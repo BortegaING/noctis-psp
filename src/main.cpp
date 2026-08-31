@@ -72,6 +72,15 @@ static void addBoxEdges(LineVertex *buf, int &i, float cx, float baseY, float cz
     }
 }
 
+// aclara un color RGBA multiplicando el RGB (para que el wireframe se lea)
+static unsigned int brighten(unsigned int c, float f) {
+    int r = (int)((c & 0xFF) * f);
+    int g = (int)(((c >> 8) & 0xFF) * f);
+    int b = (int)(((c >> 16) & 0xFF) * f);
+    if (r > 255) r = 255; if (g > 255) g = 255; if (b > 255) b = 255;
+    return RGBA(r, g, b, 255);
+}
+
 // --- distrito ---
 static LineVertex __attribute__((aligned(16))) g_world[64 * 24];
 static int g_worldVerts = 0;
@@ -80,10 +89,10 @@ static void buildWorld() {
     int i = 0;
     for (int s = 0; s < kStructureCount && s < 63; ++s) {
         const Structure &st = kStructures[s];
-        addBoxEdges(g_world, i, st.x, st.y, st.z, st.w, st.d, st.h, st.color);
+        addBoxEdges(g_world, i, st.x, st.y, st.z, st.w, st.d, st.h, brighten(st.color, 2.6f));
     }
     // The Cathedral: silueta monumental y lejana (placeholder, seccion 26)
-    addBoxEdges(g_world, i, 0.0f, 0.0f, -240.0f, 70.0f, 70.0f, 380.0f, RGBA(72, 64, 96, 255));
+    addBoxEdges(g_world, i, 0.0f, 0.0f, -240.0f, 70.0f, 70.0f, 380.0f, RGBA(120, 108, 150, 255));
     g_worldVerts = i;
 }
 
@@ -293,8 +302,8 @@ int main(void) {
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
         {
-            ScePspFVector3 rot    = { DEG2RAD(28.0f), camYaw, 0.0f };
-            ScePspFVector3 camOff = { 0.0f, -3.0f, -18.0f };
+            ScePspFVector3 rot    = { DEG2RAD(24.0f), camYaw, 0.0f };
+            ScePspFVector3 camOff = { 0.0f, -4.5f, -11.0f };
             ScePspFVector3 pOff   = { -playerX, -playerY, -playerZ };
             sceGumRotateXYZ(&rot);
             sceGumTranslate(&camOff);
