@@ -680,9 +680,15 @@ int main(void) {
 
     SceCtrlData pad;
     float playerX = 0.0f, playerY = 0.0f, playerZ = 0.0f;
-    float velY = 0.0f;
+    float velY = 0.0f, velX = 0.0f, velZ = 0.0f;
+    int   coyote = 0, prevJump = 0, jumpBuf = 0;
     float en = 780.0f;
     const float EN_MAX = 780.0f;
+    // constantes de movilidad (diseno del agente)
+    const float DEADZONE = 0.18f, RUN_SPEED = 0.42f, ACCEL_GND = 0.22f, ACCEL_AIR = 0.09f, STOP_FRIC = 0.20f, CAM_SPEED = 0.03f;
+    const float GRAVITY = 0.020f, JUMP_VEL = 0.55f, SHORTHOP = 0.50f;
+    const int   COYOTE_MAX = 6, JUMPBUF_MAX = 6;
+    const float FLOAT_LIFT = 0.030f, FLOAT_GRAV = 0.006f, FLOAT_UPCAP = 0.12f, FLOAT_FALLCAP = -0.09f, EN_FLOAT = 6.0f, EN_REGEN = 5.0f;
     int   grounded = 1;
     float camYaw = 0.0f;
     int   paused = 0, prevStart = 0;
@@ -704,43 +710,60 @@ int main(void) {
         prevStart = startNow;
 
         if (!paused) {
-            // camara (D-pad izq/der)
-            if (pad.Buttons & PSP_CTRL_LEFT)  camYaw -= 0.03f;
-            if (pad.Buttons & PSP_CTRL_RIGHT) camYaw += 0.03f;
+            // ===== camara (D-pad izq/der) =====
+            if (pad.Buttons & PSP_CTRL_LEFT)  camYaw -= CAM_SPEED;
+            if (pad.Buttons & PSP_CTRL_RIGHT) camYaw += CAM_SPEED;
 
-            // movimiento con colision por ejes separados (desliza por muros)
-            int lx = (int)pad.Lx - 128, ly = (int)pad.Ly - 128;
-            const int dead = 24;
-            float mx = (lx > dead || lx < -dead) ? lx / 128.0f : 0.0f;
-            float mz = (ly > dead || ly < -dead) ? ly / 128.0f : 0.0f;
-            const float speed = 0.35f;
-            float nx = playerX + mx * speed;
-            if (!blocked(nx, playerZ, playerY)) playerX = nx;
-            float nz = playerZ + mz * speed;
-            if (!blocked(playerX, nz, playerY)) playerZ = nz;
-
-            // animacion: caminar cuando hay movimiento, si no idle
-            moving = (mx * mx + mz * mz > 0.02f) ? 1 : 0;
-            if (moving) walkPhase += 0.30f;
-            idleT += 0.05f;
-
-            // salto + gravedad + FLOTAR (L = control gravitacional, gasta EN)
-            if (grounded && (pad.Buttons & PSP_CTRL_CROSS)) { velY = 0.55f; grounded = 0; }
-            if ((pad.Buttons & PSP_CTRL_LTRIGGER) && en > 0.0f) {
-                velY += 0.05f;                 // sube/flota
-                if (velY > 0.28f) velY = 0.28f;
-                velY *= 0.86f;                 // caida amortiguada
-                en -= 7.0f;
-                grounded = 0;
-            } else {
-                velY -= 0.02f;                 // gravedad normal
+            // ===== stick -> deseo RELATIVO A CAMARA (zona muerta radial) =====
+            float ax = ((int)pad.Lx - 128) / 128.0f;
+            float ay = ((int)pad.Ly - 128) / 128.0f;
+            float mag = sqrtf(ax * ax + ay * ay);
+            float wishX = 0.0f, wishZ = 0.0f;
+            if (mag > DEADZONE) {
+                float k = (mag - DEADZONE) / (1.0f - DEADZONE); if (k > 1.0f) k = 1.0f;
+                ax = (ax / mag) * k; ay = (ay / mag) * k;
+                float fwd = -ay, str = ax;
+                wishX =  fwd * sinf(camYaw) + str * cosf(camYaw);
+                wishZ = -fwd * cosf(camYaw) + str * sinf(camYaw);
             }
+            // ===== aceleracion / friccion (fluido) =====
+            float targetVX = wishX * RUN_SPEED, targetVZ = wishZ * RUN_SPEED;
+            float ctrl = grounded ? ACCEL_GND : ACCEL_AIR;
+            velX += (targetVX - velX) * ctrl;
+            velZ += (targetVZ - velZ) * ctrl;
+            if (grounded && wishX == 0.0f && wishZ == 0.0f) { velX -= velX * STOP_FRIC; velZ -= velZ * STOP_FRIC; }
+            // ===== colision por ejes separados (desliza por muros) =====
+            float nx = playerX + velX;
+            if (!blocked(nx, playerZ, playerY)) playerX = nx; else velX = 0.0f;
+            float nz = playerZ + velZ;
+            if (!blocked(playerX, nz, playerY)) playerZ = nz; else velZ = 0.0f;
+            // ===== salto: coyote time + buffer + salto variable =====
+            if (grounded) coyote = COYOTE_MAX; else if (coyote > 0) coyote--;
+            int jumpNow = (pad.Buttons & PSP_CTRL_CROSS) ? 1 : 0;
+            if (jumpNow && !prevJump) jumpBuf = JUMPBUF_MAX; else if (jumpBuf > 0) jumpBuf--;
+            if (jumpBuf > 0 && coyote > 0) { velY = JUMP_VEL; grounded = 0; coyote = 0; jumpBuf = 0; }
+            if (!jumpNow && velY > 0.0f) velY *= SHORTHOP;
+            prevJump = jumpNow;
+            // ===== gravedad / PLANEO (L gasta EN, caida lenta) =====
+            if ((pad.Buttons & PSP_CTRL_LTRIGGER) && en > 0.0f) {
+                velY += FLOAT_LIFT; if (velY > FLOAT_UPCAP)   velY = FLOAT_UPCAP;
+                velY -= FLOAT_GRAV; if (velY < FLOAT_FALLCAP) velY = FLOAT_FALLCAP;
+                en -= EN_FLOAT; grounded = 0;
+            } else {
+                velY -= GRAVITY;
+            }
+            // ===== integra vertical + suelo/azoteas =====
             playerY += velY;
             float gh = groundHeight(playerX, playerZ, playerY);
-            if (playerY <= gh) { playerY = gh; velY = 0.0f; grounded = 1; }
-            if (grounded && en < EN_MAX) en += 5.0f;
+            if (playerY <= gh) { playerY = gh; velY = 0.0f; grounded = 1; } else grounded = 0;
+            // ===== energia (EN) =====
+            if (grounded && en < EN_MAX) en += EN_REGEN;
             if (en > EN_MAX) en = EN_MAX;
             if (en < 0.0f) en = 0.0f;
+            // ===== animacion (segun velocidad real) =====
+            moving = (velX * velX + velZ * velZ > 0.002f) ? 1 : 0;
+            if (moving) walkPhase += 0.30f;
+            idleT += 0.05f;
 
             // recoleccion de recursos por proximidad
             for (int r = 0; r < kResourceCount && r < 64; ++r) {
@@ -780,8 +803,8 @@ int main(void) {
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
         {
-            ScePspFVector3 rot    = { DEG2RAD(15.0f), camYaw, 0.0f };
-            ScePspFVector3 camOff = { 0.0f, -6.0f, -13.0f };
+            ScePspFVector3 rot    = { DEG2RAD(11.0f), camYaw, 0.0f };
+            ScePspFVector3 camOff = { 0.0f, -3.4f, -9.5f };
             ScePspFVector3 pOff   = { -playerX, -playerY, -playerZ };
             // orden correcto de camara orbital: offset (espacio camara) -> giro
             // -> centrar en el jugador. Asi el jugador NO se va al girar.
