@@ -15,11 +15,13 @@ add_executable(${PROJECT_NAME}
 )
 
 target_link_libraries(${PROJECT_NAME}
-    pspdebug
+    pspgum
+    pspgu
+    m
+    pspvfpu
     pspdisplay
     pspge
     pspctrl
-    pspgu
 )
 
 # Genera EBOOT.PBP ejecutable en PSP / PPSSPP
