@@ -42,7 +42,7 @@ static void buildGrid() {
     int i = 0;
     const float h = (float)GRID_HALF;
     const unsigned int col     = RGBA(40, 48, 66, 255);
-    const unsigned int colAxis = RGBA(120, 55, 55, 255);
+    const unsigned int colAxis = RGBA(64, 72, 96, 255);
     for (int k = -GRID_HALF; k <= GRID_HALF; ++k) {
         const float f = (float)k;
         const unsigned int c = (k == 0) ? colAxis : col;
@@ -120,6 +120,27 @@ static void buildPlayerBox() {
     int i = 0;
     addBoxEdges(g_playerBox, i, 0.0f, 0.0f, 0.0f, 1.4f, 1.4f, 3.0f, RGBA(235, 130, 90, 255));
     g_playerBoxVerts = i;
+}
+
+// --- NPCs roboticos (cuerpo + cabeza, wireframe) ---
+struct Npc { float x, z; };
+static const Npc kNpcs[] = {
+    { 6.0f, 4.0f }, { -5.0f, 7.0f }, { 8.0f, -3.0f },
+    { -7.0f, -6.0f }, { 3.5f, 11.0f }, { -10.0f, 2.5f }
+};
+static const int kNpcCount = (int)(sizeof(kNpcs) / sizeof(kNpcs[0]));
+static LineVertex __attribute__((aligned(16))) g_npc[kNpcCount * 48];
+static int g_npcVerts = 0;
+
+static void buildNpcs() {
+    int i = 0;
+    const unsigned int body = RGBA(80, 190, 180, 255);
+    const unsigned int head = RGBA(150, 235, 225, 255);
+    for (int n = 0; n < kNpcCount; ++n) {
+        addBoxEdges(g_npc, i, kNpcs[n].x, 0.0f, kNpcs[n].z, 0.8f, 0.6f, 1.5f, body);
+        addBoxEdges(g_npc, i, kNpcs[n].x, 1.5f, kNpcs[n].z, 0.55f, 0.55f, 0.55f, head);
+    }
+    g_npcVerts = i;
 }
 
 // ================= fuente bitmap y rectangulos (sprites 2D) =================
@@ -230,6 +251,7 @@ int main(void) {
     buildGrid();
     buildWorld();
     buildPlayerBox();
+    buildNpcs();
     buildFontAtlas();
     initGu();
 
@@ -314,6 +336,7 @@ int main(void) {
         sceGumLoadIdentity();
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_gridVerts, 0, g_grid);
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_worldVerts, 0, g_world);
+        sceGumDrawArray(GU_LINES, LINE_FLAGS, g_npcVerts, 0, g_npc);
 
         sceGumLoadIdentity();
         {
@@ -354,6 +377,23 @@ int main(void) {
         drawRect(barX, 36, barW, 6, RGBA(30, 20, 40, 220));   // GRV fondo
         drawRect(barX, 36, barW, 6, RGBA(160, 120, 215, 255));// GRV lleno
         drawRect(298, 234, 176, 32, RGBA(8, 8, 14, 165));     // panel arma
+
+        // minimapa (arriba der): estructuras como puntos + jugador
+        const int mmX = 362, mmY = 10, mmS = 100;
+        drawRect(mmX - 3, mmY - 3, mmS + 6, mmS + 6, RGBA(160, 175, 215, 255)); // borde
+        drawRect(mmX, mmY, mmS, mmS, RGBA(20, 24, 38, 255));                    // fondo opaco
+        for (int s = 0; s < kStructureCount; ++s) {
+            int sx = mmX + (int)((kStructures[s].x + 50.0f) * mmS / 100.0f);
+            int sy = mmY + (int)((kStructures[s].z + 50.0f) * mmS / 100.0f);
+            if (sx >= mmX && sx < mmX + mmS - 2 && sy >= mmY && sy < mmY + mmS - 2)
+                drawRect(sx, sy, 3, 3, RGBA(140, 155, 205, 255));
+        }
+        {
+            int pxm = mmX + (int)((playerX + 50.0f) * mmS / 100.0f);
+            int pym = mmY + (int)((playerZ + 50.0f) * mmS / 100.0f);
+            if (pxm >= mmX && pxm < mmX + mmS && pym >= mmY && pym < mmY + mmS)
+                drawRect(pxm - 2, pym - 2, 4, 4, RGBA(245, 140, 95, 255));
+        }
 
         // texto
         fontTexOn();
