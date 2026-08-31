@@ -275,6 +275,21 @@ static float groundHeight(float px, float pz, float py) {
     return g;
 }
 
+// colision con muros: bloquea si el jugador (radio r) esta DENTRO de la huella
+// de una estructura y por DEBAJO de su techo (no bloquea al estar encima).
+static bool blocked(float px, float pz, float py) {
+    const float r = 1.1f;
+    for (int s = 0; s < kStructureCount; ++s) {
+        const Structure &st = kStructures[s];
+        if (py < st.y + st.h - 0.8f) {
+            const float x0 = st.x - st.w * 0.5f - r, x1 = st.x + st.w * 0.5f + r;
+            const float z0 = st.z - st.d * 0.5f - r, z1 = st.z + st.d * 0.5f + r;
+            if (px > x0 && px < x1 && pz > z0 && pz < z1) return true;
+        }
+    }
+    return false;
+}
+
 // --- caja del jugador (local, se traslada con MODEL) ---
 static LineVertex __attribute__((aligned(16))) g_playerBox[24];
 static int g_playerBoxVerts = 0;
@@ -480,6 +495,7 @@ int main(void) {
     float velY = 0.0f;
     int   grounded = 1;
     float camYaw = 0.0f;
+    int   paused = 0, prevStart = 0;
 
     int fps = 0, frameAccum = 0;
     long long lastTick = sceKernelGetSystemTimeWide();
@@ -490,41 +506,48 @@ int main(void) {
 
     while (!g_exit) {
         sceCtrlReadBufferPositive(&pad, 1);
-        if (pad.Buttons & PSP_CTRL_START) g_exit = 1;
+        // START = pausa (toggle con deteccion de flanco). Ya NO sale. HOME sale.
+        int startNow = (pad.Buttons & PSP_CTRL_START) ? 1 : 0;
+        if (startNow && !prevStart) paused = !paused;
+        prevStart = startNow;
 
-        // camara (D-pad izq/der)
-        if (pad.Buttons & PSP_CTRL_LEFT)  camYaw -= 0.03f;
-        if (pad.Buttons & PSP_CTRL_RIGHT) camYaw += 0.03f;
+        if (!paused) {
+            // camara (D-pad izq/der)
+            if (pad.Buttons & PSP_CTRL_LEFT)  camYaw -= 0.03f;
+            if (pad.Buttons & PSP_CTRL_RIGHT) camYaw += 0.03f;
 
-        // movimiento horizontal (stick, ejes de mundo)
-        int lx = (int)pad.Lx - 128, ly = (int)pad.Ly - 128;
-        const int dead = 24;
-        float mx = (lx > dead || lx < -dead) ? lx / 128.0f : 0.0f;
-        float mz = (ly > dead || ly < -dead) ? ly / 128.0f : 0.0f;
-        const float speed = 0.35f;
-        playerX += mx * speed;
-        playerZ += mz * speed;
+            // movimiento con colision por ejes separados (desliza por muros)
+            int lx = (int)pad.Lx - 128, ly = (int)pad.Ly - 128;
+            const int dead = 24;
+            float mx = (lx > dead || lx < -dead) ? lx / 128.0f : 0.0f;
+            float mz = (ly > dead || ly < -dead) ? ly / 128.0f : 0.0f;
+            const float speed = 0.35f;
+            float nx = playerX + mx * speed;
+            if (!blocked(nx, playerZ, playerY)) playerX = nx;
+            float nz = playerZ + mz * speed;
+            if (!blocked(playerX, nz, playerY)) playerZ = nz;
 
-        // salto + gravedad vertical
-        if (grounded && (pad.Buttons & PSP_CTRL_CROSS)) { velY = 0.55f; grounded = 0; }
-        velY -= 0.02f;
-        playerY += velY;
-        float gh = groundHeight(playerX, playerZ, playerY);
-        if (playerY <= gh) { playerY = gh; velY = 0.0f; grounded = 1; }
+            // salto + gravedad vertical
+            if (grounded && (pad.Buttons & PSP_CTRL_CROSS)) { velY = 0.55f; grounded = 0; }
+            velY -= 0.02f;
+            playerY += velY;
+            float gh = groundHeight(playerX, playerZ, playerY);
+            if (playerY <= gh) { playerY = gh; velY = 0.0f; grounded = 1; }
 
-        // recoleccion de recursos por proximidad
-        for (int r = 0; r < kResourceCount && r < 64; ++r) {
-            if (collected[r]) continue;
-            float dx = kResources[r].x - playerX, dz = kResources[r].z - playerZ;
-            if (dx * dx + dz * dz < 2.6f * 2.6f) {
-                collected[r] = 1;
-                collectedCount++;
-                pickedType = kResources[r].type;
-                if (pickedType < 0 || pickedType >= kMaterialCount) pickedType = 0;
-                pickTimer = 120;
+            // recoleccion de recursos por proximidad
+            for (int r = 0; r < kResourceCount && r < 64; ++r) {
+                if (collected[r]) continue;
+                float dx = kResources[r].x - playerX, dz = kResources[r].z - playerZ;
+                if (dx * dx + dz * dz < 2.6f * 2.6f) {
+                    collected[r] = 1;
+                    collectedCount++;
+                    pickedType = kResources[r].type;
+                    if (pickedType < 0 || pickedType >= kMaterialCount) pickedType = 0;
+                    pickTimer = 120;
+                }
             }
+            if (pickTimer > 0) pickTimer--;
         }
-        if (pickTimer > 0) pickTimer--;
 
         // FPS
         frameAccum++;
@@ -552,8 +575,10 @@ int main(void) {
             ScePspFVector3 rot    = { DEG2RAD(15.0f), camYaw, 0.0f };
             ScePspFVector3 camOff = { 0.0f, -6.0f, -13.0f };
             ScePspFVector3 pOff   = { -playerX, -playerY, -playerZ };
-            sceGumRotateXYZ(&rot);
+            // orden correcto de camara orbital: offset (espacio camara) -> giro
+            // -> centrar en el jugador. Asi el jugador NO se va al girar.
             sceGumTranslate(&camOff);
+            sceGumRotateXYZ(&rot);
             sceGumTranslate(&pOff);
         }
 
@@ -621,6 +646,8 @@ int main(void) {
                 drawRect(pxm - 2, pym - 2, 4, 4, RGBA(245, 140, 95, 255));
         }
 
+        if (paused) drawRect(150, 88, 180, 64, RGBA(10, 10, 16, 205)); // panel pausa
+
         // texto
         fontTexOn();
         drawText(10, 11, 1.0f, RGBA(230, 120, 130, 255), "HP");
@@ -647,7 +674,11 @@ int main(void) {
         snprintf(hud, sizeof(hud), "X %d  Z %d  Y %d", (int)playerX, (int)playerZ, (int)playerY);
         drawText(8, 230, 1.0f, RGBA(110, 130, 160, 255), hud);
         drawText(8, 244, 1.0f, RGBA(110, 130, 160, 255),
-                 "Stick mover  Dpad camara  X saltar  START salir");
+                 "Stick mover  Dpad camara  X saltar  START pausa");
+        if (paused) {
+            drawText(206, 104, 2.0f, RGBA(232, 222, 242, 255), "PAUSA");
+            drawText(163, 130, 1.0f, RGBA(165, 175, 205, 255), "START continuar   HOME salir");
+        }
 
         sceGuDisable(GU_TEXTURE_2D);
         sceGuDisable(GU_BLEND);
