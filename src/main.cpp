@@ -154,6 +154,10 @@ static TexVertex __attribute__((aligned(16))) g_solidWorld[22000]; // piedra tex
 static int g_solidVerts = 0;
 static TexVertex __attribute__((aligned(16))) g_win[18000];        // ventanas (vidriera texturizada)
 static int g_winVerts = 0;
+static TexVertex __attribute__((aligned(16))) g_metal[4000];       // metal (baranda)
+static int g_metalVerts = 0;
+static LineVertex __attribute__((aligned(16))) g_env[3000];        // ambiente (braseros, estandartes)
+static int g_envVerts = 0;
 
 // piramide de 4 caras (aguja) sin textura -- para personaje/robots (LineVertex)
 static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
@@ -369,11 +373,13 @@ static void buildSolidWorld() {
     // plataforma de piedra del mirador (suelo solido bajo el spawn)
     addSolidBoxT(g_solidWorld, i, 0.0f, -0.5f, -2.5f, 22.0f, 13.0f, 0.55f,
                  warmTint(RGBA(74, 70, 76, 255)));
-    // baranda del mirador de spawn (primer plano, como la referencia)
-    const unsigned int iron = RGBA(40, 38, 46, 255);
-    addRailing(g_solidWorld, i, -9.0f, -7.0f,  9.0f, -7.0f, iron); // frente
-    addRailing(g_solidWorld, i, -9.0f, -7.0f, -9.0f,  1.0f, iron); // lado izq
-    addRailing(g_solidWorld, i,  9.0f, -7.0f,  9.0f,  1.0f, iron); // lado der
+    // baranda de METAL del mirador -> buffer g_metal (textura de acero)
+    int mi = 0;
+    const unsigned int iron = RGBA(120, 124, 140, 255); // acero claro (para que se vea la textura)
+    addRailing(g_metal, mi, -9.0f, -7.0f,  9.0f, -7.0f, iron); // frente
+    addRailing(g_metal, mi, -9.0f, -7.0f, -9.0f,  1.0f, iron); // lado izq
+    addRailing(g_metal, mi,  9.0f, -7.0f,  9.0f,  1.0f, iron); // lado der
+    g_metalVerts = mi;
     // The Cathedral: detallada, silueta lejana con ventanas (secciones 26, 31)
     buildTower(g_solidWorld, i, 0.0f, -150.0f, 70.0f, 70.0f, 300.0f, RGBA(34, 32, 50, 255), 0.0f);
     g_solidVerts = i;
@@ -422,12 +428,14 @@ static void buildPlayerBox() {
     g_playerBoxVerts = i;
 }
 
-// personaje humanoide solido (mira a -z en local): abrigo oscuro con detalle
-// rojo, cabeza con pelo en puas y katana a la espalda (estilo de la referencia).
-static LineVertex __attribute__((aligned(16))) g_playerModel[900];
-static int g_playerModelVerts = 0;
-
-// modelo detallado del personaje (agente): buildPlayerModel(buf, i)
+// personaje por PIEZAS animables (agente): cada pieza con su pivot en el origen
+static LineVertex __attribute__((aligned(16))) g_chUpper[700];
+static LineVertex __attribute__((aligned(16))) g_chHead[240];
+static LineVertex __attribute__((aligned(16))) g_chLeg[240];
+static LineVertex __attribute__((aligned(16))) g_chArm[240];
+static LineVertex __attribute__((aligned(16))) g_chSword[240];
+static int g_chUpperV = 0, g_chHeadV = 0, g_chLegV = 0, g_chArmV = 0, g_chSwordV = 0;
+// buildChar_upper / _head / _leg / _arm / _sword (partes con pivot en el origen)
 #include "agent_character.h"
 
 // --- NPCs roboticos (cuerpo + cabeza, wireframe) ---
@@ -482,63 +490,21 @@ static void addChain(LineVertex *buf, int &i, float ax, float ay, float az,
     }
 }
 
-// textura de ventana (vidriera): panel brillante + parteluz en cruz + marco
+// generadores de textura + ambiente del agente (mas detallados)
+#include "agent_textures.h"
+
+// texturas del juego (rellenadas por los generadores del agente)
 #define WTEX 32
 static unsigned int __attribute__((aligned(16))) g_winTex[WTEX * WTEX];
-static void buildWinTex() {
-    for (int y = 0; y < WTEX; ++y)
-        for (int x = 0; x < WTEX; ++x) {
-            int b;
-            int mx = x - WTEX / 2, my = y - WTEX / 2;
-            bool frame = (x < 3 || x >= WTEX - 3 || y < 3 || y >= WTEX - 3);
-            bool cross = (mx > -2 && mx < 1) || (my > -2 && my < 1);
-            if (frame || cross) b = 55;                     // marco / parteluz oscuro
-            else { b = 205 + (WTEX - y) * 2; if (b > 255) b = 255; } // panel con brillo
-            g_winTex[y * WTEX + x] = RGBA(b, b, b, 255);
-        }
-    sceKernelDcacheWritebackAll();
-}
+static void buildWinTex() { genWindow(g_winTex, WTEX); sceKernelDcacheWritebackAll(); }
 
-// textura de metal (acero): estriado vertical + bandas y remaches
 #define MTEX 64
 static unsigned int __attribute__((aligned(16))) g_metalTex[MTEX * MTEX];
-static void buildMetalTex() {
-    for (int y = 0; y < MTEX; ++y)
-        for (int x = 0; x < MTEX; ++x) {
-            int b = 155;
-            b += ((x * 5) % 7) - 3;                 // estriado vertical
-            if ((y % 16) < 2) b -= 55;              // banda horizontal oscura
-            int rx = x % 16, ry = y % 16;
-            if (rx < 3 && ry < 3) b += 45;          // remache
-            unsigned int h = (unsigned int)(x * 71 + y * 113);
-            h ^= h >> 6; h *= 9u; h ^= h >> 4;
-            b += (int)(h % 20u) - 10;               // ruido
-            if (b < 40) b = 40; if (b > 255) b = 255;
-            g_metalTex[y * MTEX + x] = RGBA((int)(b * 0.9f), (int)(b * 0.93f), b, 255); // frio
-        }
-    sceKernelDcacheWritebackAll();
-}
+static void buildMetalTex() { genMetal(g_metalTex, MTEX); sceKernelDcacheWritebackAll(); }
 
-// textura de piedra procedural: patron de ladrillos + grima (para MODULATE)
 #define STEX 128
 static unsigned int __attribute__((aligned(16))) g_stoneTex[STEX * STEX];
-static void buildStoneTex() {
-    for (int y = 0; y < STEX; ++y)
-        for (int x = 0; x < STEX; ++x) {
-            int v = 208;
-            unsigned int hsh = (unsigned int)(x * 131 + y * 197);
-            hsh ^= hsh >> 7; hsh *= 9u; hsh ^= hsh >> 4; hsh *= 0x27d4eb2du; hsh ^= hsh >> 15;
-            v += (int)(hsh % 44u) - 26;                 // grima (ruido)
-            int row = y >> 4;
-            int xoff = (row & 1) ? 16 : 0;
-            if ((y & 15) < 2) v = 118;                  // mortero horizontal
-            else if (((x + xoff) & 31) < 2) v = 118;    // mortero vertical
-            if (v < 45) v = 45; if (v > 255) v = 255;
-            int r = v, g = (int)(v * 0.95f), b = (int)(v * 0.87f); // gris calido
-            g_stoneTex[y * STEX + x] = RGBA(r, g, b, 255);
-        }
-    sceKernelDcacheWritebackAll();
-}
+static void buildStoneTex() { genStone(g_stoneTex, STEX); sceKernelDcacheWritebackAll(); }
 
 static void buildChains() {
     int i = 0;
@@ -560,6 +526,16 @@ static void buildChains() {
         }
     }
     g_chainVerts = i;
+}
+
+// ambiente gotico: braseros con llama calida en el mirador (agente)
+static void buildEnv() {
+    int i = 0;
+    addBrazier(g_env, i, -8.5f, -6.2f);
+    addBrazier(g_env, i,  8.5f, -6.2f);
+    addBrazier(g_env, i, -8.5f,  0.5f);
+    addBrazier(g_env, i,  8.5f,  0.5f);
+    g_envVerts = i;
 }
 
 // ================= fuente bitmap y rectangulos (sprites 2D) =================
@@ -689,10 +665,16 @@ int main(void) {
 
     buildWinTex();
     buildStoneTex();
+    buildMetalTex();
     buildSolidWorld();
-    buildPlayerModel(g_playerModel, g_playerModelVerts);
+    buildChar_upper(g_chUpper, g_chUpperV);
+    buildChar_head(g_chHead, g_chHeadV);
+    buildChar_leg(g_chLeg, g_chLegV);
+    buildChar_arm(g_chArm, g_chArmV);
+    buildChar_sword(g_chSword, g_chSwordV);
     buildNpcs();
     buildChains();
+    buildEnv();
     buildFontAtlas();
     initGu();
 
@@ -704,6 +686,8 @@ int main(void) {
     int   grounded = 1;
     float camYaw = 0.0f;
     int   paused = 0, prevStart = 0;
+    float walkPhase = 0.0f, idleT = 0.0f;   // animacion del personaje
+    int   moving = 0;
 
     int fps = 0, frameAccum = 0;
     long long lastTick = sceKernelGetSystemTimeWide();
@@ -734,6 +718,11 @@ int main(void) {
             if (!blocked(nx, playerZ, playerY)) playerX = nx;
             float nz = playerZ + mz * speed;
             if (!blocked(playerX, nz, playerY)) playerZ = nz;
+
+            // animacion: caminar cuando hay movimiento, si no idle
+            moving = (mx * mx + mz * mz > 0.02f) ? 1 : 0;
+            if (moving) walkPhase += 0.30f;
+            idleT += 0.05f;
 
             // salto + gravedad + FLOTAR (L = control gravitacional, gasta EN)
             if (grounded && (pad.Buttons & PSP_CTRL_CROSS)) { velY = 0.55f; grounded = 0; }
@@ -817,20 +806,80 @@ int main(void) {
         sceGuTexImage(0, WTEX, WTEX, WTEX, g_winTex);
         sceGuTexWrap(GU_CLAMP, GU_CLAMP);
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_winVerts, 0, g_win);
+
+        // metal: baranda con textura de acero (REPEAT)
+        sceGuTexImage(0, MTEX, MTEX, MTEX, g_metalTex);
+        sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_metalVerts, 0, g_metal);
         sceGuDisable(GU_TEXTURE_2D);
 
-        // cables + robots (sin textura)
+        // cables + robots + ambiente (braseros) sin textura
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_chainVerts, 0, g_chains);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_envVerts, 0, g_env);
 
-        sceGumLoadIdentity();
+        // ---- personaje ANIMADO por piezas (caminar / idle) ----
         {
-            ScePspFVector3 pp   = { playerX, playerY, playerZ };
-            ScePspFVector3 prot = { 0.0f, camYaw, 0.0f };
+            const float legA = moving ? sinf(walkPhase) * 0.55f : 0.0f;
+            const float armA = moving ? sinf(walkPhase) * 0.45f : sinf(idleT) * 0.06f;
+            const float bobY = moving ? fabsf(sinf(walkPhase)) * 0.06f : sinf(idleT) * 0.03f;
+
+            sceGumLoadIdentity();
+            ScePspFVector3 pp = { playerX, playerY + bobY, playerZ };
             sceGumTranslate(&pp);
-            sceGumRotateXYZ(&prot);
+            ScePspFVector3 fr = { 0.0f, camYaw, 0.0f };
+            sceGumRotateXYZ(&fr);
+
+            // torso/abrigo (pivot caderas y=1.35) -> cabeza + espada cuelgan de el
+            sceGumPushMatrix();
+                ScePspFVector3 hip = { 0.0f, 1.35f, 0.0f };
+                sceGumTranslate(&hip);
+                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chUpperV, 0, g_chUpper);
+                sceGumPushMatrix();
+                    ScePspFVector3 neck = { 0.0f, 1.25f, 0.0f };
+                    sceGumTranslate(&neck);
+                    sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chHeadV, 0, g_chHead);
+                sceGumPopMatrix();
+                sceGumPushMatrix();
+                    ScePspFVector3 sw = { -0.34f, 0.15f, 0.34f };
+                    sceGumTranslate(&sw);
+                    ScePspFVector3 swr = { DEG2RAD(18.0f), 0.0f, DEG2RAD(30.0f) };
+                    sceGumRotateXYZ(&swr);
+                    sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chSwordV, 0, g_chSword);
+                sceGumPopMatrix();
+            sceGumPopMatrix();
+
+            // piernas (pivot caderas, fase opuesta)
+            sceGumPushMatrix();
+                ScePspFVector3 lp = { -0.22f, 1.35f, 0.0f };
+                sceGumTranslate(&lp);
+                ScePspFVector3 lr = { legA, 0.0f, 0.0f };
+                sceGumRotateXYZ(&lr);
+                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chLegV, 0, g_chLeg);
+            sceGumPopMatrix();
+            sceGumPushMatrix();
+                ScePspFVector3 rp = { 0.22f, 1.35f, 0.0f };
+                sceGumTranslate(&rp);
+                ScePspFVector3 rr = { -legA, 0.0f, 0.0f };
+                sceGumRotateXYZ(&rr);
+                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chLegV, 0, g_chLeg);
+            sceGumPopMatrix();
+            // brazos (pivot hombros, opuestos a las piernas)
+            sceGumPushMatrix();
+                ScePspFVector3 alp = { -0.52f, 2.50f, 0.0f };
+                sceGumTranslate(&alp);
+                ScePspFVector3 alr = { -armA, 0.0f, 0.0f };
+                sceGumRotateXYZ(&alr);
+                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chArmV, 0, g_chArm);
+            sceGumPopMatrix();
+            sceGumPushMatrix();
+                ScePspFVector3 arp = { 0.52f, 2.50f, 0.0f };
+                sceGumTranslate(&arp);
+                ScePspFVector3 arr = { armA, 0.0f, 0.0f };
+                sceGumRotateXYZ(&arr);
+                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chArmV, 0, g_chArm);
+            sceGumPopMatrix();
         }
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_playerModelVerts, 0, g_playerModel);
 
         // recursos: brillan al acercarse (seccion 12)
         for (int r = 0; r < kResourceCount && r < 64; ++r) {
