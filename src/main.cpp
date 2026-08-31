@@ -27,7 +27,7 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
 static unsigned int __attribute__((aligned(16))) g_list[262144];
 static const unsigned int CLEAR_COLOR = RGBA(16, 14, 20, 255);
-static const unsigned int HAZE = RGBA(84, 80, 98, 255); // gris silueta (mas oscuro que el fondo)
+static const unsigned int HAZE = RGBA(98, 86, 78, 255); // gris-marron silueta (calido)
 
 #define LINE_FLAGS (GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D)
 
@@ -78,6 +78,15 @@ static unsigned int brighten(unsigned int c, float f) {
     int r = (int)((c & 0xFF) * f);
     int g = (int)(((c >> 8) & 0xFF) * f);
     int b = (int)(((c >> 16) & 0xFF) * f);
+    if (r > 255) r = 255; if (g > 255) g = 255; if (b > 255) b = 255;
+    return RGBA(r, g, b, 255);
+}
+
+// sesga el color hacia calido (marron/sepia) para acercarse a la referencia
+static unsigned int warmTint(unsigned int c) {
+    int r = (int)((c & 0xFF) * 1.20f);
+    int g = (int)(((c >> 8) & 0xFF) * 1.02f);
+    int b = (int)(((c >> 16) & 0xFF) * 0.82f);
     if (r > 255) r = 255; if (g > 255) g = 255; if (b > 255) b = 255;
     return RGBA(r, g, b, 255);
 }
@@ -199,7 +208,7 @@ static void addPinnacle(LineVertex *buf, int &i, float cx, float baseY, float cz
 // torre gotica detallada: cuerpo escalonado + aguja + pinaculos + contrafuertes
 static void buildTower(LineVertex *buf, int &i, float cx, float cz,
                        float w, float d, float h, unsigned int baseColor, float dist) {
-    const unsigned int stone = fadeToVoid(brighten(baseColor, 1.9f), dist);
+    const unsigned int stone = fadeToVoid(warmTint(brighten(baseColor, 1.9f)), dist);
     const unsigned int win   = RGBA(235, 165, 85, 255); // ambar (luces)
     float bodyTop;
     if (h > 45.0f) {
@@ -247,7 +256,7 @@ static void buildTower(LineVertex *buf, int &i, float cx, float cz,
 // aguja fina del "mar de agujas" de fondo (ligera, para densidad barata)
 static void buildSpire(LineVertex *buf, int &i, float cx, float cz,
                        float w, float h, unsigned int base, float dist) {
-    const unsigned int stone = fadeToVoid(brighten(base, 1.8f), dist);
+    const unsigned int stone = fadeToVoid(warmTint(brighten(base, 1.8f)), dist);
     const float h1 = h * 0.68f;
     addSolidBox(buf, i, cx, 0.0f, cz, w, w, h1, stone);
     addSolidBox(buf, i, cx, h1, cz, w * 0.6f, w * 0.6f, h - h1, stone);
@@ -491,9 +500,9 @@ static void gradQuad(int y0, int y1, unsigned int cTop, unsigned int cBot) {
     sceGuDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 6, 0, v);
 }
 static void drawBackdrop() {
-    const unsigned int top    = RGBA(24, 22, 32, 255);
-    const unsigned int haze   = RGBA(128, 120, 134, 255);
-    const unsigned int floorc = RGBA(18, 17, 24, 255);
+    const unsigned int top    = RGBA(32, 27, 26, 255);
+    const unsigned int haze   = RGBA(138, 122, 106, 255);
+    const unsigned int floorc = RGBA(22, 19, 19, 255);
     gradQuad(0, 150, top, haze);
     gradQuad(150, SCR_HEIGHT, haze, floorc);
 }
