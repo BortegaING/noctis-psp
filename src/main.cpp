@@ -29,6 +29,8 @@ static unsigned int __attribute__((aligned(16))) g_list[262144];
 static const unsigned int CLEAR_COLOR = RGBA(16, 14, 20, 255);
 static const unsigned int HAZE = RGBA(70, 64, 62, 255); // bruma oscura (moody, 3rd Birthday)
 #define WSCALE 1.45f  // separa el distrito para abrir la vista (mas skyline/agujas)
+#define VIEWER_MODE 0     // 1 = visor de personaje; 0 = juego
+#define HERO_SHOWCASE 1   // (dentro del visor) 1 = solo el HUNTER en primer plano
 
 #define LINE_FLAGS (GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D)
 
@@ -171,6 +173,36 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
     buf[i++] = { a, x1, y0, z1 }; buf[i++] = { a, x0, y0, z1 }; buf[i++] = { a, cx, ay, cz };
     buf[i++] = { b, x0, y0, z1 }; buf[i++] = { b, x0, y0, z0 }; buf[i++] = { b, cx, ay, cz };
 }
+
+// ===== VISOR DE CANDIDATOS DE PERSONAJE (comparar 4 disenos, off-screen) =====
+#include "char_prims.h"
+#include "cand/aya.h"
+#include "cand/hunter.h"
+#include "cand/ff.h"
+#include "cand/wraith.h"
+#if VIEWER_MODE
+static LineVertex __attribute__((aligned(16))) g_candBuf[4][3300];
+static int g_candV[4];
+static const char *g_candName[4] = { "AYA", "HUNTER", "FF", "WRAITH" };
+static const float g_candX[4]    = { -8.4f, -2.8f, 2.8f, 8.4f };
+static void viewerBrighten(LineVertex *b, int n, float f) {
+    for (int k = 0; k < n; ++k) {
+        unsigned int c = b[k].color;
+        int r=(int)((c&0xFF)*f), g=(int)(((c>>8)&0xFF)*f), bl=(int)(((c>>16)&0xFF)*f);
+        if(r>255)r=255; if(g>255)g=255; if(bl>255)bl=255;
+        b[k].color = RGBA(r, g, bl, 255);
+    }
+}
+static void buildCandidates() {
+    g_candV[0] = build_aya(g_candBuf[0]);
+    g_candV[1] = build_hunter(g_candBuf[1]);
+    g_candV[2] = build_ff(g_candBuf[2]);
+    g_candV[3] = build_wraith(g_candBuf[3]);
+    // aclarado SOLO en el visor: los trajes son casi negros y en el juego se
+    // veran oscuros/atmosfericos, pero aqui hay que apreciar el diseno.
+    for (int k = 0; k < 4; ++k) viewerBrighten(g_candBuf[k], g_candV[k], 1.75f);
+}
+#endif
 
 // ---- helpers TEXTURIZADOS (piedra) para el mundo solido ----
 static void addQuadT(TexVertex *buf, int &i,
@@ -451,28 +483,20 @@ static int g_chUpperV = 0, g_chHeadV = 0, g_chLegV = 0, g_chArmV = 0, g_chSwordV
 // buildChar_upper / _head / _leg / _arm / _sword (partes con pivot en el origen)
 #include "agent_character.h"
 
-// SILUETA ENCAPUCHADA (reemplaza el personaje de cajas, se veia a lo Roblox):
-// manto acampanado que se angosta hacia arriba + capucha, casi negra -> figura
-// oscura y esbelta que se lee como sombra, no como muneco de cubos.
-static LineVertex __attribute__((aligned(16))) g_hero[400];
+// PERSONAJE DEL JUEGO: el HUNTER (encapuchado gotico, elegido por Benjamin).
+// Construido con las primitivas organicas (cilindros conicos + elipsoides +
+// abrigo hasta la rodilla con piernas a la vista), NO cubos.
+static LineVertex __attribute__((aligned(16))) g_hero[3200];
 static int g_heroV = 0;
 static void buildHero() {
-    int i = 0;
-    const unsigned int robe  = RGBA(24, 22, 30, 255);   // casi negro
-    const unsigned int robe2 = RGBA(32, 29, 38, 255);
-    const unsigned int red   = RGBA(118, 30, 36, 255);  // detalle rojo tenue
-    const unsigned int hood  = RGBA(16, 15, 20, 255);
-    // manto en capas que se angosta (silueta, sin brazos/piernas de caja)
-    addSolidBox(g_hero, i, 0.0f, 0.00f, 0.0f, 1.24f, 1.02f, 0.72f, robe);
-    addSolidBox(g_hero, i, 0.0f, 0.66f, 0.0f, 1.02f, 0.84f, 0.70f, robe2);
-    addSolidBox(g_hero, i, 0.0f, 1.30f, 0.0f, 0.80f, 0.66f, 0.68f, robe);
-    addSolidBox(g_hero, i, 0.0f, 1.92f, 0.0f, 0.64f, 0.54f, 0.52f, robe2); // hombros
-    // bufanda / detalle rojo al frente (-z)
-    addSolidBox(g_hero, i, 0.0f, 1.55f, -0.30f, 0.34f, 0.06f, 0.62f, red);
-    // capucha (cabeza cubierta) + punta
-    addSolidBox(g_hero, i, 0.0f, 2.42f, 0.06f, 0.46f, 0.50f, 0.42f, hood);
-    addPyramid(g_hero, i, 0.0f, 2.84f, 0.06f, 0.52f, 0.56f, 0.46f, hood);
-    g_heroV = i;
+    g_heroV = build_hunter(g_hero);
+    // aclarado leve para que se lea en la escena sin perder lo tenebroso.
+    for (int k = 0; k < g_heroV; ++k) {
+        unsigned int c = g_hero[k].color;
+        int r=(int)((c&0xFF)*1.28f), g=(int)(((c>>8)&0xFF)*1.28f), b=(int)(((c>>16)&0xFF)*1.28f);
+        if(r>255)r=255; if(g>255)g=255; if(b>255)b=255;
+        g_hero[k].color = RGBA(r, g, b, 255);
+    }
 }
 
 // --- NPCs roboticos (cuerpo + cabeza, wireframe) ---
@@ -621,6 +645,27 @@ static void drawBackdrop() {
     gradQuad(0, 150, top, haze);
     gradQuad(150, SCR_HEIGHT, haze, floorc);
 }
+// gradiente vertical (franjas laterales, para la vineta)
+static void gradQuadV(int x0, int x1, unsigned int cL, unsigned int cR) {
+    GradVertex *v = (GradVertex *)sceGuGetMemory(sizeof(GradVertex) * 6);
+    v[0] = { cL, (short)x0, 0, 0 };
+    v[1] = { cR, (short)x1, 0, 0 };
+    v[2] = { cR, (short)x1, (short)SCR_HEIGHT, 0 };
+    v[3] = { cL, (short)x0, 0, 0 };
+    v[4] = { cR, (short)x1, (short)SCR_HEIGHT, 0 };
+    v[5] = { cL, (short)x0, (short)SCR_HEIGHT, 0 };
+    sceGuDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 6, 0, v);
+}
+// vineta cinematografica: bordes oscuros que se funden hacia el centro
+static void drawVignette() {
+    const unsigned int e  = RGBA(0, 0, 0, 155);
+    const unsigned int eB = RGBA(0, 0, 0, 200);
+    const unsigned int t  = RGBA(0, 0, 0, 0);
+    gradQuad(0, 70, e, t);                          // arriba
+    gradQuad(SCR_HEIGHT - 80, SCR_HEIGHT, t, eB);   // abajo (mas oscuro)
+    gradQuadV(0, 76, e, t);                         // izquierda
+    gradQuadV(SCR_WIDTH - 76, SCR_WIDTH, t, e);     // derecha
+}
 
 // texto 2D (requiere textura de fuente activada por el que llama)
 static void drawText(int x, int y, float scale, unsigned int color, const char *text) {
@@ -649,6 +694,58 @@ static void fontTexOn() {
     sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
     sceGuTexFilter(GU_NEAREST, GU_NEAREST);
 }
+
+#if VIEWER_MODE
+// dibuja los 4 candidatos en fila sobre un turntable, sobre un piso oscuro.
+static void drawCandidates() {
+    static float t = 0.0f; t += 0.03f;
+    const float yaw = 3.14159265f + 0.55f * sinf(t);  // frente a la camara, 3/4 suave
+
+    sceGumMatrixMode(GU_PROJECTION);
+    sceGumLoadIdentity();
+    sceGumPerspective(55.0f, 16.0f / 9.0f, 0.5f, 1000.0f);
+    sceGumMatrixMode(GU_VIEW);
+    sceGumLoadIdentity();
+    {
+        ScePspFVector3 camOff = { 0.0f, -2.05f, -15.0f };
+        sceGumTranslate(&camOff);
+    }
+    sceGumMatrixMode(GU_MODEL);
+
+    // piso oscuro (para que no floten y se lea la silueta)
+    {
+        LineVertex *g = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 6);
+        const unsigned int fc = RGBA(24, 22, 28, 255), fb = RGBA(9, 8, 12, 255);
+        int gi = 0;
+        g[gi++] = { fb, -15.0f, 0.0f, 3.5f };  g[gi++] = { fb, 15.0f, 0.0f, 3.5f };  g[gi++] = { fc, 15.0f, 0.0f, -6.0f };
+        g[gi++] = { fb, -15.0f, 0.0f, 3.5f };  g[gi++] = { fc, 15.0f, 0.0f, -6.0f }; g[gi++] = { fc, -15.0f, 0.0f, -6.0f };
+        sceGumLoadIdentity();
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, 6, 0, g);
+    }
+
+    for (int k = 0; k < 4; ++k) {
+        sceGumLoadIdentity();
+        ScePspFVector3 pos = { g_candX[k], 0.0f, 0.0f };
+        sceGumTranslate(&pos);
+        ScePspFVector3 rot = { 0.0f, yaw, 0.0f };
+        sceGumRotateXYZ(&rot);
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_candV[k], 0, g_candBuf[k]);
+    }
+
+    // etiquetas (2D)
+    sceGuDisable(GU_DEPTH_TEST);
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    fontTexOn();
+    drawText(196, 10, 1.0f, RGBA(215, 205, 230, 255), "CANDIDATOS DE PERSONAJE");
+    const int lblX[4] = { 74, 150, 286, 356 };
+    for (int k = 0; k < 4; ++k)
+        drawText(lblX[k], 214, 1.0f, RGBA(240, 180, 120, 255), g_candName[k]);
+    sceGuDisable(GU_TEXTURE_2D);
+    sceGuDisable(GU_BLEND);
+    sceGuEnable(GU_DEPTH_TEST);
+}
+#endif
 
 // ================= salida (boton HOME) =================
 static volatile int g_exit = 0;
@@ -703,6 +800,9 @@ int main(void) {
     buildMetalTex();
     buildSolidWorld();
     buildHero();
+#if VIEWER_MODE
+    buildCandidates();
+#endif
     buildNpcs();
     buildChains();
     buildEnv();
@@ -721,7 +821,8 @@ int main(void) {
     const int   COYOTE_MAX = 6, JUMPBUF_MAX = 6;
     const float FLOAT_LIFT = 0.030f, FLOAT_GRAV = 0.006f, FLOAT_UPCAP = 0.12f, FLOAT_FALLCAP = -0.09f, EN_FLOAT = 6.0f, EN_REGEN = 5.0f;
     int   grounded = 1;
-    float camYaw = 0.0f;
+    float camYaw = 0.0f;    // camara FIJA (no rota); solo sigue la posicion del jugador
+    float heroYaw = 0.0f;   // hacia donde encara el modelo (gira al avanzar)
     int   paused = 0, prevStart = 0;
     float walkPhase = 0.0f, idleT = 0.0f;   // animacion del personaje
     int   moving = 0;
@@ -762,13 +863,16 @@ int main(void) {
             if (!blocked(nx, playerZ, playerY)) playerX = nx; else velX = 0.0f;
             float nz = playerZ + velZ;
             if (!blocked(playerX, nz, playerY)) playerZ = nz; else velZ = 0.0f;
-            // ===== la CAMARA sigue al personaje: se coloca detras del avance =====
+            // ===== el PERSONAJE gira hacia donde avanza; la CAMARA NO rota =====
+            // Antes la camara rotaba al moverse y desorientaba: "adelante" en el
+            // stick terminaba moviendote de lado. Ahora la camara queda fija
+            // (solo sigue la POSICION) y solo el modelo encara el avance.
             if (velX * velX + velZ * velZ > 0.004f) {
                 float moveAng = atan2f(velX, -velZ);
-                float dA = moveAng - camYaw;
+                float dA = moveAng - heroYaw;
                 while (dA >  3.14159265f) dA -= 6.28318531f;
                 while (dA < -3.14159265f) dA += 6.28318531f;
-                camYaw += dA * 0.12f;   // gira suave hacia la direccion de avance
+                heroYaw += dA * 0.20f;   // el personaje encara la direccion de avance
             }
             // ===== salto: coyote time + buffer + salto variable =====
             if (grounded) coyote = COYOTE_MAX; else if (coyote > 0) coyote--;
@@ -829,6 +933,9 @@ int main(void) {
         drawBackdrop();
         sceGuEnable(GU_DEPTH_TEST);
 
+#if VIEWER_MODE
+        drawCandidates();
+#else
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
         sceGumPerspective(75.0f, 16.0f / 9.0f, 0.5f, 1000.0f);
@@ -874,13 +981,13 @@ int main(void) {
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_envVerts, 0, g_env);
 
-        // ---- silueta encapuchada (idle sutil: leve balanceo) ----
+        // ---- HUNTER (idle sutil: leve balanceo) ; encara heroYaw ----
         {
             float bobY = sinf(idleT) * 0.03f;
             sceGumLoadIdentity();
             ScePspFVector3 pp = { playerX, playerY + bobY, playerZ };
             sceGumTranslate(&pp);
-            ScePspFVector3 fr = { 0.0f, camYaw + sinf(idleT * 0.6f) * 0.02f, 0.0f };
+            ScePspFVector3 fr = { 0.0f, heroYaw + sinf(idleT * 0.6f) * 0.02f, 0.0f };
             sceGumRotateXYZ(&fr);
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_heroV, 0, g_hero);
         }
@@ -906,6 +1013,7 @@ int main(void) {
         sceGuEnable(GU_BLEND);
         sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
         sceGuDisable(GU_TEXTURE_2D);
+        drawVignette();   // bordes oscuros cinematograficos (sobre el 3D, bajo el HUD)
 
         // paneles + barras (rectangulos)
         const int barX = 44, barW = 118;
@@ -973,6 +1081,7 @@ int main(void) {
         sceGuDisable(GU_TEXTURE_2D);
         sceGuDisable(GU_BLEND);
         sceGuEnable(GU_DEPTH_TEST);
+#endif
 
         sceGuFinish();
         sceGuSync(0, 0);

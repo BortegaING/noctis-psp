@@ -1,120 +1,107 @@
 #pragma once
-// PROJECT NOCTIS - Player character geometry, split into ANIMATABLE parts.
-// Self-contained header: NO includes. Relies on types/functions already defined
-// in main.cpp BEFORE this header is included:
+// PROJECT NOCTIS - Player character (single fixed pose, detailed silhouette).
+// Self-contained header: NO includes. Uses types/functions already defined in
+// main.cpp BEFORE this header is included:
 //   struct LineVertex; RGBA(r,g,b,a); brighten(c,f);
 //   addSolidBox(buf,i, cx,baseY,cz, w,d,h, col);     // 30 verts each
 //   addPyramid(buf,i, cx,baseY,cz, w,d, apexH, col); // 12 verts each
 //
-// Each part is built in LOCAL space with its PIVOT at the origin (0,0,0) so the
-// caller can rotate/translate it for walk/idle animation. Dark gothic warrior
-// (Bloodborne-ish). Faces -z. Palette is near-black coat with blood-red accents.
+// Dark gothic warrior (Bloodborne-ish) seen from the BACK (faces -z), standing,
+// SLIM and athletic. Limbs are split into tapering segments so contours read as
+// smooth stepped curves instead of blocky cubes. Feet at y=0, centered x=0,z=0,
+// total height ~3.6 (hair spikes rise a touch above). Long sword held pointing
+// down at the right side.
 //
-// Vertex budget (function bodies): upper 474 + head 126 + leg 120 + arm 120
-// + sword 102 = 942 verts total (under ~1000).
+// Budget: 51 solid boxes (51*30=1530) + 5 pyramids (5*12=60) = 1590 verts.
 
-// -------------------------------------------------------------------------
-// UPPER BODY: torso + chest plate + pauldrons + flared tattered coat + red
-// straps. Pivot = hips at (0,0,0). Torso rises (local y 0..~1.18), the coat
-// skirt hangs below the pivot (local y 0..-1.44). No head/arms/legs.
-// 15 boxes + 2 pyramids = 474 verts.
-static void buildChar_upper(LineVertex *buf, int &i)
+static void buildPlayerModel(LineVertex *buf, int &i)
 {
-    const unsigned int coat   = RGBA(38, 36, 46, 255);
-    const unsigned int coatDk = brighten(coat, 0.75f);
-    const unsigned int plate  = brighten(coat, 1.35f);
-    const unsigned int red    = RGBA(150, 40, 45, 255);
-    const unsigned int redDk  = RGBA(95, 28, 32, 255);
+    // ---- dark palette ----
+    const unsigned int coat    = RGBA(30, 28, 36, 255);   // near-black coat/armor
+    const unsigned int coatDk  = brighten(coat, 0.70f);   // shaded folds / cloth
+    const unsigned int plate   = brighten(coat, 1.40f);   // lit armor plate
+    const unsigned int red     = RGBA(150, 40, 45, 255);  // blood-red straps/trim
+    const unsigned int redDk   = RGBA(95, 28, 32, 255);   // dark red tatters
+    const unsigned int skin    = RGBA(150, 132, 122, 255);// neck / hands / face
+    const unsigned int hair    = RGBA(20, 18, 26, 255);   // black spiky hair
+    const unsigned int steel   = RGBA(120, 138, 175, 255);// blade
+    const unsigned int leather = RGBA(30, 26, 24, 255);   // boots / gloves / hilt
+    const unsigned int brass   = RGBA(120, 100, 60, 255); // tsuba guard
 
-    // torso rising from the hips
-    addSolidBox(buf, i,  0.00f,  0.00f, 0.00f, 0.82f, 0.56f, 0.50f, coat);  // abdomen
-    addSolidBox(buf, i,  0.00f,  0.45f, 0.00f, 1.00f, 0.68f, 0.50f, plate); // chest plate
-    addSolidBox(buf, i,  0.00f,  0.90f, 0.00f, 0.72f, 0.52f, 0.16f, plate); // clavicle bevel
-    addSolidBox(buf, i,  0.00f,  1.00f, 0.06f, 0.62f, 0.50f, 0.18f, coatDk);// high collar
+    // ================= LEGS (tapered: boot -> calf -> thigh) =================
+    // left leg
+    addSolidBox(buf, i, -0.24f, 0.00f, -0.08f, 0.28f, 0.50f, 0.22f, leather); // boot
+    addSolidBox(buf, i, -0.24f, 0.22f,  0.00f, 0.24f, 0.28f, 0.40f, coat);    // lower calf
+    addSolidBox(buf, i, -0.24f, 0.60f,  0.00f, 0.26f, 0.30f, 0.42f, coatDk);  // upper calf/knee
+    addSolidBox(buf, i, -0.24f, 1.00f,  0.00f, 0.28f, 0.32f, 0.40f, coat);    // lower thigh
+    addSolidBox(buf, i, -0.24f, 1.38f,  0.00f, 0.32f, 0.34f, 0.36f, coatDk);  // upper thigh
+    // right leg
+    addSolidBox(buf, i,  0.24f, 0.00f, -0.08f, 0.28f, 0.50f, 0.22f, leather); // boot
+    addSolidBox(buf, i,  0.24f, 0.22f,  0.00f, 0.24f, 0.28f, 0.40f, coat);    // lower calf
+    addSolidBox(buf, i,  0.24f, 0.60f,  0.00f, 0.26f, 0.30f, 0.42f, coatDk);  // upper calf/knee
+    addSolidBox(buf, i,  0.24f, 1.00f,  0.00f, 0.28f, 0.32f, 0.40f, coat);    // lower thigh
+    addSolidBox(buf, i,  0.24f, 1.38f,  0.00f, 0.32f, 0.34f, 0.36f, coatDk);  // upper thigh
 
-    // red belt + back straps (bandolier)
-    addSolidBox(buf, i,  0.00f, -0.03f, 0.00f, 0.90f, 0.60f, 0.16f, red);   // belt
-    addSolidBox(buf, i, -0.12f,  0.40f, 0.33f, 0.15f, 0.06f, 0.55f, red);   // strap L
-    addSolidBox(buf, i,  0.14f,  0.35f, 0.32f, 0.14f, 0.06f, 0.50f, red);   // strap R
+    // ================= PELVIS + TORSO (narrow waist -> broad chest) =========
+    addSolidBox(buf, i, 0.00f, 1.68f, 0.00f, 0.68f, 0.42f, 0.22f, coatDk); // pelvis
+    addSolidBox(buf, i, 0.00f, 1.88f, 0.00f, 0.56f, 0.36f, 0.26f, coat);   // narrow waist
+    addSolidBox(buf, i, 0.00f, 2.12f, 0.00f, 0.66f, 0.40f, 0.30f, coat);   // lower chest
+    addSolidBox(buf, i, 0.00f, 2.40f, 0.00f, 0.80f, 0.44f, 0.30f, plate);  // chest plate
+    addSolidBox(buf, i, 0.00f, 2.66f, 0.00f, 0.88f, 0.46f, 0.14f, plate);  // shoulder yoke
 
-    // pauldrons (marked armored shoulders) with beveled spikes on top
-    addSolidBox(buf, i, -0.64f,  0.66f, 0.00f, 0.52f, 0.64f, 0.36f, plate); // pauldron L
-    addSolidBox(buf, i,  0.64f,  0.66f, 0.00f, 0.52f, 0.64f, 0.36f, plate); // pauldron R
-    addPyramid (buf, i, -0.64f,  1.00f, 0.00f, 0.50f, 0.60f, 0.30f, plate); // spike L
-    addPyramid (buf, i,  0.64f,  1.00f, 0.00f, 0.50f, 0.60f, 0.30f, plate); // spike R
+    // ================= NECK + HIGH COLLAR + HEAD ===========================
+    addSolidBox(buf, i, 0.00f, 2.78f,  0.02f, 0.20f, 0.22f, 0.26f, skin);   // thin neck
+    addSolidBox(buf, i, 0.00f, 2.72f,  0.09f, 0.50f, 0.40f, 0.28f, coatDk); // gothic collar
+    addSolidBox(buf, i, 0.00f, 3.02f,  0.04f, 0.42f, 0.46f, 0.24f, hair);   // lower skull
+    addSolidBox(buf, i, 0.00f, 3.24f,  0.04f, 0.44f, 0.46f, 0.24f, hair);   // crown
+    addSolidBox(buf, i, 0.00f, 3.08f, -0.20f, 0.34f, 0.12f, 0.28f, skin);   // face plate (-z)
 
-    // coat / faldon hanging below the hips: bell-shaped in 3 layers
-    addSolidBox(buf, i,  0.00f, -0.28f, 0.00f, 0.96f, 0.72f, 0.28f, coat);   // waist
-    addSolidBox(buf, i,  0.00f, -0.52f, 0.00f, 1.24f, 0.88f, 0.28f, coatDk); // mid layer
-    addSolidBox(buf, i,  0.00f, -0.72f, 0.00f, 1.50f, 1.02f, 0.24f, coat);   // wide hem
+    // ---- spiky black hair (5 slim pyramids, offset to look tilted) ----
+    addPyramid(buf, i, -0.14f, 3.42f,  0.14f, 0.16f, 0.16f, 0.28f, hair);
+    addPyramid(buf, i,  0.14f, 3.44f,  0.10f, 0.14f, 0.14f, 0.24f, hair);
+    addPyramid(buf, i,  0.00f, 3.42f,  0.22f, 0.16f, 0.15f, 0.30f, hair);
+    addPyramid(buf, i, -0.04f, 3.46f, -0.02f, 0.13f, 0.13f, 0.22f, hair);
+    addPyramid(buf, i,  0.10f, 3.44f,  0.20f, 0.12f, 0.12f, 0.20f, hair);
 
-    // jirones (tattered strips hanging below the hem)
-    addSolidBox(buf, i, -0.50f, -1.05f,  0.20f, 0.16f, 0.14f, 0.36f, redDk); // tatter L
-    addSolidBox(buf, i,  0.46f, -1.10f,  0.28f, 0.16f, 0.14f, 0.40f, coatDk);// tatter R
-    addSolidBox(buf, i,  0.00f, -1.05f, -0.40f, 0.18f, 0.14f, 0.34f, redDk); // tatter front
-}
+    // ================= ARMS (pauldron -> upper -> forearm -> glove) ========
+    // left arm
+    addSolidBox(buf, i, -0.46f, 2.50f,  0.00f, 0.30f, 0.42f, 0.30f, plate);   // pauldron
+    addSolidBox(buf, i, -0.44f, 2.12f,  0.02f, 0.22f, 0.28f, 0.42f, coat);    // upper arm
+    addSolidBox(buf, i, -0.44f, 1.98f,  0.00f, 0.20f, 0.24f, 0.16f, coatDk);  // elbow
+    addSolidBox(buf, i, -0.44f, 1.66f,  0.00f, 0.19f, 0.22f, 0.34f, coat);    // forearm
+    addSolidBox(buf, i, -0.44f, 1.50f, -0.02f, 0.20f, 0.26f, 0.18f, leather); // glove
+    // right arm (hand grips the sword)
+    addSolidBox(buf, i,  0.46f, 2.50f,  0.00f, 0.30f, 0.42f, 0.30f, plate);   // pauldron
+    addSolidBox(buf, i,  0.44f, 2.12f,  0.02f, 0.22f, 0.28f, 0.42f, coat);    // upper arm
+    addSolidBox(buf, i,  0.44f, 1.98f,  0.00f, 0.20f, 0.24f, 0.16f, coatDk);  // elbow
+    addSolidBox(buf, i,  0.44f, 1.66f,  0.00f, 0.19f, 0.22f, 0.34f, coat);    // forearm
+    addSolidBox(buf, i,  0.46f, 1.48f,  0.00f, 0.20f, 0.26f, 0.18f, leather); // glove
 
-// -------------------------------------------------------------------------
-// HEAD: neck + skull + spiky black hair. Pivot = base of the neck at (0,0,0),
-// rising (local y 0..~0.8). Seen from the back the skull is hair-colored; the
-// face plate is skin toward -z. 3 boxes + 3 pyramids = 126 verts.
-static void buildChar_head(LineVertex *buf, int &i)
-{
-    const unsigned int skin = RGBA(150, 132, 122, 255);
-    const unsigned int hair = RGBA(24, 22, 30, 255);
+    // ================= RED DETAILS (belt, back straps, coat trim) ==========
+    addSolidBox(buf, i,  0.00f, 1.84f,  0.00f, 0.62f, 0.40f, 0.10f, red); // belt
+    addSolidBox(buf, i, -0.12f, 2.08f,  0.25f, 0.11f, 0.05f, 0.62f, red); // back strap L
+    addSolidBox(buf, i,  0.12f, 2.08f,  0.25f, 0.11f, 0.05f, 0.62f, red); // back strap R
+    addSolidBox(buf, i, -0.10f, 1.30f, -0.20f, 0.05f, 0.06f, 0.62f, red); // coat front trim L
+    addSolidBox(buf, i,  0.10f, 1.30f, -0.20f, 0.05f, 0.06f, 0.62f, red); // coat front trim R
 
-    addSolidBox(buf, i, 0.00f, 0.00f,  0.02f, 0.26f, 0.26f, 0.20f, skin); // neck
-    addSolidBox(buf, i, 0.00f, 0.16f,  0.04f, 0.50f, 0.52f, 0.42f, hair); // skull (back = hair)
-    addSolidBox(buf, i, 0.00f, 0.22f, -0.20f, 0.42f, 0.14f, 0.30f, skin); // face plate (-z)
+    // ================= COAT PANELS + JIRONES (falling cloth) ===============
+    addSolidBox(buf, i,  0.00f, 1.00f,  0.30f, 0.50f, 0.10f, 0.85f, coat);   // back center panel
+    addSolidBox(buf, i, -0.28f, 0.95f,  0.26f, 0.22f, 0.10f, 0.88f, coatDk); // back left panel
+    addSolidBox(buf, i,  0.28f, 1.00f,  0.26f, 0.22f, 0.10f, 0.82f, coatDk); // back right panel
+    addSolidBox(buf, i, -0.40f, 1.05f,  0.05f, 0.12f, 0.34f, 0.80f, coat);   // side left panel
+    addSolidBox(buf, i,  0.40f, 1.10f,  0.05f, 0.12f, 0.34f, 0.75f, coat);   // side right panel
+    addSolidBox(buf, i, -0.18f, 1.15f, -0.20f, 0.16f, 0.10f, 0.68f, coatDk); // front left flap
+    addSolidBox(buf, i,  0.18f, 1.20f, -0.20f, 0.16f, 0.10f, 0.62f, coatDk); // front right flap
+    addSolidBox(buf, i, -0.34f, 0.68f,  0.28f, 0.10f, 0.08f, 0.40f, coatDk); // tatter
+    addSolidBox(buf, i,  0.32f, 0.72f,  0.30f, 0.10f, 0.08f, 0.35f, redDk);  // tatter (red)
+    addSolidBox(buf, i,  0.00f, 0.70f,  0.34f, 0.12f, 0.08f, 0.44f, coat);   // tatter
 
-    addPyramid(buf, i, -0.14f, 0.50f, 0.12f, 0.24f, 0.24f, 0.30f, hair);  // hair spike L
-    addPyramid(buf, i,  0.16f, 0.50f, 0.04f, 0.22f, 0.22f, 0.26f, hair);  // hair spike R
-    addPyramid(buf, i,  0.00f, 0.48f, 0.22f, 0.24f, 0.22f, 0.34f, hair);  // hair spike back
-}
-
-// -------------------------------------------------------------------------
-// ONE LEG: thigh + knee + shin + boot. Pivot = hip at (0,0,0), extends DOWN
-// (local y 0..-1.35). Drawn twice (mirror x for L/R). 4 boxes = 120 verts.
-static void buildChar_leg(LineVertex *buf, int &i)
-{
-    const unsigned int coat    = RGBA(38, 36, 46, 255);
-    const unsigned int coatDk  = brighten(coat, 0.75f);
-    const unsigned int leather = RGBA(30, 26, 24, 255);
-
-    addSolidBox(buf, i, 0.00f, -0.60f,  0.00f, 0.36f, 0.42f, 0.60f, coat);   // thigh
-    addSolidBox(buf, i, 0.00f, -0.74f,  0.00f, 0.30f, 0.38f, 0.16f, coatDk); // knee
-    addSolidBox(buf, i, 0.00f, -1.15f,  0.00f, 0.30f, 0.36f, 0.45f, coat);   // shin
-    addSolidBox(buf, i, 0.00f, -1.35f, -0.08f, 0.42f, 0.72f, 0.26f, leather);// boot (toe -z)
-}
-
-// -------------------------------------------------------------------------
-// ONE ARM: shoulder/upper arm + elbow + forearm + glove. Pivot = shoulder at
-// (0,0,0), extends DOWN (local y 0..-1.05). Drawn twice. 4 boxes = 120 verts.
-static void buildChar_arm(LineVertex *buf, int &i)
-{
-    const unsigned int coat    = RGBA(38, 36, 46, 255);
-    const unsigned int coatDk  = brighten(coat, 0.75f);
-    const unsigned int leather = RGBA(30, 26, 24, 255);
-
-    addSolidBox(buf, i, 0.00f, -0.50f,  0.00f, 0.30f, 0.36f, 0.50f, coat);   // upper arm
-    addSolidBox(buf, i, 0.00f, -0.62f,  0.00f, 0.27f, 0.33f, 0.14f, coatDk); // elbow
-    addSolidBox(buf, i, 0.00f, -0.92f,  0.00f, 0.27f, 0.31f, 0.34f, coat);   // forearm
-    addSolidBox(buf, i, 0.00f, -1.05f, -0.02f, 0.26f, 0.34f, 0.16f, leather);// glove
-}
-
-// -------------------------------------------------------------------------
-// KATANA: wrapped hilt + tsuba guard + long steel blade + point. Pivot at the
-// grip (0,0,0). Hilt hangs below the pivot (y 0..-0.5) and the blade extends up
-// (+y) so the caller can hang it on the back at any angle. 3 boxes + 1 pyramid
-// = 102 verts.
-static void buildChar_sword(LineVertex *buf, int &i)
-{
-    const unsigned int leather = RGBA(30, 26, 24, 255);
-    const unsigned int brass   = RGBA(120, 100, 60, 255);
-    const unsigned int steel   = RGBA(120, 138, 175, 255);
-
-    addSolidBox(buf, i, 0.00f, -0.50f, 0.00f, 0.10f, 0.10f, 0.50f, leather); // wrapped hilt
-    addSolidBox(buf, i, 0.00f,  0.00f, 0.00f, 0.30f, 0.26f, 0.07f, brass);   // tsuba guard
-    addSolidBox(buf, i, 0.00f,  0.07f, 0.00f, 0.12f, 0.05f, 1.50f, steel);   // long thin blade
-    addPyramid (buf, i, 0.00f,  1.57f, 0.00f, 0.12f, 0.05f, 0.40f, steel);   // blade point
+    // ================= LONG SWORD (down at the right side) =================
+    // grip in hand, guard, then a blade stepped down-and-outward to fake a tilt
+    addSolidBox(buf, i, 0.50f, 1.42f, 0.06f, 0.09f, 0.09f, 0.28f, leather); // wrapped grip
+    addSolidBox(buf, i, 0.52f, 1.36f, 0.07f, 0.26f, 0.22f, 0.06f, brass);   // tsuba guard
+    addSolidBox(buf, i, 0.56f, 1.02f, 0.09f, 0.11f, 0.05f, 0.36f, steel);   // blade 1
+    addSolidBox(buf, i, 0.61f, 0.68f, 0.11f, 0.10f, 0.05f, 0.36f, steel);   // blade 2
+    addSolidBox(buf, i, 0.66f, 0.36f, 0.13f, 0.09f, 0.05f, 0.34f, steel);   // blade 3
+    addSolidBox(buf, i, 0.70f, 0.12f, 0.15f, 0.07f, 0.05f, 0.26f, steel);   // point
 }
