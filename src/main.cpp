@@ -610,6 +610,8 @@ int main(void) {
     SceCtrlData pad;
     float playerX = 0.0f, playerY = 0.0f, playerZ = 0.0f;
     float velY = 0.0f;
+    float en = 780.0f;
+    const float EN_MAX = 780.0f;
     int   grounded = 1;
     float camYaw = 0.0f;
     int   paused = 0, prevStart = 0;
@@ -644,12 +646,23 @@ int main(void) {
             float nz = playerZ + mz * speed;
             if (!blocked(playerX, nz, playerY)) playerZ = nz;
 
-            // salto + gravedad vertical
+            // salto + gravedad + FLOTAR (L = control gravitacional, gasta EN)
             if (grounded && (pad.Buttons & PSP_CTRL_CROSS)) { velY = 0.55f; grounded = 0; }
-            velY -= 0.02f;
+            if ((pad.Buttons & PSP_CTRL_LTRIGGER) && en > 0.0f) {
+                velY += 0.05f;                 // sube/flota
+                if (velY > 0.28f) velY = 0.28f;
+                velY *= 0.86f;                 // caida amortiguada
+                en -= 7.0f;
+                grounded = 0;
+            } else {
+                velY -= 0.02f;                 // gravedad normal
+            }
             playerY += velY;
             float gh = groundHeight(playerX, playerZ, playerY);
             if (playerY <= gh) { playerY = gh; velY = 0.0f; grounded = 1; }
+            if (grounded && en < EN_MAX) en += 5.0f;
+            if (en > EN_MAX) en = EN_MAX;
+            if (en < 0.0f) en = 0.0f;
 
             // recoleccion de recursos por proximidad
             for (int r = 0; r < kResourceCount && r < 64; ++r) {
@@ -743,7 +756,7 @@ int main(void) {
         drawRect(barX, 12, barW, 6, RGBA(40, 20, 24, 220));   // HP fondo
         drawRect(barX, 12, barW, 6, RGBA(205, 55, 65, 255));  // HP lleno
         drawRect(barX, 24, barW, 6, RGBA(20, 28, 40, 220));   // EN fondo
-        drawRect(barX, 24, barW, 6, RGBA(65, 140, 220, 255)); // EN lleno
+        drawRect(barX, 24, (int)(barW * en / EN_MAX), 6, RGBA(65, 140, 220, 255)); // EN
         drawRect(barX, 36, barW, 6, RGBA(30, 20, 40, 220));   // GRV fondo
         drawRect(barX, 36, barW, 6, RGBA(160, 120, 215, 255));// GRV lleno
         drawRect(298, 234, 176, 32, RGBA(8, 8, 14, 165));     // panel arma
@@ -773,7 +786,8 @@ int main(void) {
         drawText(10, 23, 1.0f, RGBA(120, 170, 230, 255), "EN");
         drawText(10, 35, 1.0f, RGBA(185, 150, 230, 255), "GRV");
         drawText(barX + barW + 4, 11, 1.0f, RGBA(220, 220, 230, 255), "1200");
-        drawText(barX + barW + 4, 23, 1.0f, RGBA(220, 220, 230, 255), "780");
+        snprintf(hud, sizeof(hud), "%d", (int)en);
+        drawText(barX + barW + 4, 23, 1.0f, RGBA(220, 220, 230, 255), hud);
         drawText(barX + barW + 4, 35, 1.0f, RGBA(220, 220, 230, 255), "100%");
 
         snprintf(hud, sizeof(hud), "DISTRITO: Campanario    FPS %d", fps);
@@ -793,7 +807,7 @@ int main(void) {
         snprintf(hud, sizeof(hud), "X %d  Z %d  Y %d", (int)playerX, (int)playerZ, (int)playerY);
         drawText(8, 230, 1.0f, RGBA(110, 130, 160, 255), hud);
         drawText(8, 244, 1.0f, RGBA(110, 130, 160, 255),
-                 "Stick mover  Dpad camara  X saltar  START pausa");
+                 "Stick mover  Dpad cam  X saltar  L flotar  START pausa");
         if (paused) {
             drawText(206, 104, 2.0f, RGBA(232, 222, 242, 255), "PAUSA");
             drawText(163, 130, 1.0f, RGBA(165, 175, 205, 255), "START continuar   HOME salir");
