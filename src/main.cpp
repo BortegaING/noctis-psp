@@ -300,6 +300,43 @@ static void buildPlayerBox() {
     g_playerBoxVerts = i;
 }
 
+// personaje humanoide solido (mira a -z en local): abrigo oscuro con detalle
+// rojo, cabeza con pelo en puas y katana a la espalda (estilo de la referencia).
+static LineVertex __attribute__((aligned(16))) g_playerModel[900];
+static int g_playerModelVerts = 0;
+
+static void buildPlayerModel() {
+    int i = 0;
+    const unsigned int coat  = RGBA(48, 46, 58, 255);
+    const unsigned int red   = RGBA(158, 48, 54, 255);
+    const unsigned int skin  = RGBA(150, 132, 122, 255);
+    const unsigned int hair  = RGBA(28, 26, 34, 255);
+    const unsigned int steel = RGBA(120, 138, 172, 255);
+    // piernas
+    addSolidBox(g_playerModel, i, -0.22f, 0.0f, 0.0f, 0.34f, 0.36f, 1.5f, coat);
+    addSolidBox(g_playerModel, i,  0.22f, 0.0f, 0.0f, 0.34f, 0.36f, 1.5f, coat);
+    // faldon del abrigo
+    addSolidBox(g_playerModel, i, 0.0f, 1.25f, 0.0f, 0.98f, 0.62f, 0.55f, coat);
+    // torso
+    addSolidBox(g_playerModel, i, 0.0f, 1.75f, 0.0f, 0.82f, 0.50f, 0.95f, coat);
+    // pecho rojo (frente = -z)
+    addSolidBox(g_playerModel, i, 0.0f, 1.95f, -0.24f, 0.50f, 0.10f, 0.62f, red);
+    // brazos
+    addSolidBox(g_playerModel, i, -0.52f, 1.70f, 0.0f, 0.24f, 0.30f, 1.00f, coat);
+    addSolidBox(g_playerModel, i,  0.52f, 1.70f, 0.0f, 0.24f, 0.30f, 1.00f, coat);
+    // cuello + cabeza
+    addSolidBox(g_playerModel, i, 0.0f, 2.68f, 0.0f, 0.20f, 0.20f, 0.16f, skin);
+    addSolidBox(g_playerModel, i, 0.0f, 2.84f, 0.0f, 0.44f, 0.44f, 0.46f, skin);
+    // pelo (bloque + puas)
+    addSolidBox(g_playerModel, i, 0.0f, 3.22f, 0.06f, 0.52f, 0.50f, 0.16f, hair);
+    addPyramid(g_playerModel, i, -0.12f, 3.34f, 0.02f, 0.18f, 0.18f, 0.30f, hair);
+    addPyramid(g_playerModel, i,  0.12f, 3.34f, 0.10f, 0.16f, 0.16f, 0.26f, hair);
+    // katana a la espalda (+z): hoja + mango
+    addSolidBox(g_playerModel, i, 0.12f, 0.90f, 0.34f, 0.10f, 0.10f, 2.10f, steel);
+    addSolidBox(g_playerModel, i, 0.12f, 3.00f, 0.34f, 0.14f, 0.14f, 0.50f, hair);
+    g_playerModelVerts = i;
+}
+
 // --- NPCs roboticos (cuerpo + cabeza, wireframe) ---
 struct Npc { float x, z; };
 static const Npc kNpcs[] = {
@@ -484,7 +521,7 @@ int main(void) {
     buildGrid();
     buildWorld();
     buildSolidWorld();
-    buildPlayerBox();
+    buildPlayerModel();
     buildNpcs();
     buildChains();
     buildFontAtlas();
@@ -591,10 +628,12 @@ int main(void) {
 
         sceGumLoadIdentity();
         {
-            ScePspFVector3 pp = { playerX, playerY, playerZ };
+            ScePspFVector3 pp   = { playerX, playerY, playerZ };
+            ScePspFVector3 prot = { 0.0f, camYaw, 0.0f };
             sceGumTranslate(&pp);
+            sceGumRotateXYZ(&prot);
         }
-        sceGumDrawArray(GU_LINES, LINE_FLAGS, g_playerBoxVerts, 0, g_playerBox);
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_playerModelVerts, 0, g_playerModel);
 
         // recursos: brillan al acercarse (seccion 12)
         for (int r = 0; r < kResourceCount && r < 64; ++r) {
