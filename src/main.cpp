@@ -152,7 +152,7 @@ static void addSolidBox(LineVertex *buf, int &i, float cx, float baseY, float cz
 
 static TexVertex __attribute__((aligned(16))) g_solidWorld[22000]; // piedra texturizada
 static int g_solidVerts = 0;
-static LineVertex __attribute__((aligned(16))) g_win[18000];       // ventanas emisivas
+static TexVertex __attribute__((aligned(16))) g_win[18000];        // ventanas (vidriera texturizada)
 static int g_winVerts = 0;
 
 // piramide de 4 caras (aguja) sin textura -- para personaje/robots (LineVertex)
@@ -222,7 +222,7 @@ static void addWinRow(float cx, float cz, float w, float d, float y, int face, u
         for (int c = 1; c <= cols; ++c) {
             float x = cx - w * 0.5f + step * c;
             unsigned int wc = winPick(x, y, z, col); if (!wc) continue;
-            addQuad(g_win, g_winVerts, x-ww,y-wh,z, x+ww,y-wh,z, x+ww,y+wh,z, x-ww,y+wh,z, wc);
+            addQuadT(g_win, g_winVerts, x-ww,y-wh,z, x+ww,y-wh,z, x+ww,y+wh,z, x-ww,y+wh,z, 0,0,1,1, wc);
         }
     } else {
         const float x = (face == 2) ? (cx + w * 0.5f + e) : (cx - w * 0.5f - e);
@@ -231,7 +231,7 @@ static void addWinRow(float cx, float cz, float w, float d, float y, int face, u
         for (int c = 1; c <= cols; ++c) {
             float z = cz - d * 0.5f + step * c;
             unsigned int wc = winPick(x, y, z, col); if (!wc) continue;
-            addQuad(g_win, g_winVerts, x,y-wh,z-ww, x,y-wh,z+ww, x,y+wh,z+ww, x,y+wh,z-ww, wc);
+            addQuadT(g_win, g_winVerts, x,y-wh,z-ww, x,y-wh,z+ww, x,y+wh,z+ww, x,y+wh,z-ww, 0,0,1,1, wc);
         }
     }
 }
@@ -496,6 +496,23 @@ static void addChain(LineVertex *buf, int &i, float ax, float ay, float az,
     }
 }
 
+// textura de ventana (vidriera): panel brillante + parteluz en cruz + marco
+#define WTEX 32
+static unsigned int __attribute__((aligned(16))) g_winTex[WTEX * WTEX];
+static void buildWinTex() {
+    for (int y = 0; y < WTEX; ++y)
+        for (int x = 0; x < WTEX; ++x) {
+            int b;
+            int mx = x - WTEX / 2, my = y - WTEX / 2;
+            bool frame = (x < 3 || x >= WTEX - 3 || y < 3 || y >= WTEX - 3);
+            bool cross = (mx > -2 && mx < 1) || (my > -2 && my < 1);
+            if (frame || cross) b = 55;                     // marco / parteluz oscuro
+            else { b = 205 + (WTEX - y) * 2; if (b > 255) b = 255; } // panel con brillo
+            g_winTex[y * WTEX + x] = RGBA(b, b, b, 255);
+        }
+    sceKernelDcacheWritebackAll();
+}
+
 // textura de piedra procedural: patron de ladrillos + grima (para MODULATE)
 #define STEX 128
 static unsigned int __attribute__((aligned(16))) g_stoneTex[STEX * STEX];
@@ -664,6 +681,7 @@ int main(void) {
     sceCtrlSetSamplingCycle(0);
     sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
 
+    buildWinTex();
     buildStoneTex();
     buildSolidWorld();
     buildPlayerModel();
@@ -788,10 +806,14 @@ int main(void) {
         sceGuTexFilter(GU_LINEAR, GU_LINEAR);
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_solidVerts, 0, g_solidWorld);
+
+        // ventanas: textura de vidriera (CLAMP: cada ventana = 1 textura)
+        sceGuTexImage(0, WTEX, WTEX, WTEX, g_winTex);
+        sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_winVerts, 0, g_win);
         sceGuDisable(GU_TEXTURE_2D);
 
-        // ventanas emisivas + cables + robots (sin textura)
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_winVerts, 0, g_win);
+        // cables + robots (sin textura)
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_chainVerts, 0, g_chains);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
 
