@@ -260,6 +260,26 @@ static void buildSpire(LineVertex *buf, int &i, float cx, float cz,
     }
 }
 
+// baranda de hierro entre dos puntos: balaustres + postes con remate + pasamanos
+static void addRailing(LineVertex *buf, int &i, float x0, float z0,
+                       float x1, float z1, unsigned int col) {
+    const float dx = x1 - x0, dz = z1 - z0;
+    const float len = sqrtf(dx * dx + dz * dz);
+    int n = (int)(len / 1.3f); if (n < 1) n = 1;
+    for (int k = 0; k <= n; ++k) {
+        float t = (float)k / n;
+        float x = x0 + dx * t, z = z0 + dz * t;
+        addSolidBox(buf, i, x, 0.0f, z, 0.16f, 0.16f, 1.4f, col);       // balaustre
+        if (k % 4 == 0) {                                              // poste + remate
+            addSolidBox(buf, i, x, 0.0f, z, 0.32f, 0.32f, 1.7f, col);
+            addPyramid(buf, i, x, 1.7f, z, 0.32f, 0.32f, 0.55f, brighten(col, 1.25f));
+        }
+    }
+    const float mx = (x0 + x1) * 0.5f, mz = (z0 + z1) * 0.5f;
+    if (fabsf(dx) > fabsf(dz)) addSolidBox(buf, i, mx, 1.28f, mz, len, 0.22f, 0.2f, col);
+    else                       addSolidBox(buf, i, mx, 1.28f, mz, 0.22f, len, 0.2f, col);
+}
+
 static void buildSolidWorld() {
     int i = 0;
     for (int s = 0; s < kStructureCount && s < 63; ++s) {
@@ -280,6 +300,11 @@ static void buildSolidWorld() {
         float dd = sqrtf(cx * cx + cz * cz);
         buildSpire(g_solidWorld, i, cx, cz, ww, hh, kStructures[k % kStructureCount].color, dd);
     }
+    // baranda del mirador de spawn (primer plano, como la referencia)
+    const unsigned int iron = RGBA(40, 38, 46, 255);
+    addRailing(g_solidWorld, i, -9.0f, -7.0f,  9.0f, -7.0f, iron); // frente
+    addRailing(g_solidWorld, i, -9.0f, -7.0f, -9.0f,  1.0f, iron); // lado izq
+    addRailing(g_solidWorld, i,  9.0f, -7.0f,  9.0f,  1.0f, iron); // lado der
     // The Cathedral: detallada, silueta lejana con ventanas (secciones 26, 31)
     buildTower(g_solidWorld, i, 0.0f, -150.0f, 70.0f, 70.0f, 300.0f, RGBA(34, 32, 50, 255), 0.0f);
     g_solidVerts = i;
