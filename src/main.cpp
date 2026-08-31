@@ -243,6 +243,17 @@ static void addPinnacle(TexVertex *buf, int &i, float cx, float baseY, float cz,
     addPyramidT(buf, i, cx, baseY + h, cz, w, w, w * 1.7f, brighten(col, 1.12f));
 }
 
+// niebla por ALTURA: las estructuras se disuelven en la bruma del cielo al subir
+static unsigned int heightHaze(unsigned int base, float y) {
+    float t = y / 190.0f; if (t < 0.0f) t = 0.0f; if (t > 0.82f) t = 0.82f;
+    int br = base & 0xFF,  bg = (base >> 8) & 0xFF,  bb = (base >> 16) & 0xFF;
+    int cr = HAZE & 0xFF,  cg = (HAZE >> 8) & 0xFF,  cb = (HAZE >> 16) & 0xFF;
+    int r  = br + (int)((cr - br) * t);
+    int g  = bg + (int)((cg - bg) * t);
+    int b2 = bb + (int)((cb - bb) * t);
+    return RGBA(r, g, b2, 255);
+}
+
 // torre gotica detallada texturizada: cuerpo escalonado + aguja + pinaculos + contrafuertes
 static void buildTower(TexVertex *buf, int &i, float cx, float cz,
                        float w, float d, float h, unsigned int baseColor, float dist) {
@@ -251,20 +262,24 @@ static void buildTower(TexVertex *buf, int &i, float cx, float cz,
     float bodyTop;
     if (h > 45.0f) {
         const float h1 = h * 0.50f, h2 = h * 0.28f, h3 = h - h1 - h2;
-        addSolidBoxT(buf, i, cx, 0.0f,    cz, w,       d,       h1, stone);
-        addSolidBoxT(buf, i, cx, h1,      cz, w*0.78f, d*0.78f, h2, stone);
-        addSolidBoxT(buf, i, cx, h1 + h2, cz, w*0.56f, d*0.56f, h3, stone);
-        addPyramidT(buf, i, cx, h, cz, w*0.56f, d*0.56f, h*0.34f, brighten(stone, 1.18f));
+        const unsigned int s1 = heightHaze(stone, h1 * 0.5f);
+        const unsigned int s2 = heightHaze(stone, h1 + h2 * 0.5f);
+        const unsigned int s3 = heightHaze(stone, h1 + h2 + h3 * 0.5f);
+        addSolidBoxT(buf, i, cx, 0.0f,    cz, w,       d,       h1, s1);
+        addSolidBoxT(buf, i, cx, h1,      cz, w*0.78f, d*0.78f, h2, s2);
+        addSolidBoxT(buf, i, cx, h1 + h2, cz, w*0.56f, d*0.56f, h3, s3);
+        addPyramidT(buf, i, cx, h, cz, w*0.56f, d*0.56f, h*0.34f, heightHaze(brighten(stone, 1.18f), h));
         const float px = w*0.5f - 0.8f, pz = d*0.5f - 0.8f;
         const float ph = h * 0.13f;
-        addPinnacle(buf, i, cx-px, h1, cz-pz, 1.4f, ph, stone);
-        addPinnacle(buf, i, cx+px, h1, cz-pz, 1.4f, ph, stone);
-        addPinnacle(buf, i, cx-px, h1, cz+pz, 1.4f, ph, stone);
-        addPinnacle(buf, i, cx+px, h1, cz+pz, 1.4f, ph, stone);
+        const unsigned int sp = heightHaze(stone, h1);
+        addPinnacle(buf, i, cx-px, h1, cz-pz, 1.4f, ph, sp);
+        addPinnacle(buf, i, cx+px, h1, cz-pz, 1.4f, ph, sp);
+        addPinnacle(buf, i, cx-px, h1, cz+pz, 1.4f, ph, sp);
+        addPinnacle(buf, i, cx+px, h1, cz+pz, 1.4f, ph, sp);
         bodyTop = h1;
     } else {
-        addSolidBoxT(buf, i, cx, 0.0f, cz, w, d, h, stone);
-        if (h > 18.0f) addPyramidT(buf, i, cx, h, cz, w, d, h * 0.40f, brighten(stone, 1.12f));
+        addSolidBoxT(buf, i, cx, 0.0f, cz, w, d, h, heightHaze(stone, h * 0.5f));
+        if (h > 18.0f) addPyramidT(buf, i, cx, h, cz, w, d, h * 0.40f, heightHaze(brighten(stone, 1.12f), h));
         bodyTop = h;
     }
     if (w >= 6.0f && h > 30.0f) {
@@ -292,9 +307,9 @@ static void buildSpire(TexVertex *buf, int &i, float cx, float cz,
                        float w, float h, unsigned int base, float dist) {
     const unsigned int stone = fadeToVoid(warmTint(brighten(base, 1.8f)), dist);
     const float h1 = h * 0.68f;
-    addSolidBoxT(buf, i, cx, 0.0f, cz, w, w, h1, stone);
-    addSolidBoxT(buf, i, cx, h1, cz, w * 0.6f, w * 0.6f, h - h1, stone);
-    addPyramidT(buf, i, cx, h, cz, w * 0.6f, w * 0.6f, h * 0.42f, brighten(stone, 1.1f));
+    addSolidBoxT(buf, i, cx, 0.0f, cz, w, w, h1, heightHaze(stone, h1 * 0.5f));
+    addSolidBoxT(buf, i, cx, h1, cz, w * 0.6f, w * 0.6f, h - h1, heightHaze(stone, h1 + (h - h1) * 0.5f));
+    addPyramidT(buf, i, cx, h, cz, w * 0.6f, w * 0.6f, h * 0.42f, heightHaze(brighten(stone, 1.1f), h));
     int rows = (int)(h1 / 6.0f); if (rows > 7) rows = 7;
     for (int rrow = 0; rrow < rows; ++rrow) {
         float y = 4.0f + rrow * 6.0f;
@@ -346,7 +361,7 @@ static void buildSolidWorld() {
         float rad = 36.0f + (float)((k * 37) % 72);  // 36..107
         float cx = cosf(ang) * rad;
         float cz = sinf(ang) * rad;
-        float hh = 44.0f + (float)((k * 53) % 92);   // 44..135
+        float hh = 60.0f + (float)((k * 53) % 175);  // 60..234 (se pierden en la bruma)
         float ww = 3.0f + (float)((k * 7) % 4);      // 3..6
         float dd = sqrtf(cx * cx + cz * cz);
         buildSpire(g_solidWorld, i, cx, cz, ww, hh, kStructures[k % kStructureCount].color, dd);
