@@ -78,10 +78,12 @@ static int g_worldVerts = 0;
 
 static void buildWorld() {
     int i = 0;
-    for (int s = 0; s < kStructureCount && s < 64; ++s) {
+    for (int s = 0; s < kStructureCount && s < 63; ++s) {
         const Structure &st = kStructures[s];
         addBoxEdges(g_world, i, st.x, st.y, st.z, st.w, st.d, st.h, st.color);
     }
+    // The Cathedral: silueta monumental y lejana (placeholder, seccion 26)
+    addBoxEdges(g_world, i, 0.0f, 0.0f, -240.0f, 70.0f, 70.0f, 380.0f, RGBA(72, 64, 96, 255));
     g_worldVerts = i;
 }
 
@@ -232,6 +234,9 @@ int main(void) {
     long long lastTick = sceKernelGetSystemTimeWide();
     char hud[80];
 
+    int collected[64] = {0};
+    int collectedCount = 0, pickTimer = 0, pickedType = 0;
+
     while (!g_exit) {
         sceCtrlReadBufferPositive(&pad, 1);
         if (pad.Buttons & PSP_CTRL_START) g_exit = 1;
@@ -255,6 +260,20 @@ int main(void) {
         playerY += velY;
         float gh = groundHeight(playerX, playerZ, playerY);
         if (playerY <= gh) { playerY = gh; velY = 0.0f; grounded = 1; }
+
+        // recoleccion de recursos por proximidad
+        for (int r = 0; r < kResourceCount && r < 64; ++r) {
+            if (collected[r]) continue;
+            float dx = kResources[r].x - playerX, dz = kResources[r].z - playerZ;
+            if (dx * dx + dz * dz < 2.6f * 2.6f) {
+                collected[r] = 1;
+                collectedCount++;
+                pickedType = kResources[r].type;
+                if (pickedType < 0 || pickedType >= kMaterialCount) pickedType = 0;
+                pickTimer = 120;
+            }
+        }
+        if (pickTimer > 0) pickTimer--;
 
         // FPS
         frameAccum++;
@@ -294,6 +313,22 @@ int main(void) {
         }
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_playerBoxVerts, 0, g_playerBox);
 
+        // recursos: brillan al acercarse (seccion 12)
+        for (int r = 0; r < kResourceCount && r < 64; ++r) {
+            if (collected[r]) continue;
+            float dx = kResources[r].x - playerX, dz = kResources[r].z - playerZ;
+            float d = sqrtf(dx * dx + dz * dz);
+            float t = (d < 14.0f) ? (1.0f - d / 14.0f) : 0.0f; // 0 lejos .. 1 cerca
+            int br = 55 + (int)(190 * t);
+            unsigned int col = RGBA(br, 90 + (int)(90 * t), 130 + (int)(90 * t), 255);
+            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 24);
+            int vi = 0;
+            addBoxEdges(v, vi, kResources[r].x, kResources[r].y + 0.3f, kResources[r].z,
+                        0.8f, 0.8f, 0.8f, col);
+            sceGumLoadIdentity();
+            sceGumDrawArray(GU_LINES, LINE_FLAGS, vi, 0, v);
+        }
+
         // ---------- HUD (2D) ----------
         sceGuDisable(GU_DEPTH_TEST);
         sceGuEnable(GU_BLEND);
@@ -325,6 +360,14 @@ int main(void) {
 
         drawText(304, 239, 1.0f, RGBA(222, 210, 188, 255), kRanged[1].name);
         drawText(304, 252, 1.0f, RGBA(150, 175, 215, 255), "40 / 280");
+
+        // aviso de objeto obtenido + contador de materiales
+        if (pickTimer > 0) {
+            snprintf(hud, sizeof(hud), "OBJETO OBTENIDO: %s", kMaterials[pickedType].name);
+            drawText(8, 150, 1.0f, RGBA(120, 220, 150, 255), hud);
+        }
+        snprintf(hud, sizeof(hud), "MATERIALES: %d", collectedCount);
+        drawText(8, 200, 1.0f, RGBA(150, 200, 170, 255), hud);
 
         snprintf(hud, sizeof(hud), "X %d  Z %d  Y %d", (int)playerX, (int)playerZ, (int)playerY);
         drawText(8, 230, 1.0f, RGBA(110, 130, 160, 255), hud);
