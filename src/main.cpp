@@ -28,6 +28,7 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 static unsigned int __attribute__((aligned(16))) g_list[262144];
 static const unsigned int CLEAR_COLOR = RGBA(16, 14, 20, 255);
 static const unsigned int HAZE = RGBA(98, 86, 78, 255); // gris-marron silueta (calido)
+#define WSCALE 1.45f  // separa el distrito para abrir la vista (mas skyline/agujas)
 
 #define LINE_FLAGS (GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D)
 
@@ -294,8 +295,9 @@ static void buildSolidWorld() {
     for (int s = 0; s < kStructureCount && s < 63; ++s) {
         if (i > 28000) break;
         const Structure &st = kStructures[s];
-        float d = sqrtf(st.x * st.x + st.z * st.z);
-        buildTower(g_solidWorld, i, st.x, st.z, st.w, st.d, st.h, st.color, d);
+        float sx = st.x * WSCALE, sz = st.z * WSCALE;
+        float d = sqrtf(sx * sx + sz * sz);
+        buildTower(g_solidWorld, i, sx, sz, st.w, st.d, st.h, st.color, d);
     }
     // mar de agujas de fondo (espiral aurea): densidad que se pierde en neblina
     for (int k = 0; k < 60; ++k) {
@@ -328,8 +330,9 @@ static float groundHeight(float px, float pz, float py) {
     float g = 0.0f;
     for (int s = 0; s < kStructureCount; ++s) {
         const Structure &st = kStructures[s];
-        const float x0 = st.x - st.w * 0.5f, x1 = st.x + st.w * 0.5f;
-        const float z0 = st.z - st.d * 0.5f, z1 = st.z + st.d * 0.5f;
+        const float cx = st.x * WSCALE, cz = st.z * WSCALE;
+        const float x0 = cx - st.w * 0.5f, x1 = cx + st.w * 0.5f;
+        const float z0 = cz - st.d * 0.5f, z1 = cz + st.d * 0.5f;
         if (px >= x0 && px <= x1 && pz >= z0 && pz <= z1) {
             const float top = st.y + st.h;
             if (top > g && top <= py + 1.0f) g = top;
@@ -345,8 +348,9 @@ static bool blocked(float px, float pz, float py) {
     for (int s = 0; s < kStructureCount; ++s) {
         const Structure &st = kStructures[s];
         if (py < st.y + st.h - 0.8f) {
-            const float x0 = st.x - st.w * 0.5f - r, x1 = st.x + st.w * 0.5f + r;
-            const float z0 = st.z - st.d * 0.5f - r, z1 = st.z + st.d * 0.5f + r;
+            const float cx = st.x * WSCALE, cz = st.z * WSCALE;
+            const float x0 = cx - st.w * 0.5f - r, x1 = cx + st.w * 0.5f + r;
+            const float z0 = cz - st.d * 0.5f - r, z1 = cz + st.d * 0.5f + r;
             if (px > x0 && px < x1 && pz > z0 && pz < z1) return true;
         }
     }
@@ -461,12 +465,13 @@ static void buildChains() {
             if (i > 1700) break;
             const Structure &a = kStructures[k];
             const Structure &b = kStructures[(k + offs[o]) % kStructureCount];
-            float dx = a.x - b.x, dz = a.z - b.z;
+            float ax = a.x * WSCALE, az = a.z * WSCALE, bx = b.x * WSCALE, bz = b.z * WSCALE;
+            float dx = ax - bx, dz = az - bz;
             float dist = sqrtf(dx * dx + dz * dz);
-            if (dist > 8.0f && dist < 56.0f) {
+            if (dist > 10.0f && dist < 80.0f) {
                 float ay = a.h * (0.52f + 0.09f * o);
                 float by = b.h * (0.52f + 0.09f * o);
-                addChain(g_chains, i, a.x, ay, a.z, b.x, by, b.z, 3.0f + dist * 0.06f, col);
+                addChain(g_chains, i, ax, ay, az, bx, by, bz, 3.0f + dist * 0.05f, col);
             }
         }
     }
@@ -667,7 +672,7 @@ int main(void) {
             // recoleccion de recursos por proximidad
             for (int r = 0; r < kResourceCount && r < 64; ++r) {
                 if (collected[r]) continue;
-                float dx = kResources[r].x - playerX, dz = kResources[r].z - playerZ;
+                float dx = kResources[r].x * WSCALE - playerX, dz = kResources[r].z * WSCALE - playerZ;
                 if (dx * dx + dz * dz < 2.6f * 2.6f) {
                     collected[r] = 1;
                     collectedCount++;
@@ -731,14 +736,14 @@ int main(void) {
         // recursos: brillan al acercarse (seccion 12)
         for (int r = 0; r < kResourceCount && r < 64; ++r) {
             if (collected[r]) continue;
-            float dx = kResources[r].x - playerX, dz = kResources[r].z - playerZ;
+            float dx = kResources[r].x * WSCALE - playerX, dz = kResources[r].z * WSCALE - playerZ;
             float d = sqrtf(dx * dx + dz * dz);
             float t = (d < 14.0f) ? (1.0f - d / 14.0f) : 0.0f; // 0 lejos .. 1 cerca
             int br = 60 + (int)(190 * t);
             unsigned int col = RGBA(br, 90 + (int)(95 * t), 140 + (int)(95 * t), 255);
             LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 40);
             int vi = 0;
-            addSolidBox(v, vi, kResources[r].x, kResources[r].y + 0.2f, kResources[r].z,
+            addSolidBox(v, vi, kResources[r].x * WSCALE, kResources[r].y + 0.2f, kResources[r].z * WSCALE,
                         0.7f, 0.7f, 0.7f, col); // gema solida que brilla al acercarse
             sceGumLoadIdentity();
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
