@@ -81,6 +81,21 @@ static unsigned int brighten(unsigned int c, float f) {
     return RGBA(r, g, b, 255);
 }
 
+// desvanece un color hacia el fondo (vacio) segun la distancia al centro del
+// distrito. Niebla "horneada" fiable (no depende del fog por hardware).
+static unsigned int fadeToVoid(unsigned int base, float dist) {
+    const float a = 20.0f, b = 64.0f;
+    float t = (dist - a) / (b - a);
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    int br = base & 0xFF,        bg = (base >> 8) & 0xFF,        bb = (base >> 16) & 0xFF;
+    int cr = CLEAR_COLOR & 0xFF, cg = (CLEAR_COLOR >> 8) & 0xFF, cb = (CLEAR_COLOR >> 16) & 0xFF;
+    int r  = br + (int)((cr - br) * t);
+    int g  = bg + (int)((cg - bg) * t);
+    int b2 = bb + (int)((cb - bb) * t);
+    return RGBA(r, g, b2, 255);
+}
+
 // --- distrito ---
 static LineVertex __attribute__((aligned(16))) g_world[64 * 24];
 static int g_worldVerts = 0;
@@ -126,9 +141,12 @@ static void buildSolidWorld() {
     int i = 0;
     for (int s = 0; s < kStructureCount && s < 63; ++s) {
         const Structure &st = kStructures[s];
-        addSolidBox(g_solidWorld, i, st.x, st.y, st.z, st.w, st.d, st.h, brighten(st.color, 1.7f));
+        float d = sqrtf(st.x * st.x + st.z * st.z);
+        addSolidBox(g_solidWorld, i, st.x, st.y, st.z, st.w, st.d, st.h,
+                    fadeToVoid(brighten(st.color, 1.9f), d));
     }
-    addSolidBox(g_solidWorld, i, 0.0f, 0.0f, -240.0f, 70.0f, 70.0f, 380.0f, RGBA(48, 44, 70, 255));
+    // The Cathedral: silueta tenue y lejana (no se desvanece del todo, seccion 26)
+    addSolidBox(g_solidWorld, i, 0.0f, 0.0f, -150.0f, 70.0f, 70.0f, 340.0f, RGBA(42, 40, 60, 255));
     g_solidVerts = i;
 }
 
