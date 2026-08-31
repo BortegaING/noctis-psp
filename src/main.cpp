@@ -721,14 +721,14 @@ int main(void) {
             float dx = kResources[r].x - playerX, dz = kResources[r].z - playerZ;
             float d = sqrtf(dx * dx + dz * dz);
             float t = (d < 14.0f) ? (1.0f - d / 14.0f) : 0.0f; // 0 lejos .. 1 cerca
-            int br = 55 + (int)(190 * t);
-            unsigned int col = RGBA(br, 90 + (int)(90 * t), 130 + (int)(90 * t), 255);
-            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 24);
+            int br = 60 + (int)(190 * t);
+            unsigned int col = RGBA(br, 90 + (int)(95 * t), 140 + (int)(95 * t), 255);
+            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 40);
             int vi = 0;
-            addBoxEdges(v, vi, kResources[r].x, kResources[r].y + 0.3f, kResources[r].z,
-                        0.8f, 0.8f, 0.8f, col);
+            addSolidBox(v, vi, kResources[r].x, kResources[r].y + 0.2f, kResources[r].z,
+                        0.7f, 0.7f, 0.7f, col); // gema solida que brilla al acercarse
             sceGumLoadIdentity();
-            sceGumDrawArray(GU_LINES, LINE_FLAGS, vi, 0, v);
+            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
         }
 
         // ---------- HUD (2D) ----------
