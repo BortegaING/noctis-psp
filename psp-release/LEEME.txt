@@ -1,0 +1,38 @@
+COMO PROBAR PROJECT NOCTIS EN LA PSP
+=====================================
+
+Tu PSP necesita firmware custom (CFW) para correr homebrew (la tuya ya
+esta modeada, asi que OK).
+
+PASOS
+-----
+1. Conecta la PSP al PC por USB y en la PSP entra en:
+   Ajustes > Conexion USB   (queda como una unidad extraible, ej. E:)
+
+2. En esa unidad, entra a la carpeta:  PSP\GAME
+   (si no existe, creala)
+
+3. Copia AHI la carpeta   NOCTIS   completa (la que esta junto a este archivo).
+   Debe quedar:   E:\PSP\GAME\NOCTIS\EBOOT.PBP
+
+4. Desconecta el USB (en la PSP, boton O para salir del modo USB).
+
+5. En el menu de la PSP ve a:  Juego > Memory Stick
+   Aparece PROJECT NOCTIS. Abrelo con X.
+
+CONTROLES
+---------
+- Stick analogico: mover
+- D-pad izquierda/derecha: girar la camara
+- X: saltar
+- START: salir
+- HOME: salir al menu de la PSP
+
+QUE DEBERIAS VER
+----------------
+Distrito Campanario: torres goticas solidas, NPCs (figuras teal),
+tu personaje (caja naranja), HUD con barras HP/EN/GRV, minimapa,
+recursos que brillan al acercarte, y The Cathedral al fondo.
+
+Si algo va lento o se ve raro EN LA PSP REAL, avisame el detalle
+(FPS, que parte) y lo ajusto: el emulador y el hardware real difieren.

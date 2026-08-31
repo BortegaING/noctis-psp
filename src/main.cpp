@@ -134,19 +134,85 @@ static void addSolidBox(LineVertex *buf, int &i, float cx, float baseY, float cz
     addQuad(buf, i, x1,y0,z0, x1,y0,z1, x1,y1,z1, x1,y1,z0, sb);  // derecha
 }
 
-static LineVertex __attribute__((aligned(16))) g_solidWorld[64 * 30];
+static LineVertex __attribute__((aligned(16))) g_solidWorld[30000];
 static int g_solidVerts = 0;
+
+// piramide de 4 caras (aguja / chapitel gotico)
+static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
+                       float w, float d, float apexH, unsigned int col) {
+    const float x0 = cx - w * 0.5f, x1 = cx + w * 0.5f;
+    const float z0 = cz - d * 0.5f, z1 = cz + d * 0.5f;
+    const float y0 = baseY, ay = baseY + apexH;
+    const unsigned int a = brighten(col, 1.10f), b = brighten(col, 0.72f);
+    buf[i++] = { a, x0, y0, z0 }; buf[i++] = { a, x1, y0, z0 }; buf[i++] = { a, cx, ay, cz };
+    buf[i++] = { b, x1, y0, z0 }; buf[i++] = { b, x1, y0, z1 }; buf[i++] = { b, cx, ay, cz };
+    buf[i++] = { a, x1, y0, z1 }; buf[i++] = { a, x0, y0, z1 }; buf[i++] = { a, cx, ay, cz };
+    buf[i++] = { b, x0, y0, z1 }; buf[i++] = { b, x0, y0, z0 }; buf[i++] = { b, cx, ay, cz };
+}
+
+// una fila de ventanas (quads emisivos) en una cara.
+// face: 0=+z, 1=-z, 2=+x, 3=-x
+static void addWinRow(LineVertex *buf, int &i, float cx, float cz,
+                      float w, float d, float y, int face, unsigned int col) {
+    const float wh = 0.7f, ww = 0.32f, e = 0.10f;
+    if (face == 0 || face == 1) {
+        const float z = (face == 0) ? (cz + d * 0.5f + e) : (cz - d * 0.5f - e);
+        int cols = (int)(w / 2.4f); if (cols < 1) cols = 1; if (cols > 5) cols = 5;
+        const float step = w / (cols + 1);
+        for (int c = 1; c <= cols; ++c) {
+            float x = cx - w * 0.5f + step * c;
+            addQuad(buf, i, x-ww,y-wh,z, x+ww,y-wh,z, x+ww,y+wh,z, x-ww,y+wh,z, col);
+        }
+    } else {
+        const float x = (face == 2) ? (cx + w * 0.5f + e) : (cx - w * 0.5f - e);
+        int cols = (int)(d / 2.4f); if (cols < 1) cols = 1; if (cols > 5) cols = 5;
+        const float step = d / (cols + 1);
+        for (int c = 1; c <= cols; ++c) {
+            float z = cz - d * 0.5f + step * c;
+            addQuad(buf, i, x,y-wh,z-ww, x,y-wh,z+ww, x,y+wh,z+ww, x,y+wh,z-ww, col);
+        }
+    }
+}
+
+// torre gotica detallada: cuerpo por tramos + aguja + ventanas iluminadas
+static void buildTower(LineVertex *buf, int &i, float cx, float cz,
+                       float w, float d, float h, unsigned int baseColor, float dist) {
+    const unsigned int stone = fadeToVoid(brighten(baseColor, 1.9f), dist);
+    const unsigned int win   = RGBA(235, 165, 85, 255); // ambar (luces)
+    float bodyTop;
+    if (h > 45.0f) {
+        const float h1 = h * 0.62f, h2 = h - h1;
+        addSolidBox(buf, i, cx, 0.0f, cz, w, d, h1, stone);
+        addSolidBox(buf, i, cx, h1, cz, w * 0.72f, d * 0.72f, h2, stone);
+        addPyramid(buf, i, cx, h, cz, w * 0.72f, d * 0.72f, h * 0.30f, brighten(stone, 1.15f));
+        bodyTop = h1;
+    } else {
+        addSolidBox(buf, i, cx, 0.0f, cz, w, d, h, stone);
+        if (h > 18.0f) addPyramid(buf, i, cx, h, cz, w, d, h * 0.35f, brighten(stone, 1.12f));
+        bodyTop = h;
+    }
+    int rows = (int)((bodyTop - 4.0f) / 4.5f);
+    if (rows > 11) rows = 11;
+    for (int rrow = 0; rrow < rows; ++rrow) {
+        float y = 3.5f + rrow * 4.5f;
+        if (y > bodyTop - 2.0f) break;
+        addWinRow(buf, i, cx, cz, w, d, y, 0, win);
+        addWinRow(buf, i, cx, cz, w, d, y, 1, win);
+        addWinRow(buf, i, cx, cz, w, d, y, 2, win);
+        addWinRow(buf, i, cx, cz, w, d, y, 3, win);
+    }
+}
 
 static void buildSolidWorld() {
     int i = 0;
     for (int s = 0; s < kStructureCount && s < 63; ++s) {
+        if (i > 28000) break;
         const Structure &st = kStructures[s];
         float d = sqrtf(st.x * st.x + st.z * st.z);
-        addSolidBox(g_solidWorld, i, st.x, st.y, st.z, st.w, st.d, st.h,
-                    fadeToVoid(brighten(st.color, 1.9f), d));
+        buildTower(g_solidWorld, i, st.x, st.z, st.w, st.d, st.h, st.color, d);
     }
-    // The Cathedral: silueta tenue y lejana (no se desvanece del todo, seccion 26)
-    addSolidBox(g_solidWorld, i, 0.0f, 0.0f, -150.0f, 70.0f, 70.0f, 340.0f, RGBA(42, 40, 60, 255));
+    // The Cathedral: detallada, silueta lejana con ventanas (secciones 26, 31)
+    buildTower(g_solidWorld, i, 0.0f, -150.0f, 70.0f, 70.0f, 300.0f, RGBA(34, 32, 50, 255), 0.0f);
     g_solidVerts = i;
 }
 
