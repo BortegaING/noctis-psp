@@ -509,6 +509,11 @@ static const Npc kNpcs[] = {
 static const int kNpcCount = (int)(sizeof(kNpcs) / sizeof(kNpcs[0]));
 static LineVertex __attribute__((aligned(16))) g_npc[1800];
 static int g_npcVerts = 0;
+static int g_npcKilled[64] = {0};   // robots derribados a tiros (no se dibujan)
+
+// ===== ARMA / DISPAROS (L apunta, R dispara) =====
+struct Shot { float x, y, z, vx, vy, vz; int life; };
+static Shot g_shots[24];
 
 // robots solidos variados (oxidado/acero/oscuro/teal), con ojo luminoso
 static void buildNpcs() {
@@ -520,6 +525,7 @@ static void buildNpcs() {
         RGBA(84, 168, 160, 255),  // teal
     };
     for (int n = 0; n < kNpcCount; ++n) {
+        if (g_npcKilled[n]) continue;   // derribado -> no se dibuja
         const unsigned int col = pal[n % 4];
         const float hh = 1.5f + 0.18f * (float)(n % 3);
         const float x = kNpcs[n].x, z = kNpcs[n].z;
@@ -834,6 +840,13 @@ int main(void) {
     int collected[64] = {0};
     int collectedCount = 0, pickTimer = 0, pickedType = 0;
 
+    // ---- arma (L apunta, R dispara; CUADRADO planea) ----
+    int   aiming = 0, fireCD = 0, reloadCD = 0, muzzle = 0;
+    int   ammo = 40, ammoReserve = 280;
+    for (int s = 0; s < 24; ++s) g_shots[s].life = 0;
+    const float SHOT_SPEED = 1.7f;
+    const int   SHOT_LIFE = 55, FIRE_CD = 7, MAG = 40;
+
     while (!g_exit) {
         sceCtrlReadBufferPositive(&pad, 1);
         // START = pausa (toggle con deteccion de flanco). Ya NO sale. HOME sale.
@@ -874,6 +887,33 @@ int main(void) {
                 while (dA < -3.14159265f) dA += 6.28318531f;
                 heroYaw += dA * 0.20f;   // el personaje encara la direccion de avance
             }
+            // ===== ARMA: L apunta, R dispara =====
+            aiming = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
+            if (aiming) {
+                // al apuntar, el personaje encara al frente (hacia la pantalla, -Z)
+                float dA = 0.0f - heroYaw;
+                while (dA >  3.14159265f) dA -= 6.28318531f;
+                while (dA < -3.14159265f) dA += 6.28318531f;
+                heroYaw += dA * 0.35f;
+            }
+            if (fireCD > 0) fireCD--;
+            if (reloadCD > 0) reloadCD--;
+            if (muzzle > 0) muzzle--;
+            if (aiming && (pad.Buttons & PSP_CTRL_RTRIGGER) && fireCD == 0 && reloadCD == 0) {
+                if (ammo > 0) {
+                    float fx = sinf(heroYaw), fz = -cosf(heroYaw);           // frente
+                    float mx = playerX + fx * 0.7f, my = playerY + 1.5f, mz = playerZ + fz * 0.7f;
+                    for (int s = 0; s < 24; ++s) if (g_shots[s].life <= 0) {
+                        g_shots[s].x = mx;  g_shots[s].y = my;  g_shots[s].z = mz;
+                        g_shots[s].vx = fx * SHOT_SPEED; g_shots[s].vy = 0.0f; g_shots[s].vz = fz * SHOT_SPEED;
+                        g_shots[s].life = SHOT_LIFE; break;
+                    }
+                    ammo--; fireCD = FIRE_CD; muzzle = 4;
+                } else if (ammoReserve > 0) {   // recarga automatica al vaciar
+                    int need = MAG - ammo; if (need > ammoReserve) need = ammoReserve;
+                    ammo += need; ammoReserve -= need; reloadCD = 34;
+                }
+            }
             // ===== salto: coyote time + buffer + salto variable =====
             if (grounded) coyote = COYOTE_MAX; else if (coyote > 0) coyote--;
             int jumpNow = (pad.Buttons & PSP_CTRL_CROSS) ? 1 : 0;
@@ -881,8 +921,8 @@ int main(void) {
             if (jumpBuf > 0 && coyote > 0) { velY = JUMP_VEL; grounded = 0; coyote = 0; jumpBuf = 0; }
             if (!jumpNow && velY > 0.0f) velY *= SHORTHOP;
             prevJump = jumpNow;
-            // ===== gravedad / PLANEO (L gasta EN, caida lenta) =====
-            if ((pad.Buttons & PSP_CTRL_LTRIGGER) && en > 0.0f) {
+            // ===== gravedad / PLANEO (CUADRADO gasta EN; L ahora apunta) =====
+            if ((pad.Buttons & PSP_CTRL_SQUARE) && en > 0.0f) {
                 velY += FLOAT_LIFT; if (velY > FLOAT_UPCAP)   velY = FLOAT_UPCAP;
                 velY -= FLOAT_GRAV; if (velY < FLOAT_FALLCAP) velY = FLOAT_FALLCAP;
                 en -= EN_FLOAT; grounded = 0;
@@ -915,6 +955,24 @@ int main(void) {
                 }
             }
             if (pickTimer > 0) pickTimer--;
+
+            // ===== balas: mover, chocar con muros, derribar robots =====
+            for (int s = 0; s < 24; ++s) {
+                if (g_shots[s].life <= 0) continue;
+                g_shots[s].x += g_shots[s].vx;
+                g_shots[s].y += g_shots[s].vy;
+                g_shots[s].z += g_shots[s].vz;
+                if (--g_shots[s].life <= 0) continue;
+                if (blocked(g_shots[s].x, g_shots[s].z, g_shots[s].y)) { g_shots[s].life = 0; continue; }
+                for (int n = 0; n < kNpcCount; ++n) {
+                    if (g_npcKilled[n]) continue;
+                    float dx = g_shots[s].x - kNpcs[n].x, dz = g_shots[s].z - kNpcs[n].z;
+                    float hh = 1.5f + 0.18f * (float)(n % 3);
+                    if (dx*dx + dz*dz < 0.5f*0.5f && g_shots[s].y > 0.0f && g_shots[s].y < hh + 0.6f) {
+                        g_npcKilled[n] = 1; buildNpcs(); g_shots[s].life = 0; break;
+                    }
+                }
+            }
         }
 
         // FPS
@@ -1008,6 +1066,27 @@ int main(void) {
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
         }
 
+        // ---- balas (tracer brillante) ----
+        for (int s = 0; s < 24; ++s) {
+            if (g_shots[s].life <= 0) continue;
+            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
+            int vi = 0;
+            addSolidBox(v, vi, g_shots[s].x, g_shots[s].y - 0.07f, g_shots[s].z,
+                        0.14f, 0.14f, 0.14f, RGBA(255, 210, 130, 255));
+            sceGumLoadIdentity();
+            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
+        }
+        // ---- fogonazo del canon ----
+        if (muzzle > 0) {
+            float fx = sinf(heroYaw), fz = -cosf(heroYaw);
+            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
+            int vi = 0;
+            addSolidBox(v, vi, playerX + fx * 0.7f, playerY + 1.5f - 0.12f, playerZ + fz * 0.7f,
+                        0.24f, 0.24f, 0.24f, RGBA(255, 235, 170, 255));
+            sceGumLoadIdentity();
+            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
+        }
+
         // ---------- HUD (2D) ----------
         sceGuDisable(GU_DEPTH_TEST);
         sceGuEnable(GU_BLEND);
@@ -1043,6 +1122,16 @@ int main(void) {
                 drawRect(pxm - 2, pym - 2, 4, 4, RGBA(245, 140, 95, 255));
         }
 
+        // mira (crosshair) al apuntar con L
+        if (aiming) {
+            unsigned int rc = RGBA(255, 90, 80, 235);
+            drawRect(239, 127, 2, 7, rc);   // arriba
+            drawRect(239, 139, 2, 7, rc);   // abajo
+            drawRect(231, 135, 7, 2, rc);   // izq
+            drawRect(243, 135, 7, 2, rc);   // der
+            drawRect(239, 135, 2, 2, RGBA(255, 255, 255, 255)); // centro
+        }
+
         if (paused) drawRect(150, 88, 180, 64, RGBA(10, 10, 16, 205)); // panel pausa
 
         // texto
@@ -1059,7 +1148,12 @@ int main(void) {
         drawText(8, 58, 1.0f, RGBA(150, 160, 190, 255), hud);
 
         drawText(304, 239, 1.0f, RGBA(222, 210, 188, 255), kRanged[1].name);
-        drawText(304, 252, 1.0f, RGBA(150, 175, 215, 255), "40 / 280");
+        if (reloadCD > 0) {
+            drawText(304, 252, 1.0f, RGBA(235, 180, 90, 255), "RECARGANDO...");
+        } else {
+            snprintf(hud, sizeof(hud), "%d / %d", ammo, ammoReserve);
+            drawText(304, 252, 1.0f, aiming ? RGBA(255, 120, 110, 255) : RGBA(150, 175, 215, 255), hud);
+        }
 
         // aviso de objeto obtenido + contador de materiales
         if (pickTimer > 0) {
@@ -1072,7 +1166,7 @@ int main(void) {
         snprintf(hud, sizeof(hud), "X %d  Z %d  Y %d", (int)playerX, (int)playerZ, (int)playerY);
         drawText(8, 230, 1.0f, RGBA(110, 130, 160, 255), hud);
         drawText(8, 244, 1.0f, RGBA(110, 130, 160, 255),
-                 "Stick mover (camara sigue)  X saltar  L planear  START pausa");
+                 "Stick mover  X saltar  Cuadr planear  L apuntar  R disparar");
         if (paused) {
             drawText(206, 104, 2.0f, RGBA(232, 222, 242, 255), "PAUSA");
             drawText(163, 130, 1.0f, RGBA(165, 175, 205, 255), "START continuar   HOME salir");
