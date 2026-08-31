@@ -23,7 +23,7 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 #define SCR_HEIGHT 272
 
 #define DEG2RAD(d) ((d) * 0.0174532925f)
-#define RGBA(r, g, b, a) (((a) << 24) | ((b) << 16) | ((g) << 8) | (r)) // 0xAABBGGRR
+#define RGBA(r, g, b, a) ((unsigned int)(((a) << 24) | ((b) << 16) | ((g) << 8) | (r))) // 0xAABBGGRR
 
 static unsigned int __attribute__((aligned(16))) g_list[262144];
 static const unsigned int CLEAR_COLOR = RGBA(16, 14, 20, 255);
@@ -403,20 +403,32 @@ static void buildPlayerModel() {
 // --- NPCs roboticos (cuerpo + cabeza, wireframe) ---
 struct Npc { float x, z; };
 static const Npc kNpcs[] = {
-    { 6.0f, 4.0f }, { -5.0f, 7.0f }, { 8.0f, -3.0f },
-    { -7.0f, -6.0f }, { 3.5f, 11.0f }, { -10.0f, 2.5f }
+    { 6.0f, 4.0f }, { -5.0f, 7.0f }, { 8.0f, -3.0f }, { -7.0f, -6.0f },
+    { 3.5f, 9.0f }, { -9.0f, 2.5f }, { 2.0f, 6.5f }, { -3.0f, 4.0f },
+    { 5.5f, -5.0f }, { -5.5f, -3.0f }
 };
 static const int kNpcCount = (int)(sizeof(kNpcs) / sizeof(kNpcs[0]));
-static LineVertex __attribute__((aligned(16))) g_npc[kNpcCount * 48];
+static LineVertex __attribute__((aligned(16))) g_npc[1800];
 static int g_npcVerts = 0;
 
+// robots solidos variados (oxidado/acero/oscuro/teal), con ojo luminoso
 static void buildNpcs() {
     int i = 0;
-    const unsigned int body = RGBA(80, 190, 180, 255);
-    const unsigned int head = RGBA(150, 235, 225, 255);
+    static const unsigned int pal[4] = {
+        RGBA(150, 92, 58, 255),   // oxidado
+        RGBA(120, 132, 152, 255), // acero
+        RGBA(74, 78, 92, 255),    // oscuro
+        RGBA(84, 168, 160, 255),  // teal
+    };
     for (int n = 0; n < kNpcCount; ++n) {
-        addBoxEdges(g_npc, i, kNpcs[n].x, 0.0f, kNpcs[n].z, 0.8f, 0.6f, 1.5f, body);
-        addBoxEdges(g_npc, i, kNpcs[n].x, 1.5f, kNpcs[n].z, 0.55f, 0.55f, 0.55f, head);
+        const unsigned int col = pal[n % 4];
+        const float hh = 1.5f + 0.18f * (float)(n % 3);
+        const float x = kNpcs[n].x, z = kNpcs[n].z;
+        addSolidBox(g_npc, i, x, 0.0f, z, 0.70f, 0.55f, hh, col);                           // cuerpo
+        addSolidBox(g_npc, i, x - 0.18f, 0.0f, z, 0.22f, 0.28f, hh * 0.55f, brighten(col, 0.8f)); // pierna
+        addSolidBox(g_npc, i, x + 0.18f, 0.0f, z, 0.22f, 0.28f, hh * 0.55f, brighten(col, 0.8f)); // pierna
+        addSolidBox(g_npc, i, x, hh, z, 0.50f, 0.50f, 0.50f, brighten(col, 1.12f));          // cabeza
+        addSolidBox(g_npc, i, x, hh + 0.16f, z - 0.26f, 0.20f, 0.06f, 0.1f, RGBA(240, 180, 90, 255)); // ojo
     }
     g_npcVerts = i;
 }
@@ -692,7 +704,7 @@ int main(void) {
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_gridVerts, 0, g_grid);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_solidVerts, 0, g_solidWorld);
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_chainVerts, 0, g_chains);
-        sceGumDrawArray(GU_LINES, LINE_FLAGS, g_npcVerts, 0, g_npc);
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
 
         sceGumLoadIdentity();
         {
