@@ -427,37 +427,8 @@ static void buildPlayerBox() {
 static LineVertex __attribute__((aligned(16))) g_playerModel[900];
 static int g_playerModelVerts = 0;
 
-static void buildPlayerModel() {
-    int i = 0;
-    const unsigned int coat  = RGBA(48, 46, 58, 255);
-    const unsigned int red   = RGBA(158, 48, 54, 255);
-    const unsigned int skin  = RGBA(150, 132, 122, 255);
-    const unsigned int hair  = RGBA(28, 26, 34, 255);
-    const unsigned int steel = RGBA(120, 138, 172, 255);
-    // piernas
-    addSolidBox(g_playerModel, i, -0.22f, 0.0f, 0.0f, 0.34f, 0.36f, 1.5f, coat);
-    addSolidBox(g_playerModel, i,  0.22f, 0.0f, 0.0f, 0.34f, 0.36f, 1.5f, coat);
-    // faldon del abrigo
-    addSolidBox(g_playerModel, i, 0.0f, 1.25f, 0.0f, 0.98f, 0.62f, 0.55f, coat);
-    // torso
-    addSolidBox(g_playerModel, i, 0.0f, 1.75f, 0.0f, 0.82f, 0.50f, 0.95f, coat);
-    // pecho rojo (frente = -z)
-    addSolidBox(g_playerModel, i, 0.0f, 1.95f, -0.24f, 0.50f, 0.10f, 0.62f, red);
-    // brazos
-    addSolidBox(g_playerModel, i, -0.52f, 1.70f, 0.0f, 0.24f, 0.30f, 1.00f, coat);
-    addSolidBox(g_playerModel, i,  0.52f, 1.70f, 0.0f, 0.24f, 0.30f, 1.00f, coat);
-    // cuello + cabeza
-    addSolidBox(g_playerModel, i, 0.0f, 2.68f, 0.0f, 0.20f, 0.20f, 0.16f, skin);
-    addSolidBox(g_playerModel, i, 0.0f, 2.84f, 0.0f, 0.44f, 0.44f, 0.46f, skin);
-    // pelo (bloque + puas)
-    addSolidBox(g_playerModel, i, 0.0f, 3.22f, 0.06f, 0.52f, 0.50f, 0.16f, hair);
-    addPyramid(g_playerModel, i, -0.12f, 3.34f, 0.02f, 0.18f, 0.18f, 0.30f, hair);
-    addPyramid(g_playerModel, i,  0.12f, 3.34f, 0.10f, 0.16f, 0.16f, 0.26f, hair);
-    // katana a la espalda (+z): hoja + mango
-    addSolidBox(g_playerModel, i, 0.12f, 0.90f, 0.34f, 0.10f, 0.10f, 2.10f, steel);
-    addSolidBox(g_playerModel, i, 0.12f, 3.00f, 0.34f, 0.14f, 0.14f, 0.50f, hair);
-    g_playerModelVerts = i;
-}
+// modelo detallado del personaje (agente): buildPlayerModel(buf, i)
+#include "agent_character.h"
 
 // --- NPCs roboticos (cuerpo + cabeza, wireframe) ---
 struct Npc { float x, z; };
@@ -524,6 +495,26 @@ static void buildWinTex() {
             if (frame || cross) b = 55;                     // marco / parteluz oscuro
             else { b = 205 + (WTEX - y) * 2; if (b > 255) b = 255; } // panel con brillo
             g_winTex[y * WTEX + x] = RGBA(b, b, b, 255);
+        }
+    sceKernelDcacheWritebackAll();
+}
+
+// textura de metal (acero): estriado vertical + bandas y remaches
+#define MTEX 64
+static unsigned int __attribute__((aligned(16))) g_metalTex[MTEX * MTEX];
+static void buildMetalTex() {
+    for (int y = 0; y < MTEX; ++y)
+        for (int x = 0; x < MTEX; ++x) {
+            int b = 155;
+            b += ((x * 5) % 7) - 3;                 // estriado vertical
+            if ((y % 16) < 2) b -= 55;              // banda horizontal oscura
+            int rx = x % 16, ry = y % 16;
+            if (rx < 3 && ry < 3) b += 45;          // remache
+            unsigned int h = (unsigned int)(x * 71 + y * 113);
+            h ^= h >> 6; h *= 9u; h ^= h >> 4;
+            b += (int)(h % 20u) - 10;               // ruido
+            if (b < 40) b = 40; if (b > 255) b = 255;
+            g_metalTex[y * MTEX + x] = RGBA((int)(b * 0.9f), (int)(b * 0.93f), b, 255); // frio
         }
     sceKernelDcacheWritebackAll();
 }
@@ -699,7 +690,7 @@ int main(void) {
     buildWinTex();
     buildStoneTex();
     buildSolidWorld();
-    buildPlayerModel();
+    buildPlayerModel(g_playerModel, g_playerModelVerts);
     buildNpcs();
     buildChains();
     buildFontAtlas();
