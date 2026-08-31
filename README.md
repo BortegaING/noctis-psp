@@ -9,24 +9,38 @@ Lenguaje: **C++17** con **PSPSDK** (toolchain `pspdev`), build con **CMake**.
 
 ### Objetivo 1 - Vertical slice: Distrito "Campanario"
 
-- [ ] Boot del motor + camara en 3a persona + medidor de FPS
-- [ ] Distrito Campanario (geometria low-poly + niebla de distancia)
-- [ ] Movimiento responsivo (correr, saltar, caer)
+- [x] Boot del motor + camara en 3a persona + medidor de FPS
+- [x] Distrito Campanario (22 torres goticas en wireframe; niebla pendiente)
+- [x] Movimiento con stick + salto/gravedad (caer)
 - [ ] Un cambio de gravedad (pared -> suelo)
-- [ ] Escalada basica integrada con gravedad
-- [ ] 1 arma melee + 1 arma a distancia
-- [ ] HUD del mockup: HP / EN / GRV, minimapa, arma equipada
-- [ ] Recursos con brillo al acercarse
-- [ ] The Cathedral como silueta lejana + campana
+- [~] Aterrizar en azoteas (colision de techo; escalada real pendiente)
+- [ ] Combate: 1 arma melee + 1 a distancia (arma se muestra en HUD, falta disparar)
+- [x] HUD del mockup: barras HP / EN / GRV + panel de arma (minimapa pendiente)
+- [x] Recursos con brillo al acercarse + recoleccion
+- [~] The Cathedral silueta lejana (falta campana/audio y el encuentro)
 
-## Estado
+## Estado (2026-08-31)
 
-Andamiaje inicial. Falta instalar el toolchain (ver `docs/BUILD.md`).
+Vertical slice en marcha. Todo compila y corre en PPSSPP; falta verificacion
+visual de los ultimos avances (recursos, HUD, gravedad). Render con **GU_LINES**
+(mundo en wireframe) y **GU_SPRITES** (HUD y texto), primitivos ya validados en
+pantalla. Fuente bitmap propia (no depende de flash0).
+
+Pendiente principal: niebla (subdividiendo lineas), geometria solida, el cambio
+de direccion gravitacional, combate real, NPCs roboticos y audio.
 
 ## Estructura
 
-- `src/` codigo C++ del juego
+- `src/main.cpp` motor + gameplay (un archivo por ahora; se modulariza despues)
+- `src/world_data.h` distrito Campanario (estructuras + puntos de recurso)
+- `src/game_data.h` armas (10+10), materiales, familias de enemigos
+- `src/font8x8_basic.h` fuente bitmap 8x8 (dominio publico)
 - `assets/` recursos (modelos, texturas, audio) - placeholder
 - `docs/DESIGN.md` la directiva maestra (pilares de diseno)
+- `docs/ARCHITECTURE.md` modulos y plan de agentes
 - `docs/BUILD.md` como compilar (WSL2 + pspdev) y probar (PPSSPP)
 - `tools/build.sh` script de compilacion para WSL
+
+## Controles (actuales)
+
+- Stick: mover | D-pad izq/der: orbitar camara | X: saltar | START: salir
