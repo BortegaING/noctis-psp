@@ -189,23 +189,49 @@ static void addWinRow(LineVertex *buf, int &i, float cx, float cz,
     }
 }
 
-// torre gotica detallada: cuerpo por tramos + aguja + ventanas iluminadas
+// pinaculo gotico: caja fina rematada en aguja (mini-torre de esquina)
+static void addPinnacle(LineVertex *buf, int &i, float cx, float baseY, float cz,
+                        float w, float h, unsigned int col) {
+    addSolidBox(buf, i, cx, baseY, cz, w, w, h, col);
+    addPyramid(buf, i, cx, baseY + h, cz, w, w, w * 1.7f, brighten(col, 1.12f));
+}
+
+// torre gotica detallada: cuerpo escalonado + aguja + pinaculos + contrafuertes
 static void buildTower(LineVertex *buf, int &i, float cx, float cz,
                        float w, float d, float h, unsigned int baseColor, float dist) {
     const unsigned int stone = fadeToVoid(brighten(baseColor, 1.9f), dist);
     const unsigned int win   = RGBA(235, 165, 85, 255); // ambar (luces)
     float bodyTop;
     if (h > 45.0f) {
-        const float h1 = h * 0.62f, h2 = h - h1;
-        addSolidBox(buf, i, cx, 0.0f, cz, w, d, h1, stone);
-        addSolidBox(buf, i, cx, h1, cz, w * 0.72f, d * 0.72f, h2, stone);
-        addPyramid(buf, i, cx, h, cz, w * 0.72f, d * 0.72f, h * 0.30f, brighten(stone, 1.15f));
+        // cuerpo en tres tramos que se angostan (perfil gotico escalonado)
+        const float h1 = h * 0.50f, h2 = h * 0.28f, h3 = h - h1 - h2;
+        addSolidBox(buf, i, cx, 0.0f,      cz, w,       d,       h1, stone);
+        addSolidBox(buf, i, cx, h1,        cz, w*0.78f, d*0.78f, h2, stone);
+        addSolidBox(buf, i, cx, h1 + h2,   cz, w*0.56f, d*0.56f, h3, stone);
+        addPyramid(buf, i, cx, h, cz, w*0.56f, d*0.56f, h*0.34f, brighten(stone, 1.18f));
+        // pinaculos en las esquinas del primer setback
+        const float px = w*0.5f - 0.8f, pz = d*0.5f - 0.8f;
+        const float ph = h * 0.13f;
+        addPinnacle(buf, i, cx-px, h1, cz-pz, 1.4f, ph, stone);
+        addPinnacle(buf, i, cx+px, h1, cz-pz, 1.4f, ph, stone);
+        addPinnacle(buf, i, cx-px, h1, cz+pz, 1.4f, ph, stone);
+        addPinnacle(buf, i, cx+px, h1, cz+pz, 1.4f, ph, stone);
         bodyTop = h1;
     } else {
         addSolidBox(buf, i, cx, 0.0f, cz, w, d, h, stone);
-        if (h > 18.0f) addPyramid(buf, i, cx, h, cz, w, d, h * 0.35f, brighten(stone, 1.12f));
+        if (h > 18.0f) addPyramid(buf, i, cx, h, cz, w, d, h * 0.40f, brighten(stone, 1.12f));
         bodyTop = h;
     }
+    // contrafuertes en la base (4 lados) para darle forma
+    if (w >= 6.0f && h > 30.0f) {
+        const float bh = h * 0.30f, bw = 1.6f, bd = 2.6f;
+        const unsigned int bc = brighten(stone, 0.82f);
+        addSolidBox(buf, i, cx - w*0.5f - bd*0.35f, 0.0f, cz, bd, bw, bh, bc);
+        addSolidBox(buf, i, cx + w*0.5f + bd*0.35f, 0.0f, cz, bd, bw, bh, bc);
+        addSolidBox(buf, i, cx, 0.0f, cz - d*0.5f - bd*0.35f, bw, bd, bh, bc);
+        addSolidBox(buf, i, cx, 0.0f, cz + d*0.5f + bd*0.35f, bw, bd, bh, bc);
+    }
+    // ventanas en las 4 caras del cuerpo bajo
     int rows = (int)((bodyTop - 4.0f) / 4.5f);
     if (rows > 11) rows = 11;
     for (int rrow = 0; rrow < rows; ++rrow) {
@@ -359,7 +385,7 @@ static void buildNpcs() {
 }
 
 // --- cadenas colgantes entre torres (detalle iconico de la referencia) ---
-static LineVertex __attribute__((aligned(16))) g_chains[600];
+static LineVertex __attribute__((aligned(16))) g_chains[1800];
 static int g_chainVerts = 0;
 
 static void addChain(LineVertex *buf, int &i, float ax, float ay, float az,
@@ -379,15 +405,20 @@ static void addChain(LineVertex *buf, int &i, float ax, float ay, float az,
 
 static void buildChains() {
     int i = 0;
-    const unsigned int col = RGBA(72, 68, 82, 255);
-    for (int k = 0; k < kStructureCount && k < 20; ++k) {
-        const Structure &a = kStructures[k];
-        const Structure &b = kStructures[(k + 3) % kStructureCount];
-        float dx = a.x - b.x, dz = a.z - b.z;
-        float dist = sqrtf(dx * dx + dz * dz);
-        if (dist > 8.0f && dist < 58.0f && i < 560) {
-            addChain(g_chains, i, a.x, a.h * 0.7f, a.z, b.x, b.h * 0.7f, b.z,
-                     3.0f + dist * 0.06f, col);
+    const unsigned int col = RGBA(76, 72, 86, 255);
+    const int offs[4] = { 2, 3, 5, 7 };
+    for (int o = 0; o < 4; ++o) {
+        for (int k = 0; k < kStructureCount; ++k) {
+            if (i > 1700) break;
+            const Structure &a = kStructures[k];
+            const Structure &b = kStructures[(k + offs[o]) % kStructureCount];
+            float dx = a.x - b.x, dz = a.z - b.z;
+            float dist = sqrtf(dx * dx + dz * dz);
+            if (dist > 8.0f && dist < 56.0f) {
+                float ay = a.h * (0.52f + 0.09f * o);
+                float by = b.h * (0.52f + 0.09f * o);
+                addChain(g_chains, i, a.x, ay, a.z, b.x, by, b.z, 3.0f + dist * 0.06f, col);
+            }
         }
     }
     g_chainVerts = i;
