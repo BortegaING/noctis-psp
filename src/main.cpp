@@ -35,6 +35,11 @@ static const unsigned int HAZE = RGBA(98, 86, 78, 255); // gris-marron silueta (
 // ================= geometria (lineas 3D) =================
 struct LineVertex { unsigned int color; float x, y, z; };
 
+// vertice texturizado (piedra): u,v + color + posicion
+struct TexVertex { float u, v; unsigned int color; float x, y, z; };
+#define TEX_FLAGS (GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D)
+#define TILE 6.0f   // unidades de mundo por repeticion de la textura de piedra
+
 // --- piso ---
 #define GRID_HALF 48
 static LineVertex __attribute__((aligned(16))) g_grid[(2 * GRID_HALF + 1) * 4];
@@ -145,10 +150,12 @@ static void addSolidBox(LineVertex *buf, int &i, float cx, float baseY, float cz
     addQuad(buf, i, x1,y0,z0, x1,y0,z1, x1,y1,z1, x1,y1,z0, sb);  // derecha
 }
 
-static LineVertex __attribute__((aligned(16))) g_solidWorld[30000];
+static TexVertex __attribute__((aligned(16))) g_solidWorld[22000]; // piedra texturizada
 static int g_solidVerts = 0;
+static LineVertex __attribute__((aligned(16))) g_win[18000];       // ventanas emisivas
+static int g_winVerts = 0;
 
-// piramide de 4 caras (aguja / chapitel gotico)
+// piramide de 4 caras (aguja) sin textura -- para personaje/robots (LineVertex)
 static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
                        float w, float d, float apexH, unsigned int col) {
     const float x0 = cx - w * 0.5f, x1 = cx + w * 0.5f;
@@ -159,6 +166,36 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
     buf[i++] = { b, x1, y0, z0 }; buf[i++] = { b, x1, y0, z1 }; buf[i++] = { b, cx, ay, cz };
     buf[i++] = { a, x1, y0, z1 }; buf[i++] = { a, x0, y0, z1 }; buf[i++] = { a, cx, ay, cz };
     buf[i++] = { b, x0, y0, z1 }; buf[i++] = { b, x0, y0, z0 }; buf[i++] = { b, cx, ay, cz };
+}
+
+// ---- helpers TEXTURIZADOS (piedra) para el mundo solido ----
+static void addQuadT(TexVertex *buf, int &i,
+                     float ax,float ay,float az, float bx,float by,float bz,
+                     float cx2,float cy2,float cz2, float dx,float dy,float dz,
+                     float u0,float v0,float u1,float v1, unsigned int col) {
+    buf[i++] = {u0,v0,col,ax,ay,az}; buf[i++] = {u1,v0,col,bx,by,bz}; buf[i++] = {u1,v1,col,cx2,cy2,cz2};
+    buf[i++] = {u0,v0,col,ax,ay,az}; buf[i++] = {u1,v1,col,cx2,cy2,cz2}; buf[i++] = {u0,v1,col,dx,dy,dz};
+}
+static void addSolidBoxT(TexVertex *buf, int &i, float cx, float baseY, float cz,
+                         float w, float d, float h, unsigned int col) {
+    const float x0 = cx-w*0.5f, x1 = cx+w*0.5f, z0 = cz-d*0.5f, z1 = cz+d*0.5f, y0 = baseY, y1 = baseY+h;
+    const unsigned int top = brighten(col,1.15f), sa = brighten(col,0.82f), sb = brighten(col,0.60f);
+    const float uw = w/TILE, ud = d/TILE, uh = h/TILE;
+    addQuadT(buf,i, x0,y1,z0, x1,y1,z0, x1,y1,z1, x0,y1,z1, 0,0,uw,ud, top); // techo
+    addQuadT(buf,i, x0,y0,z0, x1,y0,z0, x1,y1,z0, x0,y1,z0, 0,uh,uw,0, sa);  // frente
+    addQuadT(buf,i, x1,y0,z1, x0,y0,z1, x0,y1,z1, x1,y1,z1, 0,uh,uw,0, sa);  // atras
+    addQuadT(buf,i, x0,y0,z1, x0,y0,z0, x0,y1,z0, x0,y1,z1, 0,uh,ud,0, sb);  // izq
+    addQuadT(buf,i, x1,y0,z0, x1,y0,z1, x1,y1,z1, x1,y1,z0, 0,uh,ud,0, sb);  // der
+}
+static void addPyramidT(TexVertex *buf, int &i, float cx, float baseY, float cz,
+                        float w, float d, float apexH, unsigned int col) {
+    const float x0 = cx-w*0.5f, x1 = cx+w*0.5f, z0 = cz-d*0.5f, z1 = cz+d*0.5f, y0 = baseY, ay = baseY+apexH;
+    const unsigned int a = brighten(col,1.10f), b = brighten(col,0.72f);
+    const float uw = w/TILE, uh = apexH/TILE;
+    buf[i++]={0,uh,a,x0,y0,z0}; buf[i++]={uw,uh,a,x1,y0,z0}; buf[i++]={uw*0.5f,0,a,cx,ay,cz};
+    buf[i++]={0,uh,b,x1,y0,z0}; buf[i++]={uw,uh,b,x1,y0,z1}; buf[i++]={uw*0.5f,0,b,cx,ay,cz};
+    buf[i++]={0,uh,a,x1,y0,z1}; buf[i++]={uw,uh,a,x0,y0,z1}; buf[i++]={uw*0.5f,0,a,cx,ay,cz};
+    buf[i++]={0,uh,b,x0,y0,z1}; buf[i++]={uw,uh,b,x0,y0,z0}; buf[i++]={uw*0.5f,0,b,cx,ay,cz};
 }
 
 // decide el estado de una ventana por su posicion: 0 = apagada, o un color.
@@ -173,10 +210,10 @@ static unsigned int winPick(float x, float y, float z, unsigned int amber) {
     return amber;                                // ambar
 }
 
-// una fila de ventanas (quads emisivos) en una cara.
+// una fila de ventanas (quads emisivos) -> buffer g_win (sin textura).
 // face: 0=+z, 1=-z, 2=+x, 3=-x
-static void addWinRow(LineVertex *buf, int &i, float cx, float cz,
-                      float w, float d, float y, int face, unsigned int col) {
+static void addWinRow(float cx, float cz, float w, float d, float y, int face, unsigned int col) {
+    if (g_winVerts > 17800) return;
     const float wh = 0.62f, ww = 0.28f, e = 0.10f;
     if (face == 0 || face == 1) {
         const float z = (face == 0) ? (cz + d * 0.5f + e) : (cz - d * 0.5f - e);
@@ -185,7 +222,7 @@ static void addWinRow(LineVertex *buf, int &i, float cx, float cz,
         for (int c = 1; c <= cols; ++c) {
             float x = cx - w * 0.5f + step * c;
             unsigned int wc = winPick(x, y, z, col); if (!wc) continue;
-            addQuad(buf, i, x-ww,y-wh,z, x+ww,y-wh,z, x+ww,y+wh,z, x-ww,y+wh,z, wc);
+            addQuad(g_win, g_winVerts, x-ww,y-wh,z, x+ww,y-wh,z, x+ww,y+wh,z, x-ww,y+wh,z, wc);
         }
     } else {
         const float x = (face == 2) ? (cx + w * 0.5f + e) : (cx - w * 0.5f - e);
@@ -194,32 +231,30 @@ static void addWinRow(LineVertex *buf, int &i, float cx, float cz,
         for (int c = 1; c <= cols; ++c) {
             float z = cz - d * 0.5f + step * c;
             unsigned int wc = winPick(x, y, z, col); if (!wc) continue;
-            addQuad(buf, i, x,y-wh,z-ww, x,y-wh,z+ww, x,y+wh,z+ww, x,y+wh,z-ww, wc);
+            addQuad(g_win, g_winVerts, x,y-wh,z-ww, x,y-wh,z+ww, x,y+wh,z+ww, x,y+wh,z-ww, wc);
         }
     }
 }
 
-// pinaculo gotico: caja fina rematada en aguja (mini-torre de esquina)
-static void addPinnacle(LineVertex *buf, int &i, float cx, float baseY, float cz,
+// pinaculo gotico texturizado: caja fina rematada en aguja
+static void addPinnacle(TexVertex *buf, int &i, float cx, float baseY, float cz,
                         float w, float h, unsigned int col) {
-    addSolidBox(buf, i, cx, baseY, cz, w, w, h, col);
-    addPyramid(buf, i, cx, baseY + h, cz, w, w, w * 1.7f, brighten(col, 1.12f));
+    addSolidBoxT(buf, i, cx, baseY, cz, w, w, h, col);
+    addPyramidT(buf, i, cx, baseY + h, cz, w, w, w * 1.7f, brighten(col, 1.12f));
 }
 
-// torre gotica detallada: cuerpo escalonado + aguja + pinaculos + contrafuertes
-static void buildTower(LineVertex *buf, int &i, float cx, float cz,
+// torre gotica detallada texturizada: cuerpo escalonado + aguja + pinaculos + contrafuertes
+static void buildTower(TexVertex *buf, int &i, float cx, float cz,
                        float w, float d, float h, unsigned int baseColor, float dist) {
     const unsigned int stone = fadeToVoid(warmTint(brighten(baseColor, 1.9f)), dist);
     const unsigned int win   = RGBA(235, 165, 85, 255); // ambar (luces)
     float bodyTop;
     if (h > 45.0f) {
-        // cuerpo en tres tramos que se angostan (perfil gotico escalonado)
         const float h1 = h * 0.50f, h2 = h * 0.28f, h3 = h - h1 - h2;
-        addSolidBox(buf, i, cx, 0.0f,      cz, w,       d,       h1, stone);
-        addSolidBox(buf, i, cx, h1,        cz, w*0.78f, d*0.78f, h2, stone);
-        addSolidBox(buf, i, cx, h1 + h2,   cz, w*0.56f, d*0.56f, h3, stone);
-        addPyramid(buf, i, cx, h, cz, w*0.56f, d*0.56f, h*0.34f, brighten(stone, 1.18f));
-        // pinaculos en las esquinas del primer setback
+        addSolidBoxT(buf, i, cx, 0.0f,    cz, w,       d,       h1, stone);
+        addSolidBoxT(buf, i, cx, h1,      cz, w*0.78f, d*0.78f, h2, stone);
+        addSolidBoxT(buf, i, cx, h1 + h2, cz, w*0.56f, d*0.56f, h3, stone);
+        addPyramidT(buf, i, cx, h, cz, w*0.56f, d*0.56f, h*0.34f, brighten(stone, 1.18f));
         const float px = w*0.5f - 0.8f, pz = d*0.5f - 0.8f;
         const float ph = h * 0.13f;
         addPinnacle(buf, i, cx-px, h1, cz-pz, 1.4f, ph, stone);
@@ -228,50 +263,48 @@ static void buildTower(LineVertex *buf, int &i, float cx, float cz,
         addPinnacle(buf, i, cx+px, h1, cz+pz, 1.4f, ph, stone);
         bodyTop = h1;
     } else {
-        addSolidBox(buf, i, cx, 0.0f, cz, w, d, h, stone);
-        if (h > 18.0f) addPyramid(buf, i, cx, h, cz, w, d, h * 0.40f, brighten(stone, 1.12f));
+        addSolidBoxT(buf, i, cx, 0.0f, cz, w, d, h, stone);
+        if (h > 18.0f) addPyramidT(buf, i, cx, h, cz, w, d, h * 0.40f, brighten(stone, 1.12f));
         bodyTop = h;
     }
-    // contrafuertes en la base (4 lados) para darle forma
     if (w >= 6.0f && h > 30.0f) {
         const float bh = h * 0.30f, bw = 1.6f, bd = 2.6f;
         const unsigned int bc = brighten(stone, 0.82f);
-        addSolidBox(buf, i, cx - w*0.5f - bd*0.35f, 0.0f, cz, bd, bw, bh, bc);
-        addSolidBox(buf, i, cx + w*0.5f + bd*0.35f, 0.0f, cz, bd, bw, bh, bc);
-        addSolidBox(buf, i, cx, 0.0f, cz - d*0.5f - bd*0.35f, bw, bd, bh, bc);
-        addSolidBox(buf, i, cx, 0.0f, cz + d*0.5f + bd*0.35f, bw, bd, bh, bc);
+        addSolidBoxT(buf, i, cx - w*0.5f - bd*0.35f, 0.0f, cz, bd, bw, bh, bc);
+        addSolidBoxT(buf, i, cx + w*0.5f + bd*0.35f, 0.0f, cz, bd, bw, bh, bc);
+        addSolidBoxT(buf, i, cx, 0.0f, cz - d*0.5f - bd*0.35f, bw, bd, bh, bc);
+        addSolidBoxT(buf, i, cx, 0.0f, cz + d*0.5f + bd*0.35f, bw, bd, bh, bc);
     }
-    // ventanas en las 4 caras del cuerpo bajo
     int rows = (int)((bodyTop - 4.0f) / 4.5f);
     if (rows > 11) rows = 11;
     for (int rrow = 0; rrow < rows; ++rrow) {
         float y = 3.5f + rrow * 4.5f;
         if (y > bodyTop - 2.0f) break;
-        addWinRow(buf, i, cx, cz, w, d, y, 0, win);
-        addWinRow(buf, i, cx, cz, w, d, y, 1, win);
-        addWinRow(buf, i, cx, cz, w, d, y, 2, win);
-        addWinRow(buf, i, cx, cz, w, d, y, 3, win);
+        addWinRow(cx, cz, w, d, y, 0, win);
+        addWinRow(cx, cz, w, d, y, 1, win);
+        addWinRow(cx, cz, w, d, y, 2, win);
+        addWinRow(cx, cz, w, d, y, 3, win);
     }
 }
 
-// aguja fina del "mar de agujas" de fondo (ligera, para densidad barata)
-static void buildSpire(LineVertex *buf, int &i, float cx, float cz,
+// aguja fina del "mar de agujas" de fondo (texturizada)
+static void buildSpire(TexVertex *buf, int &i, float cx, float cz,
                        float w, float h, unsigned int base, float dist) {
     const unsigned int stone = fadeToVoid(warmTint(brighten(base, 1.8f)), dist);
     const float h1 = h * 0.68f;
-    addSolidBox(buf, i, cx, 0.0f, cz, w, w, h1, stone);
-    addSolidBox(buf, i, cx, h1, cz, w * 0.6f, w * 0.6f, h - h1, stone);
-    addPyramid(buf, i, cx, h, cz, w * 0.6f, w * 0.6f, h * 0.42f, brighten(stone, 1.1f));
+    addSolidBoxT(buf, i, cx, 0.0f, cz, w, w, h1, stone);
+    addSolidBoxT(buf, i, cx, h1, cz, w * 0.6f, w * 0.6f, h - h1, stone);
+    addPyramidT(buf, i, cx, h, cz, w * 0.6f, w * 0.6f, h * 0.42f, brighten(stone, 1.1f));
     int rows = (int)(h1 / 6.0f); if (rows > 7) rows = 7;
     for (int rrow = 0; rrow < rows; ++rrow) {
         float y = 4.0f + rrow * 6.0f;
         if (y > h1 - 2.0f) break;
-        addWinRow(buf, i, cx, cz, w, w, y, 0, RGBA(235, 165, 85, 255));
+        addWinRow(cx, cz, w, w, y, 0, RGBA(235, 165, 85, 255));
     }
 }
 
 // baranda de hierro entre dos puntos: balaustres + postes con remate + pasamanos
-static void addRailing(LineVertex *buf, int &i, float x0, float z0,
+static void addRailing(TexVertex *buf, int &i, float x0, float z0,
                        float x1, float z1, unsigned int col) {
     const float dx = x1 - x0, dz = z1 - z0;
     const float len = sqrtf(dx * dx + dz * dz);
@@ -279,21 +312,28 @@ static void addRailing(LineVertex *buf, int &i, float x0, float z0,
     for (int k = 0; k <= n; ++k) {
         float t = (float)k / n;
         float x = x0 + dx * t, z = z0 + dz * t;
-        addSolidBox(buf, i, x, 0.0f, z, 0.16f, 0.16f, 1.4f, col);       // balaustre
-        if (k % 4 == 0) {                                              // poste + remate
-            addSolidBox(buf, i, x, 0.0f, z, 0.32f, 0.32f, 1.7f, col);
-            addPyramid(buf, i, x, 1.7f, z, 0.32f, 0.32f, 0.55f, brighten(col, 1.25f));
+        addSolidBoxT(buf, i, x, 0.0f, z, 0.16f, 0.16f, 1.4f, col);       // balaustre
+        if (k % 4 == 0) {                                               // poste + remate
+            addSolidBoxT(buf, i, x, 0.0f, z, 0.32f, 0.32f, 1.7f, col);
+            addPyramidT(buf, i, x, 1.7f, z, 0.32f, 0.32f, 0.55f, brighten(col, 1.25f));
         }
     }
     const float mx = (x0 + x1) * 0.5f, mz = (z0 + z1) * 0.5f;
-    if (fabsf(dx) > fabsf(dz)) addSolidBox(buf, i, mx, 1.28f, mz, len, 0.22f, 0.2f, col);
-    else                       addSolidBox(buf, i, mx, 1.28f, mz, 0.22f, len, 0.2f, col);
+    if (fabsf(dx) > fabsf(dz)) addSolidBoxT(buf, i, mx, 1.28f, mz, len, 0.22f, 0.2f, col);
+    else                       addSolidBoxT(buf, i, mx, 1.28f, mz, 0.22f, len, 0.2f, col);
 }
 
 static void buildSolidWorld() {
     int i = 0;
+    g_winVerts = 0;
+    // suelo de piedra (plano texturizado grande) bajo todo
+    {
+        const float S = 135.0f, uv = 2.0f * S / TILE;
+        addQuadT(g_solidWorld, i, -S,0.0f,-S,  S,0.0f,-S,  S,0.0f,S,  -S,0.0f,S,
+                 0.0f,0.0f, uv,uv, warmTint(RGBA(50, 48, 54, 255)));
+    }
     for (int s = 0; s < kStructureCount && s < 63; ++s) {
-        if (i > 28000) break;
+        if (i > 20500) break;
         const Structure &st = kStructures[s];
         float sx = st.x * WSCALE, sz = st.z * WSCALE;
         float d = sqrtf(sx * sx + sz * sz);
@@ -301,7 +341,7 @@ static void buildSolidWorld() {
     }
     // mar de agujas de fondo (espiral aurea): densidad que se pierde en neblina
     for (int k = 0; k < 60; ++k) {
-        if (i > 27000) break;
+        if (i > 20000) break;
         float ang = (float)k * 2.3999632f;
         float rad = 36.0f + (float)((k * 37) % 72);  // 36..107
         float cx = cosf(ang) * rad;
@@ -312,8 +352,8 @@ static void buildSolidWorld() {
         buildSpire(g_solidWorld, i, cx, cz, ww, hh, kStructures[k % kStructureCount].color, dd);
     }
     // plataforma de piedra del mirador (suelo solido bajo el spawn)
-    addSolidBox(g_solidWorld, i, 0.0f, -0.5f, -2.5f, 22.0f, 13.0f, 0.55f,
-                warmTint(RGBA(64, 62, 68, 255)));
+    addSolidBoxT(g_solidWorld, i, 0.0f, -0.5f, -2.5f, 22.0f, 13.0f, 0.55f,
+                 warmTint(RGBA(74, 70, 76, 255)));
     // baranda del mirador de spawn (primer plano, como la referencia)
     const unsigned int iron = RGBA(40, 38, 46, 255);
     addRailing(g_solidWorld, i, -9.0f, -7.0f,  9.0f, -7.0f, iron); // frente
@@ -454,6 +494,27 @@ static void addChain(LineVertex *buf, int &i, float ax, float ay, float az,
         buf[i++] = { col, x, y, z };
         px = x; py = y; pz = z;
     }
+}
+
+// textura de piedra procedural: patron de ladrillos + grima (para MODULATE)
+#define STEX 128
+static unsigned int __attribute__((aligned(16))) g_stoneTex[STEX * STEX];
+static void buildStoneTex() {
+    for (int y = 0; y < STEX; ++y)
+        for (int x = 0; x < STEX; ++x) {
+            int v = 208;
+            unsigned int hsh = (unsigned int)(x * 131 + y * 197);
+            hsh ^= hsh >> 7; hsh *= 9u; hsh ^= hsh >> 4; hsh *= 0x27d4eb2du; hsh ^= hsh >> 15;
+            v += (int)(hsh % 44u) - 26;                 // grima (ruido)
+            int row = y >> 4;
+            int xoff = (row & 1) ? 16 : 0;
+            if ((y & 15) < 2) v = 118;                  // mortero horizontal
+            else if (((x + xoff) & 31) < 2) v = 118;    // mortero vertical
+            if (v < 45) v = 45; if (v > 255) v = 255;
+            int r = v, g = (int)(v * 0.95f), b = (int)(v * 0.87f); // gris calido
+            g_stoneTex[y * STEX + x] = RGBA(r, g, b, 255);
+        }
+    sceKernelDcacheWritebackAll();
 }
 
 static void buildChains() {
@@ -603,8 +664,7 @@ int main(void) {
     sceCtrlSetSamplingCycle(0);
     sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
 
-    buildGrid();
-    buildWorld();
+    buildStoneTex();
     buildSolidWorld();
     buildPlayerModel();
     buildNpcs();
@@ -719,8 +779,19 @@ int main(void) {
 
         sceGumMatrixMode(GU_MODEL);
         sceGumLoadIdentity();
-        sceGumDrawArray(GU_LINES, LINE_FLAGS, g_gridVerts, 0, g_grid);
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_solidVerts, 0, g_solidWorld);
+
+        // piedra texturizada (torres, agujas, muros, suelo, plataforma)
+        sceGuEnable(GU_TEXTURE_2D);
+        sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+        sceGuTexImage(0, STEX, STEX, STEX, g_stoneTex);
+        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
+        sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+        sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_solidVerts, 0, g_solidWorld);
+        sceGuDisable(GU_TEXTURE_2D);
+
+        // ventanas emisivas + cables + robots (sin textura)
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_winVerts, 0, g_win);
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_chainVerts, 0, g_chains);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
 
