@@ -1,0 +1,22 @@
+# Build
+build/
+*.o
+*.a
+*.elf
+*.prx
+EBOOT.PBP
+PARAM.SFO
+
+# Emulador / memstick de prueba
+ppsspp/
+memstick/
+
+# Editor
+.vscode/
+.idea/
+*.user
+
+# SO
+Thumbs.db
+desktop.ini
+.DS_Store
