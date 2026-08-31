@@ -96,6 +96,42 @@ static void buildWorld() {
     g_worldVerts = i;
 }
 
+// --- caras solidas con sombreado falso por cara (sin luces) ---
+static void addQuad(LineVertex *buf, int &i,
+                    float ax, float ay, float az, float bx, float by, float bz,
+                    float cx2, float cy2, float cz2, float dx, float dy, float dz,
+                    unsigned int col) {
+    buf[i++] = { col, ax, ay, az }; buf[i++] = { col, bx, by, bz }; buf[i++] = { col, cx2, cy2, cz2 };
+    buf[i++] = { col, ax, ay, az }; buf[i++] = { col, cx2, cy2, cz2 }; buf[i++] = { col, dx, dy, dz };
+}
+static void addSolidBox(LineVertex *buf, int &i, float cx, float baseY, float cz,
+                        float w, float d, float h, unsigned int col) {
+    const float x0 = cx - w * 0.5f, x1 = cx + w * 0.5f;
+    const float z0 = cz - d * 0.5f, z1 = cz + d * 0.5f;
+    const float y0 = baseY, y1 = baseY + h;
+    const unsigned int top = brighten(col, 1.15f);
+    const unsigned int sa  = brighten(col, 0.82f);
+    const unsigned int sb  = brighten(col, 0.60f);
+    addQuad(buf, i, x0,y1,z0, x1,y1,z0, x1,y1,z1, x0,y1,z1, top); // techo
+    addQuad(buf, i, x0,y0,z0, x1,y0,z0, x1,y1,z0, x0,y1,z0, sa);  // frente
+    addQuad(buf, i, x1,y0,z1, x0,y0,z1, x0,y1,z1, x1,y1,z1, sa);  // atras
+    addQuad(buf, i, x0,y0,z1, x0,y0,z0, x0,y1,z0, x0,y1,z1, sb);  // izquierda
+    addQuad(buf, i, x1,y0,z0, x1,y0,z1, x1,y1,z1, x1,y1,z0, sb);  // derecha
+}
+
+static LineVertex __attribute__((aligned(16))) g_solidWorld[64 * 30];
+static int g_solidVerts = 0;
+
+static void buildSolidWorld() {
+    int i = 0;
+    for (int s = 0; s < kStructureCount && s < 63; ++s) {
+        const Structure &st = kStructures[s];
+        addSolidBox(g_solidWorld, i, st.x, st.y, st.z, st.w, st.d, st.h, brighten(st.color, 1.7f));
+    }
+    addSolidBox(g_solidWorld, i, 0.0f, 0.0f, -240.0f, 70.0f, 70.0f, 380.0f, RGBA(48, 44, 70, 255));
+    g_solidVerts = i;
+}
+
 // altura del suelo bajo el jugador (0, o el techo de una estructura si esta
 // por encima de el). Permite pararse en azoteas al caer sobre ellas.
 static float groundHeight(float px, float pz, float py) {
@@ -250,6 +286,7 @@ int main(void) {
 
     buildGrid();
     buildWorld();
+    buildSolidWorld();
     buildPlayerBox();
     buildNpcs();
     buildFontAtlas();
@@ -335,7 +372,7 @@ int main(void) {
         sceGumMatrixMode(GU_MODEL);
         sceGumLoadIdentity();
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_gridVerts, 0, g_grid);
-        sceGumDrawArray(GU_LINES, LINE_FLAGS, g_worldVerts, 0, g_world);
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_solidVerts, 0, g_solidWorld);
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_npcVerts, 0, g_npc);
 
         sceGumLoadIdentity();
