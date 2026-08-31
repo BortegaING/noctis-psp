@@ -27,6 +27,7 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
 static unsigned int __attribute__((aligned(16))) g_list[262144];
 static const unsigned int CLEAR_COLOR = RGBA(16, 14, 20, 255);
+static const unsigned int HAZE = RGBA(84, 80, 98, 255); // gris silueta (mas oscuro que el fondo)
 
 #define LINE_FLAGS (GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D)
 
@@ -84,12 +85,12 @@ static unsigned int brighten(unsigned int c, float f) {
 // desvanece un color hacia el fondo (vacio) segun la distancia al centro del
 // distrito. Niebla "horneada" fiable (no depende del fog por hardware).
 static unsigned int fadeToVoid(unsigned int base, float dist) {
-    const float a = 20.0f, b = 64.0f;
+    const float a = 26.0f, b = 98.0f; // cerca..lejos: se funde en la neblina
     float t = (dist - a) / (b - a);
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
-    int br = base & 0xFF,        bg = (base >> 8) & 0xFF,        bb = (base >> 16) & 0xFF;
-    int cr = CLEAR_COLOR & 0xFF, cg = (CLEAR_COLOR >> 8) & 0xFF, cb = (CLEAR_COLOR >> 16) & 0xFF;
+    int br = base & 0xFF,  bg = (base >> 8) & 0xFF,  bb = (base >> 16) & 0xFF;
+    int cr = HAZE & 0xFF,  cg = (HAZE >> 8) & 0xFF,  cb = (HAZE >> 16) & 0xFF;
     int r  = br + (int)((cr - br) * t);
     int g  = bg + (int)((cg - bg) * t);
     int b2 = bb + (int)((cb - bb) * t);
@@ -217,6 +218,22 @@ static void buildTower(LineVertex *buf, int &i, float cx, float cz,
     }
 }
 
+// aguja fina del "mar de agujas" de fondo (ligera, para densidad barata)
+static void buildSpire(LineVertex *buf, int &i, float cx, float cz,
+                       float w, float h, unsigned int base, float dist) {
+    const unsigned int stone = fadeToVoid(brighten(base, 1.8f), dist);
+    const float h1 = h * 0.68f;
+    addSolidBox(buf, i, cx, 0.0f, cz, w, w, h1, stone);
+    addSolidBox(buf, i, cx, h1, cz, w * 0.6f, w * 0.6f, h - h1, stone);
+    addPyramid(buf, i, cx, h, cz, w * 0.6f, w * 0.6f, h * 0.42f, brighten(stone, 1.1f));
+    int rows = (int)(h1 / 6.0f); if (rows > 7) rows = 7;
+    for (int rrow = 0; rrow < rows; ++rrow) {
+        float y = 4.0f + rrow * 6.0f;
+        if (y > h1 - 2.0f) break;
+        addWinRow(buf, i, cx, cz, w, w, y, 0, RGBA(235, 165, 85, 255));
+    }
+}
+
 static void buildSolidWorld() {
     int i = 0;
     for (int s = 0; s < kStructureCount && s < 63; ++s) {
@@ -224,6 +241,18 @@ static void buildSolidWorld() {
         const Structure &st = kStructures[s];
         float d = sqrtf(st.x * st.x + st.z * st.z);
         buildTower(g_solidWorld, i, st.x, st.z, st.w, st.d, st.h, st.color, d);
+    }
+    // mar de agujas de fondo (espiral aurea): densidad que se pierde en neblina
+    for (int k = 0; k < 60; ++k) {
+        if (i > 27000) break;
+        float ang = (float)k * 2.3999632f;
+        float rad = 36.0f + (float)((k * 37) % 72);  // 36..107
+        float cx = cosf(ang) * rad;
+        float cz = sinf(ang) * rad;
+        float hh = 44.0f + (float)((k * 53) % 92);   // 44..135
+        float ww = 3.0f + (float)((k * 7) % 4);      // 3..6
+        float dd = sqrtf(cx * cx + cz * cz);
+        buildSpire(g_solidWorld, i, cx, cz, ww, hh, kStructures[k % kStructureCount].color, dd);
     }
     // The Cathedral: detallada, silueta lejana con ventanas (secciones 26, 31)
     buildTower(g_solidWorld, i, 0.0f, -150.0f, 70.0f, 70.0f, 300.0f, RGBA(34, 32, 50, 255), 0.0f);
@@ -277,6 +306,41 @@ static void buildNpcs() {
     g_npcVerts = i;
 }
 
+// --- cadenas colgantes entre torres (detalle iconico de la referencia) ---
+static LineVertex __attribute__((aligned(16))) g_chains[600];
+static int g_chainVerts = 0;
+
+static void addChain(LineVertex *buf, int &i, float ax, float ay, float az,
+                     float bx, float by, float bz, float sag, unsigned int col) {
+    const int SEG = 10;
+    float px = ax, py = ay, pz = az;
+    for (int s = 1; s <= SEG; ++s) {
+        float t = (float)s / SEG;
+        float x = ax + (bx - ax) * t;
+        float z = az + (bz - az) * t;
+        float y = ay + (by - ay) * t - sag * 4.0f * t * (1.0f - t); // pandeo
+        buf[i++] = { col, px, py, pz };
+        buf[i++] = { col, x, y, z };
+        px = x; py = y; pz = z;
+    }
+}
+
+static void buildChains() {
+    int i = 0;
+    const unsigned int col = RGBA(72, 68, 82, 255);
+    for (int k = 0; k < kStructureCount && k < 20; ++k) {
+        const Structure &a = kStructures[k];
+        const Structure &b = kStructures[(k + 3) % kStructureCount];
+        float dx = a.x - b.x, dz = a.z - b.z;
+        float dist = sqrtf(dx * dx + dz * dz);
+        if (dist > 8.0f && dist < 58.0f && i < 560) {
+            addChain(g_chains, i, a.x, a.h * 0.7f, a.z, b.x, b.h * 0.7f, b.z,
+                     3.0f + dist * 0.06f, col);
+        }
+    }
+    g_chainVerts = i;
+}
+
 // ================= fuente bitmap y rectangulos (sprites 2D) =================
 static unsigned int __attribute__((aligned(16))) g_fontAtlas[128 * 128];
 
@@ -304,6 +368,26 @@ static void drawRect(int x, int y, int w, int h, unsigned int color) {
     v[0] = { (short)x, (short)y, 0 };
     v[1] = { (short)(x + w), (short)(y + h), 0 };
     sceGuDrawArray(GU_SPRITES, GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, v);
+}
+
+// fondo con gradiente vertical: neblina luminosa en el horizonte (profundidad)
+struct GradVertex { unsigned int color; short x, y, z; };
+static void gradQuad(int y0, int y1, unsigned int cTop, unsigned int cBot) {
+    GradVertex *v = (GradVertex *)sceGuGetMemory(sizeof(GradVertex) * 6);
+    v[0] = { cTop, 0, (short)y0, 0 };
+    v[1] = { cTop, (short)SCR_WIDTH, (short)y0, 0 };
+    v[2] = { cBot, (short)SCR_WIDTH, (short)y1, 0 };
+    v[3] = { cTop, 0, (short)y0, 0 };
+    v[4] = { cBot, (short)SCR_WIDTH, (short)y1, 0 };
+    v[5] = { cBot, 0, (short)y1, 0 };
+    sceGuDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 6, 0, v);
+}
+static void drawBackdrop() {
+    const unsigned int top    = RGBA(24, 22, 32, 255);
+    const unsigned int haze   = RGBA(128, 120, 134, 255);
+    const unsigned int floorc = RGBA(18, 17, 24, 255);
+    gradQuad(0, 150, top, haze);
+    gradQuad(150, SCR_HEIGHT, haze, floorc);
 }
 
 // texto 2D (requiere textura de fuente activada por el que llama)
@@ -387,6 +471,7 @@ int main(void) {
     buildSolidWorld();
     buildPlayerBox();
     buildNpcs();
+    buildChains();
     buildFontAtlas();
     initGu();
 
@@ -452,6 +537,11 @@ int main(void) {
         sceGuClearDepth(0);
         sceGuClear(GU_COLOR_BUFFER_BIT | GU_DEPTH_BUFFER_BIT);
 
+        // fondo brumoso (2D, sin profundidad): neblina en el horizonte
+        sceGuDisable(GU_DEPTH_TEST);
+        drawBackdrop();
+        sceGuEnable(GU_DEPTH_TEST);
+
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
         sceGumPerspective(75.0f, 16.0f / 9.0f, 0.5f, 1000.0f);
@@ -459,8 +549,8 @@ int main(void) {
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
         {
-            ScePspFVector3 rot    = { DEG2RAD(24.0f), camYaw, 0.0f };
-            ScePspFVector3 camOff = { 0.0f, -4.5f, -11.0f };
+            ScePspFVector3 rot    = { DEG2RAD(15.0f), camYaw, 0.0f };
+            ScePspFVector3 camOff = { 0.0f, -6.0f, -13.0f };
             ScePspFVector3 pOff   = { -playerX, -playerY, -playerZ };
             sceGumRotateXYZ(&rot);
             sceGumTranslate(&camOff);
@@ -471,6 +561,7 @@ int main(void) {
         sceGumLoadIdentity();
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_gridVerts, 0, g_grid);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_solidVerts, 0, g_solidWorld);
+        sceGumDrawArray(GU_LINES, LINE_FLAGS, g_chainVerts, 0, g_chains);
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_npcVerts, 0, g_npc);
 
         sceGumLoadIdentity();
