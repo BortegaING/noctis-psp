@@ -710,21 +710,15 @@ int main(void) {
         prevStart = startNow;
 
         if (!paused) {
-            // ===== camara (D-pad izq/der) =====
-            if (pad.Buttons & PSP_CTRL_LEFT)  camYaw -= CAM_SPEED;
-            if (pad.Buttons & PSP_CTRL_RIGHT) camYaw += CAM_SPEED;
-
-            // ===== stick -> deseo RELATIVO A CAMARA (zona muerta radial) =====
+            // ===== stick -> deseo en MUNDO FIJO (girar la camara NO cambia el control) =====
             float ax = ((int)pad.Lx - 128) / 128.0f;
             float ay = ((int)pad.Ly - 128) / 128.0f;
             float mag = sqrtf(ax * ax + ay * ay);
             float wishX = 0.0f, wishZ = 0.0f;
             if (mag > DEADZONE) {
                 float k = (mag - DEADZONE) / (1.0f - DEADZONE); if (k > 1.0f) k = 1.0f;
-                ax = (ax / mag) * k; ay = (ay / mag) * k;
-                float fwd = -ay, str = ax;
-                wishX =  fwd * sinf(camYaw) + str * cosf(camYaw);
-                wishZ = -fwd * cosf(camYaw) + str * sinf(camYaw);
+                wishX = (ax / mag) * k;   // derecha = +X
+                wishZ = (ay / mag) * k;   // arriba (ay<0) = adelante (-Z)
             }
             // ===== aceleracion / friccion (fluido) =====
             float targetVX = wishX * RUN_SPEED, targetVZ = wishZ * RUN_SPEED;
@@ -737,6 +731,14 @@ int main(void) {
             if (!blocked(nx, playerZ, playerY)) playerX = nx; else velX = 0.0f;
             float nz = playerZ + velZ;
             if (!blocked(playerX, nz, playerY)) playerZ = nz; else velZ = 0.0f;
+            // ===== la CAMARA sigue al personaje: se coloca detras del avance =====
+            if (velX * velX + velZ * velZ > 0.004f) {
+                float moveAng = atan2f(velX, -velZ);
+                float dA = moveAng - camYaw;
+                while (dA >  3.14159265f) dA -= 6.28318531f;
+                while (dA < -3.14159265f) dA += 6.28318531f;
+                camYaw += dA * 0.12f;   // gira suave hacia la direccion de avance
+            }
             // ===== salto: coyote time + buffer + salto variable =====
             if (grounded) coyote = COYOTE_MAX; else if (coyote > 0) coyote--;
             int jumpNow = (pad.Buttons & PSP_CTRL_CROSS) ? 1 : 0;
@@ -983,7 +985,7 @@ int main(void) {
         snprintf(hud, sizeof(hud), "X %d  Z %d  Y %d", (int)playerX, (int)playerZ, (int)playerY);
         drawText(8, 230, 1.0f, RGBA(110, 130, 160, 255), hud);
         drawText(8, 244, 1.0f, RGBA(110, 130, 160, 255),
-                 "Stick mover  Dpad cam  X saltar  L flotar  START pausa");
+                 "Stick mover (camara sigue)  X saltar  L planear  START pausa");
         if (paused) {
             drawText(206, 104, 2.0f, RGBA(232, 222, 242, 255), "PAUSA");
             drawText(163, 130, 1.0f, RGBA(165, 175, 205, 255), "START continuar   HOME salir");
