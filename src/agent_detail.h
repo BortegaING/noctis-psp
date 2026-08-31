@@ -24,8 +24,11 @@
 static inline float nd_absf(float v) { return v < 0.0f ? -v : v; }
 
 // ----------------------------------------------------------------------------
-// 1) addTowerDetail  ->  ~360 vert  (12 cajas x 30)
-//    2 cornisas/molduras + 4 pilastras + 4 quoins + 2 tuberias.
+// 1) addTowerDetail  ->  ~510 vert base / ~654 max (torres altas)  (budget 700)
+//    base: 2 cornisas + 4 pilastras + 4 quoins + 2 tuberias + plinto/socle +
+//          4 pinaculos de esquina + aguja central + 2 gargolas.
+//    h>=6: 2 nichos ciegos ojivales (caras +Z/-Z).
+//    h>=12: 2 contrafuertes escalonados (caras +X/-X) -> lectura de catedral.
 //    Agrega relieve a una torre de cuerpo (cx,cz), base y=0, tamano w x d x h.
 // ----------------------------------------------------------------------------
 static void addTowerDetail(TexVertex *buf, int &i,
@@ -75,12 +78,58 @@ static void addTowerDetail(TexVertex *buf, int &i,
     const float tOut = tD * 0.4f;              // cuanto sobresale de la cara
     addSolidBoxT(buf, i, cx - hw - tOut, 0.0f, cz + hd * 0.45f, tD, tD, h * 0.95f, cDark);
     addSolidBoxT(buf, i, cx - hw - tOut, 0.0f, cz - hd * 0.45f, tD, tD, h * 0.80f, cDark);
+
+    // --- BASE / SOCLE: plinto escalonado que ancla la torre al suelo (+30) ---
+    float socH = corH * 1.2f;
+    addSolidBoxT(buf, i, cx, 0.0f, cz, w + over * 2.4f, d + over * 2.4f, socH, cDark);
+
+    // --- CORONACION: pinaculos de esquina + aguja central (silueta de catedral) ---
+    // La cornisa de cima termina en y = h; los remates nacen desde ahi (+60).
+    const float pinW = qS * 1.5f;
+    const float pinH = 0.9f + h * 0.10f;               // mas afilado en torres altas
+    for (int c = 0; c < 4; ++c) {
+        addPyramidT(buf, i,
+                    cx + sx[c] + (sx[c] > 0.0f ? qOff : -qOff),
+                    h,
+                    cz + sz[c] + (sz[c] > 0.0f ? qOff : -qOff),
+                    pinW, pinW, pinH, cLight);         // 4 pinaculos = 48
+    }
+    // aguja / flecha central: crece con la altura de la torre
+    addPyramidT(buf, i, cx, h, cz, w * 0.5f, d * 0.5f, 1.4f + h * 0.14f,
+                brighten(stone, 1.16f));               // 12
+
+    // --- GARGOLAS / canos vertedores bajo la cornisa (relieve amenazante, +60) ---
+    const unsigned int cDeep = brighten(stone, 0.82f); // sombra profunda gotica
+    const float gY = h - corH * 1.6f;
+    addSolidBoxT(buf, i, cx + hw * 0.4f, gY, cz + hd + 0.45f, 0.35f, 0.9f, 0.35f, cDeep); // saliente +Z
+    addSolidBoxT(buf, i, cx - hw * 0.4f, gY, cz - hd - 0.45f, 0.35f, 0.9f, 0.35f, cDeep); // saliente -Z
+
+    // --- NICHOS CIEGOS OJIVALES en caras +Z / -Z: panel oscuro + capucha en punta ---
+    if (h >= 6.0f) {                                    // +84
+        const float niW = w * 0.30f;                   // ancho del nicho (X)
+        const float niH = h * 0.34f;                   // alto del panel
+        const float niY = h * 0.30f;                   // arranque del panel
+        const float niHoodH = w * 0.18f;               // altura de la punta ojival
+        addSolidBoxT(buf, i, cx, niY, cz + hd + 0.07f, niW, 0.14f, niH, cDeep);
+        addPyramidT (buf, i, cx, niY + niH, cz + hd + 0.07f, niW * 1.1f, 0.30f, niHoodH, cMid);
+        addSolidBoxT(buf, i, cx, niY, cz - hd - 0.07f, niW, 0.14f, niH, cDeep);
+        addPyramidT (buf, i, cx, niY + niH, cz - hd - 0.07f, niW * 1.1f, 0.30f, niHoodH, cMid);
+    }
+
+    // --- CONTRAFUERTES ESCALONADOS al pie de pilastras +X / -X (solo torres altas) ---
+    if (h >= 12.0f) {                                   // +60
+        const float btH = h * 0.24f;                   // alto del pie del contrafuerte
+        const float btW = pilD * 1.9f;                 // extension tangencial (Z)
+        addSolidBoxT(buf, i, cx + hw + pr * 0.9f, 0.0f, cz, pr * 2.2f, btW, btH, cMid); // +X
+        addSolidBoxT(buf, i, cx - hw - pr * 0.9f, 0.0f, cz, pr * 2.2f, btW, btH, cMid); // -X
+    }
 }
 
 // ----------------------------------------------------------------------------
-// 2) addBridge  ->  ~270 vert  (9 cajas: 1 tablero + 2 barandas + 6 postes)
-//    Pasarela entre (x0,y0,z0) y (x1,y1,z1). Se orienta al eje horizontal
-//    dominante (X o Z). Tablero largo y fino + barandal a los lados + postes.
+// 2) addBridge  ->  ~390 vert  (13 cajas)  (budget 450)
+//    Pasarela gotica entre (x0,y0,z0) y (x1,y1,z1). Se orienta al eje horizontal
+//    dominante (X o Z). Tablero + barandal + postes (ritmo de balaustres) +
+//    coronamiento/coping sobre cada baranda + 2 mensulas de apoyo bajo el tablero.
 // ----------------------------------------------------------------------------
 static void addBridge(TexVertex *buf, int &i,
                       float x0, float y0, float z0,
@@ -120,6 +169,14 @@ static void addBridge(TexVertex *buf, int &i,
             addSolidBoxT(buf, i, px, cy, zL, postS, postS, postH, cPost);
             addSolidBoxT(buf, i, px, cy, zR, postS, postS, postH, cPost);
         }
+        // coronamiento (coping) sobre cada baranda -> remata el ritmo de balaustres
+        const float capTop = railTop + railH;
+        addSolidBoxT(buf, i, cx, capTop, zL, len, railW * 1.8f, deckH * 0.7f, cRail);
+        addSolidBoxT(buf, i, cx, capTop, zR, len, railW * 1.8f, deckH * 0.7f, cRail);
+        // mensulas / brackets de apoyo colgando bajo el tablero en los extremos
+        const float brY = cy - deckH * 0.5f - 0.5f;
+        addSolidBoxT(buf, i, xa,       brY, cz, postS * 1.6f, deckW * 0.9f, 0.6f, cPost);
+        addSolidBoxT(buf, i, xa + len, brY, cz, postS * 1.6f, deckW * 0.9f, 0.6f, cPost);
     } else {
         // puente a lo largo de Z
         const float len = dzA;
@@ -136,14 +193,24 @@ static void addBridge(TexVertex *buf, int &i,
             addSolidBoxT(buf, i, xL, cy, pz, postS, postS, postH, cPost);
             addSolidBoxT(buf, i, xR, cy, pz, postS, postS, postH, cPost);
         }
+        // coronamiento (coping) sobre cada baranda -> remata el ritmo de balaustres
+        const float capTop = railTop + railH;
+        addSolidBoxT(buf, i, xL, capTop, cz, railW * 1.8f, len, deckH * 0.7f, cRail);
+        addSolidBoxT(buf, i, xR, capTop, cz, railW * 1.8f, len, deckH * 0.7f, cRail);
+        // mensulas / brackets de apoyo colgando bajo el tablero en los extremos
+        const float brY = cy - deckH * 0.5f - 0.5f;
+        addSolidBoxT(buf, i, cx, brY, za,       deckW * 0.9f, postS * 1.6f, 0.6f, cPost);
+        addSolidBoxT(buf, i, cx, brY, za + len, deckW * 0.9f, postS * 1.6f, 0.6f, cPost);
     }
 }
 
 // ----------------------------------------------------------------------------
-// 3) addArchSpan  ->  ~252 vert  (2 pilares + 6 dovelas = 8 cajas + 1 piramide)
+// 3) addArchSpan  ->  ~384 vert  (13 cajas + 2 piramides)  (budget 400)
 //    Arco ojival (gotico apuntado) a la altura y, centrado en (cx,cz), luz w.
 //    El vano abre a lo largo de X (arco en el plano X-Y). 2 pilares, dovelas
-//    escalonadas que suben hacia el centro y una piramide que cierra la punta.
+//    escalonadas (voussoirs) que suben al centro, piramide que cierra la punta,
+//    2 impostas/capiteles en el arranque, clave (keystone) resaltada y traceria
+//    del timpano (mainel central + sub-punta ojival).
 // ----------------------------------------------------------------------------
 static void addArchSpan(TexVertex *buf, int &i,
                         float cx, float cz, float w, float y,
@@ -180,4 +247,23 @@ static void addArchSpan(TexVertex *buf, int &i,
     const float apexBaseY = baseY + dy * (float)N;
     const float apexW = apexHalf * 2.0f + blk;
     addPyramidT(buf, i, cx, apexBaseY, cz, apexW, pilD, dy * 1.6f + 0.6f, cApex);
+
+    // --- IMPOSTAS / capiteles: bloque de arranque sobre cada pilar (linea de salmer, +60) ---
+    const unsigned int cImp = brighten(stone, 1.04f);
+    const float impH = pilW * 0.6f;
+    addSolidBoxT(buf, i, cx - half, baseY - impH * 0.5f, cz, pilW * 1.7f, pilD * 1.6f, impH, cImp);
+    addSolidBoxT(buf, i, cx + half, baseY - impH * 0.5f, cz, pilW * 1.7f, pilD * 1.6f, impH, cImp);
+
+    // --- CLAVE (keystone): dovela central resaltada justo bajo la punta (+30) ---
+    const float ksH = blk * 0.9f;
+    addSolidBoxT(buf, i, cx, apexBaseY - ksH * 0.5f, cz, blk * 1.25f, pilD * 1.15f, ksH,
+                 brighten(stone, 1.18f));
+
+    // --- TRACERIA del timpano: mainel central + sub-punta ojival (+42) ---
+    const float traH = apexBaseY - baseY;
+    if (traH > 0.4f) {
+        addSolidBoxT(buf, i, cx, baseY, cz, pilW * 0.5f, pilD * 0.7f, traH, cVou);        // mainel
+        addPyramidT (buf, i, cx, baseY + traH, cz, pilW * 1.4f, pilD * 0.7f,
+                     dy * 1.1f + 0.4f, cImp);                                              // sub-punta
+    }
 }
