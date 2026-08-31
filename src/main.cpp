@@ -150,7 +150,7 @@ static void addSolidBox(LineVertex *buf, int &i, float cx, float baseY, float cz
     addQuad(buf, i, x1,y0,z0, x1,y0,z1, x1,y1,z1, x1,y1,z0, sb);  // derecha
 }
 
-static TexVertex __attribute__((aligned(16))) g_solidWorld[22000]; // piedra texturizada
+static TexVertex __attribute__((aligned(16))) g_solidWorld[36000]; // piedra texturizada (+ detalle)
 static int g_solidVerts = 0;
 static TexVertex __attribute__((aligned(16))) g_win[18000];        // ventanas (vidriera texturizada)
 static int g_winVerts = 0;
@@ -247,6 +247,9 @@ static void addPinnacle(TexVertex *buf, int &i, float cx, float baseY, float cz,
     addPyramidT(buf, i, cx, baseY + h, cz, w, w, w * 1.7f, brighten(col, 1.12f));
 }
 
+// detalle arquitectonico anti-caja (agente): addTowerDetail/addBridge/addArchSpan
+#include "agent_detail.h"
+
 // niebla por ALTURA: las estructuras se disuelven en la bruma del cielo al subir
 static unsigned int heightHaze(unsigned int base, float y) {
     float t = y / 190.0f; if (t < 0.0f) t = 0.0f; if (t > 0.82f) t = 0.82f;
@@ -294,6 +297,8 @@ static void buildTower(TexVertex *buf, int &i, float cx, float cz,
         addSolidBoxT(buf, i, cx, 0.0f, cz - d*0.5f - bd*0.35f, bw, bd, bh, bc);
         addSolidBoxT(buf, i, cx, 0.0f, cz + d*0.5f + bd*0.35f, bw, bd, bh, bc);
     }
+    // detalle arquitectonico (cornisas, pilastras, quoins, tuberias) anti-caja
+    addTowerDetail(buf, i, cx, cz, w, d, bodyTop, stone);
     int rows = (int)((bodyTop - 4.0f) / 4.5f);
     if (rows > 11) rows = 11;
     for (int rrow = 0; rrow < rows; ++rrow) {
@@ -352,7 +357,7 @@ static void buildSolidWorld() {
                  0.0f,0.0f, uv,uv, warmTint(RGBA(50, 48, 54, 255)));
     }
     for (int s = 0; s < kStructureCount && s < 63; ++s) {
-        if (i > 20500) break;
+        if (i > 33000) break;
         const Structure &st = kStructures[s];
         float sx = st.x * WSCALE, sz = st.z * WSCALE;
         float d = sqrtf(sx * sx + sz * sz);
@@ -360,7 +365,7 @@ static void buildSolidWorld() {
     }
     // mar de agujas de fondo (espiral aurea): densidad que se pierde en neblina
     for (int k = 0; k < 60; ++k) {
-        if (i > 20000) break;
+        if (i > 34000) break;
         float ang = (float)k * 2.3999632f;
         float rad = 36.0f + (float)((k * 37) % 72);  // 36..107
         float cx = cosf(ang) * rad;
@@ -380,6 +385,14 @@ static void buildSolidWorld() {
     addRailing(g_metal, mi, -9.0f, -7.0f, -9.0f,  1.0f, iron); // lado izq
     addRailing(g_metal, mi,  9.0f, -7.0f,  9.0f,  1.0f, iron); // lado der
     g_metalVerts = mi;
+    // arcos goticos como portico del mirador (detalle del agente)
+    {
+        const unsigned int arc = warmTint(brighten(RGBA(40, 38, 48, 255), 1.4f));
+        addArchSpan(g_solidWorld, i, -13.0f, -9.0f, 7.0f, 0.0f, arc);
+        addArchSpan(g_solidWorld, i,  13.0f, -9.0f, 7.0f, 0.0f, arc);
+        // un puente/pasarela alto cruzando el fondo del mirador
+        addBridge(g_solidWorld, i, -30.0f, 26.0f, -34.0f, 30.0f, 26.0f, -34.0f, arc);
+    }
     // The Cathedral: detallada, silueta lejana con ventanas (secciones 26, 31)
     buildTower(g_solidWorld, i, 0.0f, -150.0f, 70.0f, 70.0f, 300.0f, RGBA(34, 32, 50, 255), 0.0f);
     g_solidVerts = i;
@@ -437,6 +450,30 @@ static LineVertex __attribute__((aligned(16))) g_chSword[240];
 static int g_chUpperV = 0, g_chHeadV = 0, g_chLegV = 0, g_chArmV = 0, g_chSwordV = 0;
 // buildChar_upper / _head / _leg / _arm / _sword (partes con pivot en el origen)
 #include "agent_character.h"
+
+// SILUETA ENCAPUCHADA (reemplaza el personaje de cajas, se veia a lo Roblox):
+// manto acampanado que se angosta hacia arriba + capucha, casi negra -> figura
+// oscura y esbelta que se lee como sombra, no como muneco de cubos.
+static LineVertex __attribute__((aligned(16))) g_hero[400];
+static int g_heroV = 0;
+static void buildHero() {
+    int i = 0;
+    const unsigned int robe  = RGBA(24, 22, 30, 255);   // casi negro
+    const unsigned int robe2 = RGBA(32, 29, 38, 255);
+    const unsigned int red   = RGBA(118, 30, 36, 255);  // detalle rojo tenue
+    const unsigned int hood  = RGBA(16, 15, 20, 255);
+    // manto en capas que se angosta (silueta, sin brazos/piernas de caja)
+    addSolidBox(g_hero, i, 0.0f, 0.00f, 0.0f, 1.24f, 1.02f, 0.72f, robe);
+    addSolidBox(g_hero, i, 0.0f, 0.66f, 0.0f, 1.02f, 0.84f, 0.70f, robe2);
+    addSolidBox(g_hero, i, 0.0f, 1.30f, 0.0f, 0.80f, 0.66f, 0.68f, robe);
+    addSolidBox(g_hero, i, 0.0f, 1.92f, 0.0f, 0.64f, 0.54f, 0.52f, robe2); // hombros
+    // bufanda / detalle rojo al frente (-z)
+    addSolidBox(g_hero, i, 0.0f, 1.55f, -0.30f, 0.34f, 0.06f, 0.62f, red);
+    // capucha (cabeza cubierta) + punta
+    addSolidBox(g_hero, i, 0.0f, 2.42f, 0.06f, 0.46f, 0.50f, 0.42f, hood);
+    addPyramid(g_hero, i, 0.0f, 2.84f, 0.06f, 0.52f, 0.56f, 0.46f, hood);
+    g_heroV = i;
+}
 
 // --- NPCs roboticos (cuerpo + cabeza, wireframe) ---
 struct Npc { float x, z; };
@@ -665,11 +702,7 @@ int main(void) {
     buildStoneTex();
     buildMetalTex();
     buildSolidWorld();
-    buildChar_upper(g_chUpper, g_chUpperV);
-    buildChar_head(g_chHead, g_chHeadV);
-    buildChar_leg(g_chLeg, g_chLegV);
-    buildChar_arm(g_chArm, g_chArmV);
-    buildChar_sword(g_chSword, g_chSwordV);
+    buildHero();
     buildNpcs();
     buildChains();
     buildEnv();
@@ -803,8 +836,8 @@ int main(void) {
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
         {
-            ScePspFVector3 rot    = { DEG2RAD(11.0f), camYaw, 0.0f };
-            ScePspFVector3 camOff = { 0.0f, -3.4f, -9.5f };
+            ScePspFVector3 rot    = { DEG2RAD(12.0f), camYaw, 0.0f };
+            ScePspFVector3 camOff = { 0.0f, -4.2f, -11.5f };
             ScePspFVector3 pOff   = { -playerX, -playerY, -playerZ };
             // orden correcto de camara orbital: offset (espacio camara) -> giro
             // -> centrar en el jugador. Asi el jugador NO se va al girar.
@@ -841,67 +874,15 @@ int main(void) {
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_envVerts, 0, g_env);
 
-        // ---- personaje ANIMADO por piezas (caminar / idle) ----
+        // ---- silueta encapuchada (idle sutil: leve balanceo) ----
         {
-            const float legA = moving ? sinf(walkPhase) * 0.55f : 0.0f;
-            const float armA = moving ? sinf(walkPhase) * 0.45f : sinf(idleT) * 0.06f;
-            const float bobY = moving ? fabsf(sinf(walkPhase)) * 0.06f : sinf(idleT) * 0.03f;
-
+            float bobY = sinf(idleT) * 0.03f;
             sceGumLoadIdentity();
             ScePspFVector3 pp = { playerX, playerY + bobY, playerZ };
             sceGumTranslate(&pp);
-            ScePspFVector3 fr = { 0.0f, camYaw, 0.0f };
+            ScePspFVector3 fr = { 0.0f, camYaw + sinf(idleT * 0.6f) * 0.02f, 0.0f };
             sceGumRotateXYZ(&fr);
-
-            // torso/abrigo (pivot caderas y=1.35) -> cabeza + espada cuelgan de el
-            sceGumPushMatrix();
-                ScePspFVector3 hip = { 0.0f, 1.35f, 0.0f };
-                sceGumTranslate(&hip);
-                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chUpperV, 0, g_chUpper);
-                sceGumPushMatrix();
-                    ScePspFVector3 neck = { 0.0f, 1.25f, 0.0f };
-                    sceGumTranslate(&neck);
-                    sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chHeadV, 0, g_chHead);
-                sceGumPopMatrix();
-                sceGumPushMatrix();
-                    ScePspFVector3 sw = { -0.34f, 0.15f, 0.34f };
-                    sceGumTranslate(&sw);
-                    ScePspFVector3 swr = { DEG2RAD(18.0f), 0.0f, DEG2RAD(30.0f) };
-                    sceGumRotateXYZ(&swr);
-                    sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chSwordV, 0, g_chSword);
-                sceGumPopMatrix();
-            sceGumPopMatrix();
-
-            // piernas (pivot caderas, fase opuesta)
-            sceGumPushMatrix();
-                ScePspFVector3 lp = { -0.22f, 1.35f, 0.0f };
-                sceGumTranslate(&lp);
-                ScePspFVector3 lr = { legA, 0.0f, 0.0f };
-                sceGumRotateXYZ(&lr);
-                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chLegV, 0, g_chLeg);
-            sceGumPopMatrix();
-            sceGumPushMatrix();
-                ScePspFVector3 rp = { 0.22f, 1.35f, 0.0f };
-                sceGumTranslate(&rp);
-                ScePspFVector3 rr = { -legA, 0.0f, 0.0f };
-                sceGumRotateXYZ(&rr);
-                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chLegV, 0, g_chLeg);
-            sceGumPopMatrix();
-            // brazos (pivot hombros, opuestos a las piernas)
-            sceGumPushMatrix();
-                ScePspFVector3 alp = { -0.52f, 2.50f, 0.0f };
-                sceGumTranslate(&alp);
-                ScePspFVector3 alr = { -armA, 0.0f, 0.0f };
-                sceGumRotateXYZ(&alr);
-                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chArmV, 0, g_chArm);
-            sceGumPopMatrix();
-            sceGumPushMatrix();
-                ScePspFVector3 arp = { 0.52f, 2.50f, 0.0f };
-                sceGumTranslate(&arp);
-                ScePspFVector3 arr = { armA, 0.0f, 0.0f };
-                sceGumRotateXYZ(&arr);
-                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_chArmV, 0, g_chArm);
-            sceGumPopMatrix();
+            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_heroV, 0, g_hero);
         }
 
         // recursos: brillan al acercarse (seccion 12)
