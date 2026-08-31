@@ -7,13 +7,6 @@ recursos ocultos y un vacio aparentemente infinito.
 Plataforma objetivo: **PSP 1000 / 2000 / 3000** (corre tambien en PPSSPP).
 Lenguaje: **C++17** con **PSPSDK** (toolchain `pspdev`), build con **CMake**.
 
-## Alcance honesto
-
-Esto NO es el render fotorrealista del concepto ni el juego AAA completo de
-las 53 secciones del design (eso es trabajo de un estudio por anios). Es un
-juego **real y jugable** de PSP que captura la IDENTIDAD de NOCTIS con el
-estilo autentico del hardware: low-poly + niebla + siluetas + impostors.
-
 ### Objetivo 1 - Vertical slice: Distrito "Campanario"
 
 - [ ] Boot del motor + camara en 3a persona + medidor de FPS
