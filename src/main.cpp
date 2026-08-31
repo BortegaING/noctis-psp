@@ -27,7 +27,7 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
 static unsigned int __attribute__((aligned(16))) g_list[262144];
 static const unsigned int CLEAR_COLOR = RGBA(16, 14, 20, 255);
-static const unsigned int HAZE = RGBA(98, 86, 78, 255); // gris-marron silueta (calido)
+static const unsigned int HAZE = RGBA(70, 64, 62, 255); // bruma oscura (moody, 3rd Birthday)
 #define WSCALE 1.45f  // separa el distrito para abrir la vista (mas skyline/agujas)
 
 #define LINE_FLAGS (GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D)
@@ -209,9 +209,9 @@ static unsigned int winPick(float x, float y, float z, unsigned int amber) {
     unsigned int u = (unsigned int)seed;
     u ^= 61u; u ^= (u >> 16); u *= 9u; u ^= (u >> 4); u *= 0x27d4eb2du; u ^= (u >> 15);
     int m = (int)(u % 10u);
-    if (m < 3) return 0u;                        // apagada
-    if (m < 5) return RGBA(120, 150, 215, 255);  // luz fria
-    return amber;                                // ambar
+    if (m < 7) return 0u;                         // ~70% APAGADAS (oscuro, claroscuro)
+    if (m < 8) return RGBA(70, 92, 140, 255);     // pocas frias tenues
+    return amber;                                 // ambar tenue
 }
 
 // una fila de ventanas (quads emisivos) -> buffer g_win (sin textura).
@@ -261,8 +261,8 @@ static unsigned int heightHaze(unsigned int base, float y) {
 // torre gotica detallada texturizada: cuerpo escalonado + aguja + pinaculos + contrafuertes
 static void buildTower(TexVertex *buf, int &i, float cx, float cz,
                        float w, float d, float h, unsigned int baseColor, float dist) {
-    const unsigned int stone = fadeToVoid(warmTint(brighten(baseColor, 1.9f)), dist);
-    const unsigned int win   = RGBA(235, 165, 85, 255); // ambar (luces)
+    const unsigned int stone = fadeToVoid(warmTint(brighten(baseColor, 1.45f)), dist);
+    const unsigned int win   = RGBA(166, 108, 52, 255); // ambar TENUE (menos luz)
     float bodyTop;
     if (h > 45.0f) {
         const float h1 = h * 0.50f, h2 = h * 0.28f, h3 = h - h1 - h2;
@@ -309,7 +309,7 @@ static void buildTower(TexVertex *buf, int &i, float cx, float cz,
 // aguja fina del "mar de agujas" de fondo (texturizada)
 static void buildSpire(TexVertex *buf, int &i, float cx, float cz,
                        float w, float h, unsigned int base, float dist) {
-    const unsigned int stone = fadeToVoid(warmTint(brighten(base, 1.8f)), dist);
+    const unsigned int stone = fadeToVoid(warmTint(brighten(base, 1.4f)), dist);
     const float h1 = h * 0.68f;
     addSolidBoxT(buf, i, cx, 0.0f, cz, w, w, h1, heightHaze(stone, h1 * 0.5f));
     addSolidBoxT(buf, i, cx, h1, cz, w * 0.6f, w * 0.6f, h - h1, heightHaze(stone, h1 + (h - h1) * 0.5f));
@@ -318,7 +318,7 @@ static void buildSpire(TexVertex *buf, int &i, float cx, float cz,
     for (int rrow = 0; rrow < rows; ++rrow) {
         float y = 4.0f + rrow * 6.0f;
         if (y > h1 - 2.0f) break;
-        addWinRow(cx, cz, w, w, y, 0, RGBA(235, 165, 85, 255));
+        addWinRow(cx, cz, w, w, y, 0, RGBA(166, 108, 52, 255));
     }
 }
 
@@ -531,10 +531,8 @@ static void buildChains() {
 // ambiente gotico: braseros con llama calida en el mirador (agente)
 static void buildEnv() {
     int i = 0;
-    addBrazier(g_env, i, -8.5f, -6.2f);
+    addBrazier(g_env, i, -8.5f, -6.2f);   // solo 2 braseros al frente (menos luces)
     addBrazier(g_env, i,  8.5f, -6.2f);
-    addBrazier(g_env, i, -8.5f,  0.5f);
-    addBrazier(g_env, i,  8.5f,  0.5f);
     g_envVerts = i;
 }
 
@@ -580,9 +578,9 @@ static void gradQuad(int y0, int y1, unsigned int cTop, unsigned int cBot) {
     sceGuDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 6, 0, v);
 }
 static void drawBackdrop() {
-    const unsigned int top    = RGBA(32, 27, 26, 255);
-    const unsigned int haze   = RGBA(138, 122, 106, 255);
-    const unsigned int floorc = RGBA(22, 19, 19, 255);
+    const unsigned int top    = RGBA(18, 16, 20, 255);
+    const unsigned int haze   = RGBA(82, 74, 70, 255);
+    const unsigned int floorc = RGBA(14, 12, 15, 255);
     gradQuad(0, 150, top, haze);
     gradQuad(150, SCR_HEIGHT, haze, floorc);
 }
