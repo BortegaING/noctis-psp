@@ -309,6 +309,9 @@ static void buildSolidWorld() {
         float dd = sqrtf(cx * cx + cz * cz);
         buildSpire(g_solidWorld, i, cx, cz, ww, hh, kStructures[k % kStructureCount].color, dd);
     }
+    // plataforma de piedra del mirador (suelo solido bajo el spawn)
+    addSolidBox(g_solidWorld, i, 0.0f, -0.5f, -2.5f, 22.0f, 13.0f, 0.55f,
+                warmTint(RGBA(64, 62, 68, 255)));
     // baranda del mirador de spawn (primer plano, como la referencia)
     const unsigned int iron = RGBA(40, 38, 46, 255);
     addRailing(g_solidWorld, i, -9.0f, -7.0f,  9.0f, -7.0f, iron); // frente
