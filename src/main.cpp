@@ -150,18 +150,31 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
     buf[i++] = { b, x0, y0, z1 }; buf[i++] = { b, x0, y0, z0 }; buf[i++] = { b, cx, ay, cz };
 }
 
+// decide el estado de una ventana por su posicion: 0 = apagada, o un color.
+// Rompe la uniformidad: ~30% apagadas, algunas de luz fria, el resto ambar.
+static unsigned int winPick(float x, float y, float z, unsigned int amber) {
+    int seed = (int)(x * 97.0f) + (int)(y * 57.0f) + (int)(z * 131.0f);
+    unsigned int u = (unsigned int)seed;
+    u ^= 61u; u ^= (u >> 16); u *= 9u; u ^= (u >> 4); u *= 0x27d4eb2du; u ^= (u >> 15);
+    int m = (int)(u % 10u);
+    if (m < 3) return 0u;                        // apagada
+    if (m < 5) return RGBA(120, 150, 215, 255);  // luz fria
+    return amber;                                // ambar
+}
+
 // una fila de ventanas (quads emisivos) en una cara.
 // face: 0=+z, 1=-z, 2=+x, 3=-x
 static void addWinRow(LineVertex *buf, int &i, float cx, float cz,
                       float w, float d, float y, int face, unsigned int col) {
-    const float wh = 0.7f, ww = 0.32f, e = 0.10f;
+    const float wh = 0.62f, ww = 0.28f, e = 0.10f;
     if (face == 0 || face == 1) {
         const float z = (face == 0) ? (cz + d * 0.5f + e) : (cz - d * 0.5f - e);
         int cols = (int)(w / 2.4f); if (cols < 1) cols = 1; if (cols > 5) cols = 5;
         const float step = w / (cols + 1);
         for (int c = 1; c <= cols; ++c) {
             float x = cx - w * 0.5f + step * c;
-            addQuad(buf, i, x-ww,y-wh,z, x+ww,y-wh,z, x+ww,y+wh,z, x-ww,y+wh,z, col);
+            unsigned int wc = winPick(x, y, z, col); if (!wc) continue;
+            addQuad(buf, i, x-ww,y-wh,z, x+ww,y-wh,z, x+ww,y+wh,z, x-ww,y+wh,z, wc);
         }
     } else {
         const float x = (face == 2) ? (cx + w * 0.5f + e) : (cx - w * 0.5f - e);
@@ -169,7 +182,8 @@ static void addWinRow(LineVertex *buf, int &i, float cx, float cz,
         const float step = d / (cols + 1);
         for (int c = 1; c <= cols; ++c) {
             float z = cz - d * 0.5f + step * c;
-            addQuad(buf, i, x,y-wh,z-ww, x,y-wh,z+ww, x,y+wh,z+ww, x,y+wh,z-ww, col);
+            unsigned int wc = winPick(x, y, z, col); if (!wc) continue;
+            addQuad(buf, i, x,y-wh,z-ww, x,y-wh,z+ww, x,y+wh,z+ww, x,y+wh,z-ww, wc);
         }
     }
 }
