@@ -463,8 +463,8 @@ static void buildSolidWorld() {
         // un puente/pasarela alto cruzando el fondo del mirador
         addBridge(g_solidWorld, i, -30.0f, 26.0f, -34.0f, 30.0f, 26.0f, -34.0f, arc);
     }
-    // The Cathedral: detallada, silueta lejana con ventanas (secciones 26, 31)
-    buildTower(g_solidWorld, i, 0.0f, -150.0f, 70.0f, 70.0f, 300.0f, RGBA(34, 32, 50, 255), 0.0f);
+    // The Cathedral: landmark monumental viviente, domina el horizonte (secciones 26-31)
+    buildTower(g_solidWorld, i, 0.0f, -170.0f, 96.0f, 96.0f, 480.0f, RGBA(38, 34, 58, 255), 0.0f);
     g_solidVerts = i;
 }
 
