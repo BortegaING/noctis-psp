@@ -32,6 +32,13 @@ static unsigned int __attribute__((aligned(16))) g_list[262144];
 // palidos flotando en negro. Antes: cielo 38 (mas oscuro que la niebla 66) -> vacio.
 static const unsigned int CLEAR_COLOR = RGBA(104, 98, 87, 255);  // cielo brumoso: overcast calido, el horizonte "brilla"
 static const unsigned int HAZE = RGBA(90, 84, 74, 255); // bruma calida: la geometria lejana se DISUELVE aqui (un pelo bajo el cielo)
+
+// Sentido de "cara frontal" para el back-face culling por-pase (R1 rendimiento).
+// El winding de cajas/piramides/piso es CONSISTENTE (probado), asi que exactamente
+// UNO de GU_CW/GU_CCW es el correcto para TODOS los pases a la vez. Arranca en CW.
+// >>> Si al capturar se ven las paredes/piso POR DENTRO (see-through), cambia esta
+//     UNICA linea a GU_CCW y recompila: queda resuelto para todo. <<<
+#define NOCTIS_FRONTFACE GU_CW
 #define WSCALE 2.25f  // separa los edificios (menos juntos) y mas caen fuera de vista (mas FPS)
 #define VIEWER_MODE 0     // 1 = visor de personaje; 0 = juego
 #define HERO_SHOWCASE 1   // (dentro del visor) 1 = solo el HUNTER en primer plano
@@ -459,8 +466,8 @@ static void buildSolidWorld() {
         // PISO: adoquin (genGround, alto contraste) con color CLARO (el MODULATE
         // multiplica textura*color; textura ~90/255, asi que el color debe ser
         // claro para que se lea). uv ~ 12 unidades/repeticion -> losas ~1.5u.
-        const float S = 160.0f;                 // suelo mas chico (jugador acotado a r~82) -> menos fill/minificacion
-        const float uv = 2.0f * S / 12.0f;      // ~27 repeticiones -> losas visibles cerca
+        const float S = 120.0f;                 // suelo mas chico (jugador acotado a r~82) -> menos fill/minificacion (R5)
+        const float uv = 2.0f * S / 12.0f;      // densidad de losa fija a 12u (indep. de S) -> losas visibles cerca
         addQuadT(g_solidWorld, i, -S,0.0f,-S,  S,0.0f,-S,  S,0.0f,S,  -S,0.0f,S,
                  0.0f,0.0f, uv,uv, RGBA(216, 198, 174, 255));   // adoquin gotico claro/calido (se ve, no gris plano)
     }
@@ -905,8 +912,9 @@ static void initGu() {
     sceGuEnable(GU_SCISSOR_TEST);
     sceGuDepthFunc(GU_GEQUAL);
     sceGuEnable(GU_DEPTH_TEST);
-    sceGuDisable(GU_CULL_FACE);  // SIN culling: ambas caras -> paredes SOLIDAS (no se ve por dentro).
-                                 // Con pocos edificios el costo es bajo; evita el bug de winding invertido.
+    sceGuFrontFace(NOCTIS_FRONTFACE); // cara exterior = NOCTIS_FRONTFACE (winding probado consistente)
+    sceGuDisable(GU_CULL_FACE);  // default OFF; el culling se ACTIVA por-pase en el lazo de render
+                                 // (paredes/piso/agujas SI; ventanas/hero/braseros NO -> winding no probado).
     sceGuDisable(GU_TEXTURE_2D);
     sceGuShadeModel(GU_SMOOTH);
     sceGuFinish();
@@ -1226,7 +1234,7 @@ int main(void) {
 #else
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
-        sceGumPerspective(72.0f, 16.0f / 9.0f, 0.8f, 420.0f); // far mas corto + FOV menor = menos que dibujar (FPS)
+        sceGumPerspective(72.0f, 16.0f / 9.0f, 0.8f, 300.0f); // R2: far 420->300 recorta el anillo externo de agujas + mejora Z (la bruma tapa el corte; la catedral z=-170 sigue entrando)
 
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
@@ -1259,6 +1267,7 @@ int main(void) {
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);   // 1 texel/pixel: gran ahorro de fill en PSP real
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
         // --- MUNDO SOLIDO con CULLING por estructura + LOD (solo lo cercano/al frente) ---
+        sceGuEnable(GU_CULL_FACE);   // R1: back-face culling en pases PROBADOS (piso, edificios, cola/catedral) -> ~1/2 del fill
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso: siempre (piedra)
         sceGuTexImage(0, STEX, STEX, STEX, g_facadeTexS);   // EDIFICIOS: textura de FACHADA gotica (ventanas en la imagen)
         for (int s = 0; s < g_srangeCount; ++s) {
@@ -1278,6 +1287,7 @@ int main(void) {
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_solidVerts - g_tailStart, 0, g_solidWorld + g_tailStart);  // cola + cathedral
 
         // ventanas: textura de vidriera (CLAMP). Solo torres CERCANAS + agujas/cathedral (siempre).
+        sceGuDisable(GU_CULL_FACE);  // ventanas (addWinRow) tienen winding INCONSISTENTE -> NO cullear; metal tambien queda OFF
         sceGuTexImage(0, WTEX, WTEX, WTEX, g_winTexS);
         sceGuTexWrap(GU_CLAMP, GU_CLAMP);
         for (int s = 0; s < g_srangeCount; ++s) {
@@ -1298,11 +1308,13 @@ int main(void) {
         sceGuDisable(GU_TEXTURE_2D);
 
         // atmosfera de fondo: siluetas colosales lejanas + ruinas suspendidas del abismo
+        sceGuEnable(GU_CULL_FACE);   // R1: agujas + props + npc son cajas/piramides probadas -> cullables
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_spireVerts, 0, g_spire);     // MAR DENSO de agujas (el look de la referencia)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);   // props del pueblo
         // cables + robots + ambiente (braseros) sin textura
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_chainVerts, 0, g_chains);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
+        sceGuDisable(GU_CULL_FACE);  // braseros (g_env) + HUNTER + balas: winding NO verificado -> culling OFF (seguro)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_envVerts, 0, g_env);
 
         // ---- HUNTER (idle sutil: leve balanceo) ; encara heroYaw ----
