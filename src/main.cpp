@@ -206,6 +206,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "cand/ff.h"
 #include "cand/wraith.h"
 #include "atmosphere.h"   // Vacio/Abismo (ruinas suspendidas) + siluetas colosales lejanas
+#include "weapons_fx.h"   // FX/comportamiento distinto por arma a distancia (10)
 #if VIEWER_MODE
 static LineVertex __attribute__((aligned(16))) g_candBuf[4][3300];
 static int g_candV[4];
@@ -550,7 +551,7 @@ static int g_npcVerts = 0;
 static int g_npcKilled[64] = {0};   // robots derribados a tiros (no se dibujan)
 
 // ===== ARMA / DISPAROS (L apunta, R dispara) =====
-struct Shot { float x, y, z, vx, vy, vz; int life; };
+struct Shot { float x, y, z, vx, vy, vz; int life; unsigned int col; float size; int pierce; };
 static Shot g_shots[24];
 // chispa/estallido al derribar un robot (feedback de impacto)
 struct Spark { float x, y, z; int life; };
@@ -905,13 +906,17 @@ int main(void) {
     int collected[64] = {0};
     int collectedCount = 0, pickTimer = 0, pickedType = 0;
 
-    // ---- arma (L apunta, R dispara; CUADRADO planea) ----
+    // ---- armas (L apunta, R dispara; D-pad izq/der cambia arma; O melee) ----
     int   aiming = 0, fireCD = 0, reloadCD = 0, muzzle = 0;
-    int   ammo = 40, ammoReserve = 280;
+    unsigned int muzzleCol = RGBA(255, 235, 170, 255);
+    int   curRanged = 0, curMelee = 0;
+    int   ammoMag[16];
+    for (int k = 0; k < kRangedCount && k < 16; ++k) ammoMag[k] = kRanged[k].magazine;
+    int   prevDR = 0, prevDL = 0, prevDU = 0, prevDD = 0, prevCircle = 0;
+    int   meleeCD = 0, meleeFx = 0;
     for (int s = 0; s < 24; ++s) g_shots[s].life = 0;
     for (int s = 0; s < 12; ++s) g_sparks[s].life = 0;
-    const float SHOT_SPEED = 1.7f;
-    const int   SHOT_LIFE = 55, FIRE_CD = 7, MAG = 40;
+    const int   SHOT_LIFE = 55;
 
     while (!g_exit) {
         sceCtrlReadBufferPositive(&pad, 1);
@@ -953,10 +958,18 @@ int main(void) {
                 while (dA < -3.14159265f) dA += 6.28318531f;
                 heroYaw += dA * 0.20f;   // el personaje encara la direccion de avance
             }
-            // ===== ARMA: L apunta, R dispara =====
+            // ===== ARMAS: L apunta, R dispara; D-pad cambia; Circulo melee =====
+            // cambio de arma a distancia (D-pad izq/der) y melee (D-pad arr/aba)
+            int dR = (pad.Buttons & PSP_CTRL_RIGHT) ? 1 : 0, dL = (pad.Buttons & PSP_CTRL_LEFT) ? 1 : 0;
+            int dU = (pad.Buttons & PSP_CTRL_UP) ? 1 : 0,    dD = (pad.Buttons & PSP_CTRL_DOWN) ? 1 : 0;
+            if (dR && !prevDR) curRanged = (curRanged + 1) % kRangedCount;
+            if (dL && !prevDL) curRanged = (curRanged - 1 + kRangedCount) % kRangedCount;
+            if (dU && !prevDU) curMelee  = (curMelee + 1) % kMeleeCount;
+            if (dD && !prevDD) curMelee  = (curMelee - 1 + kMeleeCount) % kMeleeCount;
+            prevDR = dR; prevDL = dL; prevDU = dU; prevDD = dD;
+
             aiming = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
-            if (aiming) {
-                // al apuntar, el personaje encara al frente (hacia la pantalla, -Z)
+            if (aiming) {   // al apuntar, el personaje encara al frente (-Z)
                 float dA = 0.0f - heroYaw;
                 while (dA >  3.14159265f) dA -= 6.28318531f;
                 while (dA < -3.14159265f) dA += 6.28318531f;
@@ -965,21 +978,49 @@ int main(void) {
             if (fireCD > 0) fireCD--;
             if (reloadCD > 0) reloadCD--;
             if (muzzle > 0) muzzle--;
+            if (meleeCD > 0) meleeCD--;
+            if (meleeFx > 0) meleeFx--;
+            // --- disparo a distancia (usa stats + FX del arma actual) ---
             if (aiming && (pad.Buttons & PSP_CTRL_RTRIGGER) && fireCD == 0 && reloadCD == 0) {
-                if (ammo > 0) {
-                    float fx = sinf(heroYaw), fz = -cosf(heroYaw);           // frente
-                    float mx = playerX + fx * 0.7f, my = playerY + 1.5f, mz = playerZ + fz * 0.7f;
-                    for (int s = 0; s < 24; ++s) if (g_shots[s].life <= 0) {
-                        g_shots[s].x = mx;  g_shots[s].y = my;  g_shots[s].z = mz;
-                        g_shots[s].vx = fx * SHOT_SPEED; g_shots[s].vy = 0.0f; g_shots[s].vz = fz * SHOT_SPEED;
-                        g_shots[s].life = SHOT_LIFE; break;
+                WeaponFX wf = weaponFX(curRanged);
+                int cost = kRanged[curRanged].energyCost;
+                if (ammoMag[curRanged] > 0 && en >= (float)cost) {
+                    for (int b = 0; b < wf.spread; ++b) {
+                        float off = (wf.spread > 1) ? ((float)b - (wf.spread - 1) * 0.5f) * 0.11f : 0.0f;
+                        float ya = heroYaw + off, fx = sinf(ya), fz = -cosf(ya);
+                        float mx = playerX + fx * 0.7f, my = playerY + 1.5f, mz = playerZ + fz * 0.7f;
+                        for (int s = 0; s < 24; ++s) if (g_shots[s].life <= 0) {
+                            g_shots[s].x = mx; g_shots[s].y = my; g_shots[s].z = mz;
+                            g_shots[s].vx = fx * wf.speed; g_shots[s].vy = 0.0f; g_shots[s].vz = fz * wf.speed;
+                            g_shots[s].life = SHOT_LIFE; g_shots[s].col = wf.col; g_shots[s].size = wf.size; g_shots[s].pierce = wf.pierce;
+                            break;
+                        }
                     }
-                    ammo--; fireCD = FIRE_CD; muzzle = 4;
-                } else if (ammoReserve > 0) {   // recarga automatica al vaciar
-                    int need = MAG - ammo; if (need > ammoReserve) need = ammoReserve;
-                    ammo += need; ammoReserve -= need; reloadCD = 34;
+                    ammoMag[curRanged]--; en -= (float)cost; fireCD = wf.fireFrames;
+                    muzzle = 4; muzzleCol = weaponMuzzle(curRanged);
+                } else if (ammoMag[curRanged] == 0) {   // recarga automatica
+                    ammoMag[curRanged] = kRanged[curRanged].magazine;
+                    reloadCD = kRanged[curRanged].reloadMs / 16;
                 }
             }
+            // --- melee (Circulo): golpe en arco al frente ---
+            if ((pad.Buttons & PSP_CTRL_CIRCLE) && !prevCircle && meleeCD == 0) {
+                meleeCD = kMelee[curMelee].speedMs / 16; meleeFx = 8;
+                float reach = kMelee[curMelee].reach * 0.20f;
+                float fx = sinf(heroYaw), fz = -cosf(heroYaw);
+                for (int n = 0; n < kNpcCount; ++n) {
+                    if (g_npcKilled[n]) continue;
+                    float rx = kNpcs[n].x - playerX, rz = kNpcs[n].z - playerZ;
+                    float dd = sqrtf(rx*rx + rz*rz);
+                    if (dd > reach + 0.7f) continue;
+                    if (dd > 0.01f && (rx*fx + rz*fz) / dd < 0.30f) continue;   // solo al frente
+                    g_npcKilled[n] = 1; buildNpcs();
+                    for (int q = 0; q < 12; ++q) if (g_sparks[q].life <= 0) {
+                        g_sparks[q].x = kNpcs[n].x; g_sparks[q].y = 1.0f; g_sparks[q].z = kNpcs[n].z; g_sparks[q].life = 14; break;
+                    }
+                }
+            }
+            prevCircle = (pad.Buttons & PSP_CTRL_CIRCLE) ? 1 : 0;
             // ===== salto: coyote time + buffer + salto variable =====
             if (grounded) coyote = COYOTE_MAX; else if (coyote > 0) coyote--;
             int jumpNow = (pad.Buttons & PSP_CTRL_CROSS) ? 1 : 0;
@@ -1040,7 +1081,7 @@ int main(void) {
                             g_sparks[q].x = kNpcs[n].x; g_sparks[q].y = g_shots[s].y; g_sparks[q].z = kNpcs[n].z;
                             g_sparks[q].life = 16; break;
                         }
-                        g_shots[s].life = 0; break;
+                        if (!g_shots[s].pierce) { g_shots[s].life = 0; break; }   // pierce sigue de largo
                     }
                 }
             }
@@ -1175,8 +1216,9 @@ int main(void) {
             if (g_shots[s].life <= 0) continue;
             LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
             int vi = 0;
-            addSolidBox(v, vi, g_shots[s].x, g_shots[s].y - 0.07f, g_shots[s].z,
-                        0.14f, 0.14f, 0.14f, RGBA(255, 210, 130, 255));
+            float bsz = g_shots[s].size;
+            addSolidBox(v, vi, g_shots[s].x, g_shots[s].y - bsz * 0.5f, g_shots[s].z,
+                        bsz, bsz, bsz, g_shots[s].col);
             sceGumLoadIdentity();
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
         }
@@ -1186,7 +1228,7 @@ int main(void) {
             LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
             int vi = 0;
             addSolidBox(v, vi, playerX + fx * 0.7f, playerY + 1.5f - 0.12f, playerZ + fz * 0.7f,
-                        0.24f, 0.24f, 0.24f, RGBA(255, 235, 170, 255));
+                        0.24f, 0.24f, 0.24f, muzzleCol);
             sceGumLoadIdentity();
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
         }
@@ -1200,6 +1242,18 @@ int main(void) {
             LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
             int vi = 0;
             addSolidBox(v, vi, g_sparks[q].x, g_sparks[q].y - sz * 0.5f, g_sparks[q].z, sz, sz, sz, col);
+            sceGumLoadIdentity();
+            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
+        }
+
+        // ---- arco de melee (Circulo): destello frontal al golpear ----
+        if (meleeFx > 0) {
+            float fx = sinf(heroYaw), fz = -cosf(heroYaw);
+            float reach = kMelee[curMelee].reach * 0.20f;
+            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
+            int vi = 0;
+            addSolidBox(v, vi, playerX + fx * reach * 0.6f, playerY + 1.0f, playerZ + fz * reach * 0.6f,
+                        reach * 1.2f, 0.28f, reach * 1.2f, RGBA(205, 225, 255, 255));
             sceGumLoadIdentity();
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
         }
@@ -1264,11 +1318,12 @@ int main(void) {
         snprintf(hud, sizeof(hud), "DISTRITO: Campanario    FPS %d", fps);
         drawText(8, 58, 1.0f, RGBA(150, 160, 190, 255), hud);
 
-        drawText(304, 239, 1.0f, RGBA(222, 210, 188, 255), kRanged[1].name);
+        drawText(304, 226, 1.0f, RGBA(170, 205, 165, 255), kMelee[curMelee].name);    // melee (Circulo)
+        drawText(304, 239, 1.0f, RGBA(222, 210, 188, 255), kRanged[curRanged].name);  // arma a distancia (R)
         if (reloadCD > 0) {
             drawText(304, 252, 1.0f, RGBA(235, 180, 90, 255), "RECARGANDO...");
         } else {
-            snprintf(hud, sizeof(hud), "%d / %d", ammo, ammoReserve);
+            snprintf(hud, sizeof(hud), "%d / %d", ammoMag[curRanged], kRanged[curRanged].magazine);
             drawText(304, 252, 1.0f, aiming ? RGBA(255, 120, 110, 255) : RGBA(150, 175, 215, 255), hud);
         }
 
@@ -1283,7 +1338,7 @@ int main(void) {
         snprintf(hud, sizeof(hud), "X %d  Z %d  Y %d", (int)playerX, (int)playerZ, (int)playerY);
         drawText(8, 230, 1.0f, RGBA(110, 130, 160, 255), hud);
         drawText(8, 244, 1.0f, RGBA(110, 130, 160, 255),
-                 "Stick mover  X saltar  Cuadr planear  L apuntar  R disparar");
+                 "Stick  X salto  Cuad planeo  L mira  R tiro  Dpad arma  O melee");
         if (paused) {
             drawText(206, 104, 2.0f, RGBA(232, 222, 242, 255), "PAUSA");
             drawText(163, 130, 1.0f, RGBA(165, 175, 205, 255), "START continuar   HOME salir");
