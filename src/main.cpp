@@ -1148,6 +1148,7 @@ int main(void) {
             if (ddz > BEHIND_CULL) continue;                    // detras de la camara (fija mira -Z)
             float d2 = ddx * ddx + ddz * ddz;
             if (d2 > DRAW_DIST * DRAW_DIST) continue;           // demasiado lejos (la niebla ya lo tapa)
+            { float axl = ddx < 0 ? -ddx : ddx; if (ddz < -1.0f && d2 > 625.0f && axl > -ddz * 2.0f) continue; } // muy a los lados (fuera del campo de vision)
             if (d2 > LOD_DIST * LOD_DIST)
                 sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, r.sDetail - r.sStart, 0, g_solidWorld + r.sStart); // LOD: cuerpo sin detalle
             else
