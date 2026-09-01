@@ -30,7 +30,7 @@ static int buildSpirescape(LineVertex *buf) {
     // ================= AGUJAS SUELTAS (130) =================
     // cada k: espiral aurea + radio hash (solapan en pantalla = bosque). Sesgo de densidad a -Z (frente de camara)
     // plegando ~70% de las que caen detras hacia el frente, dejando ~30% detras para ENVOLVER al jugador.
-    for (int k = 0; k < 55; ++k) {   // menos agujas (fill-rate PSP); igual se lee el bosque
+    for (int k = 0; k < 32; ++k) {   // aun menos agujas (fill-rate PSP); igual se lee el bosque
         const unsigned int hT = spireHash((unsigned int)(k * 4 + 1));   // tier (fija el conteo de verts)
         const unsigned int hR = spireHash((unsigned int)(k * 9 + 2));   // radio
         const unsigned int hW = spireHash((unsigned int)(k * 9 + 3));   // ancho
@@ -71,7 +71,7 @@ static int buildSpirescape(LineVertex *buf) {
 
     // ================= CATEDRALES / HITOS (14) =================
     // cuerpo escalonado (2 cajas) coronado por un RACIMO de 4 agujas finas: los grandes referentes del gentio.
-    for (int c = 0; c < 6; ++c) {   // menos catedrales de fondo (FPS)
+    for (int c = 0; c < 3; ++c) {   // menos catedrales de fondo (FPS)
         const unsigned int hA = spireHash((unsigned int)(c * 11 + 101));  // angulo/radio
         const unsigned int hB = spireHash((unsigned int)(c * 11 + 102));  // dimensiones
         const unsigned int hF = spireHash((unsigned int)(c * 11 + 103));  // pliegue frente

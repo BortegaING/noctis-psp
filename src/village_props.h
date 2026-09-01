@@ -59,7 +59,7 @@ static int buildVillageProps(LineVertex *buf) {
 
     // ========================= LAPIDAS (~14) =========================
     // losa fina baja + a veces una cruz (2 cajitas). Piedra gris fria con variacion.
-    for (int t = 0; t < 14; ++t) {
+    for (int t = 0; t < 5; ++t) {   // menos lapidas (cosas entremedio -> FPS)
         float x, z; vpSpot(step, 8.0f, 42.0f, x, z);
         unsigned int h  = vpHash((unsigned int)(t * 131 + 7));
         unsigned int col = brighten(STONE, 0.80f + 0.30f * ((float)(h & 255) / 255.0f)); // variacion de tono
@@ -79,7 +79,7 @@ static int buildVillageProps(LineVertex *buf) {
 
     // ===================== ARBOLES MUERTOS (~6) =====================
     // tronco delgado alto + 3..5 ramas (cajitas finas orientadas por posicion). Casi negro.
-    for (int t = 0; t < 6; ++t) {
+    for (int t = 0; t < 0; ++t) {   // arboles muertos QUITADOS (los mas pesados; clutter)
         float x, z; vpSpot(step, 10.0f, 44.0f, x, z);
         unsigned int h   = vpHash((unsigned int)(t * 977 + 41));
         unsigned int col = brighten(DEAD, 0.85f + 0.35f * ((float)(h & 255) / 255.0f));
@@ -104,7 +104,7 @@ static int buildVillageProps(LineVertex *buf) {
 
     // ================= CERCA / MURO BAJO de piedra (~2 tramos) =================
     // filas de cajas bajas (0.6 alto) formando un tramo de ~10 unidades, gris frio.
-    for (int t = 0; t < 2; ++t) {
+    for (int t = 0; t < 0; ++t) {   // muros bajos QUITADOS (clutter)
         float x, z; vpSpot(step, 12.0f, 40.0f, x, z);
         unsigned int h = vpHash((unsigned int)(t * 617 + 19));
         float ang   = ((float)(h & 255) / 255.0f) * 6.2832f;                              // orientacion del tramo
@@ -129,7 +129,7 @@ static int buildVillageProps(LineVertex *buf) {
     }
 
     // ============ Opcional: BARRILES (2) + CARRETA rota (1) para vida de pueblo ============
-    for (int t = 0; t < 2; ++t) {
+    for (int t = 0; t < 0; ++t) {   // barriles/carreta QUITADOS (clutter)
         float x, z; vpSpot(step, 11.0f, 30.0f, x, z);
         unsigned int h = vpHash((unsigned int)(t * 401 + 89));
         addSolidBox(buf, i, x, 0.0f, z, 0.70f, 0.70f, 1.00f,

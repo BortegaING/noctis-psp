@@ -186,8 +186,8 @@ static int g_spireStart   = 0, g_spireEnd = 0;   // agujas: siempre
 static int g_tailStart    = 0;   // cola (mirador..cathedral): [g_tailStart, g_solidVerts)
 static int g_winTailStart = 0;   // ventanas de agujas+cathedral: siempre
 // distancias (unidades de mundo). La niebla ya funde mas alla de ~98.
-static const float DRAW_DIST = 78.0f;   // mas alla -> no se dibuja la torre (mas agresivo = mas FPS)
-static const float LOD_DIST  = 34.0f;   // entre LOD_DIST y DRAW_DIST -> cuerpo sin detalle ni ventanas
+static const float DRAW_DIST = 58.0f;   // rango de mundo mas corto -> mas FPS
+static const float LOD_DIST  = 26.0f;   // entre LOD_DIST y DRAW_DIST -> cuerpo sin detalle
 static const float BEHIND_CULL = 24.0f; // dz por detras de la camara -> descartar
 
 // piramide de 4 caras (aguja) sin textura -- para personaje/robots (LineVertex)
@@ -454,7 +454,7 @@ static void buildSolidWorld() {
     {
         const float S = 360.0f, uv = 2.0f * S / TILE;   // SUELO grande y solido (sin vacio)
         addQuadT(g_solidWorld, i, -S,0.0f,-S,  S,0.0f,-S,  S,0.0f,S,  -S,0.0f,S,
-                 0.0f,0.0f, uv,uv, warmTint(RGBA(50, 48, 54, 255)));
+                 0.0f,0.0f, uv,uv, warmTint(RGBA(62, 54, 46, 255)));   // adoquin mas rico/calido
     }
     g_floorCount = i;      // piso = [0, g_floorCount)  (siempre se dibuja)
     g_srangeCount = 0;
@@ -502,7 +502,8 @@ static void buildSolidWorld() {
         // un puente/pasarela alto cruzando el fondo del mirador
         addBridge(g_solidWorld, i, -30.0f, 26.0f, -34.0f, 30.0f, 26.0f, -34.0f, arc);
     }
-    // (catedral vieja monolitica QUITADA para el FPS; el mar de agujas ya da el fondo)
+    // The Cathedral: landmark del fondo (Benjamin la dejo, se ve bien)
+    buildTower(g_solidWorld, i, 0.0f, -170.0f, 96.0f, 96.0f, 480.0f, RGBA(38, 34, 58, 255), 0.0f);
     g_solidVerts = i;
 }
 
@@ -917,7 +918,7 @@ int main(void) {
     buildCandidates();
 #endif
     buildNpcs();
-    buildChains();   // cadenas colgantes (atmosfera de la referencia)
+    // buildChains();   // cadenas QUITADAS (cosas entremedio que bajan FPS); g_chainVerts=0
     buildEnv();
     g_farSilVerts = buildFarSilhouettes(g_farSil);
     g_voidVerts   = buildVoidLayer(g_void);
@@ -933,7 +934,7 @@ int main(void) {
     float en = 780.0f;
     const float EN_MAX = 780.0f;
     // constantes de movilidad (diseno del agente)
-    const float DEADZONE = 0.18f, RUN_SPEED = 0.42f, ACCEL_GND = 0.22f, ACCEL_AIR = 0.09f, STOP_FRIC = 0.20f, CAM_SPEED = 0.03f;
+    const float DEADZONE = 0.18f, RUN_SPEED = 0.22f, ACCEL_GND = 0.20f, ACCEL_AIR = 0.09f, STOP_FRIC = 0.22f, CAM_SPEED = 0.03f;
     const float GRAVITY = 0.020f, JUMP_VEL = 0.55f, SHORTHOP = 0.50f;
     const int   COYOTE_MAX = 6, JUMPBUF_MAX = 6;
     const float FLOAT_LIFT = 0.030f, FLOAT_GRAV = 0.006f, FLOAT_UPCAP = 0.12f, FLOAT_FALLCAP = -0.09f, EN_FLOAT = 6.0f, EN_REGEN = 5.0f;
@@ -1102,7 +1103,7 @@ int main(void) {
             if (en < 0.0f) en = 0.0f;
             // ===== animacion (segun velocidad real) =====
             moving = (velX * velX + velZ * velZ > 0.002f) ? 1 : 0;
-            if (moving) walkPhase += 0.30f;
+            if (moving) walkPhase += 0.17f;   // ritmo de paso mas lento (acorde al RUN_SPEED bajo)
             idleT += 0.05f;
             } else {
                 // ===== GRAVEDAD NO-ABAJO: caer/mover/saltar segun gravDir (v1 wall-walk) =====
@@ -1211,7 +1212,7 @@ int main(void) {
 #else
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
-        sceGumPerspective(75.0f, 16.0f / 9.0f, 0.8f, 1200.0f); // far grande: caben las siluetas colosales
+        sceGumPerspective(72.0f, 16.0f / 9.0f, 0.8f, 420.0f); // far mas corto + FOV menor = menos que dibujar (FPS)
 
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
