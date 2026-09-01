@@ -28,7 +28,7 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 static unsigned int __attribute__((aligned(16))) g_list[262144];
 static const unsigned int CLEAR_COLOR = RGBA(9, 10, 15, 255);   // vacio frio (abismo BLAME!)
 static const unsigned int HAZE = RGBA(34, 38, 52, 255); // bruma FRIA azul-gris: lo lejano se disuelve aqui
-#define WSCALE 1.45f  // separa el distrito para abrir la vista (mas skyline/agujas)
+#define WSCALE 2.25f  // separa los edificios (menos juntos) y mas caen fuera de vista (mas FPS)
 #define VIEWER_MODE 0     // 1 = visor de personaje; 0 = juego
 #define HERO_SHOWCASE 1   // (dentro del visor) 1 = solo el HUNTER en primer plano
 #define FLYCAM 0          // 1 = camara de vista elevada (SOLO para capturar el horizonte/abismo)
@@ -182,8 +182,8 @@ static int g_spireStart   = 0, g_spireEnd = 0;   // agujas: siempre
 static int g_tailStart    = 0;   // cola (mirador..cathedral): [g_tailStart, g_solidVerts)
 static int g_winTailStart = 0;   // ventanas de agujas+cathedral: siempre
 // distancias (unidades de mundo). La niebla ya funde mas alla de ~98.
-static const float DRAW_DIST = 96.0f;   // mas alla -> no se dibuja la torre
-static const float LOD_DIST  = 46.0f;   // entre LOD_DIST y DRAW_DIST -> cuerpo sin detalle ni ventanas
+static const float DRAW_DIST = 78.0f;   // mas alla -> no se dibuja la torre (mas agresivo = mas FPS)
+static const float LOD_DIST  = 34.0f;   // entre LOD_DIST y DRAW_DIST -> cuerpo sin detalle ni ventanas
 static const float BEHIND_CULL = 24.0f; // dz por detras de la camara -> descartar
 
 // piramide de 4 caras (aguja) sin textura -- para personaje/robots (LineVertex)
@@ -433,7 +433,7 @@ static void buildSolidWorld() {
     g_winTailStart = g_winVerts;   // ventanas de aqui en adelante (agujas+cathedral) = siempre
     // mar de agujas de fondo (espiral aurea): densidad que se pierde en neblina
     g_spireStart = i;
-    for (int k = 0; k < 60; ++k) {
+    for (int k = 0; k < 26; ++k) {   // menos agujas de fondo (ahorro de verts)
         if (i > 34000) break;
         float ang = (float)k * 2.3999632f;
         float rad = 36.0f + (float)((k * 37) % 72);  // 36..107
