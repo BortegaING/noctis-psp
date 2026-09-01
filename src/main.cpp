@@ -881,8 +881,8 @@ static void initGu() {
     sceGuEnable(GU_SCISSOR_TEST);
     sceGuDepthFunc(GU_GEQUAL);
     sceGuEnable(GU_DEPTH_TEST);
-    sceGuFrontFace(GU_CCW);      // caras salientes en CCW (ver addQuad/addSolidBox)
-    sceGuEnable(GU_CULL_FACE);   // descarta caras traseras -> ~2x en geometria solida (PSP real)
+    sceGuDisable(GU_CULL_FACE);  // SIN culling: ambas caras -> paredes SOLIDAS (no se ve por dentro).
+                                 // Con pocos edificios el costo es bajo; evita el bug de winding invertido.
     sceGuDisable(GU_TEXTURE_2D);
     sceGuShadeModel(GU_SMOOTH);
     sceGuFinish();
