@@ -452,9 +452,13 @@ static void buildSolidWorld() {
     g_winVerts = 0;
     // suelo de piedra (plano texturizado grande) bajo todo
     {
-        const float S = 360.0f, uv = 16.0f;   // SUELO grande; losas GRANDES (poco tiling = se ve, no gris)
+        // PISO: adoquin (genGround, alto contraste) con color CLARO (el MODULATE
+        // multiplica textura*color; textura ~90/255, asi que el color debe ser
+        // claro para que se lea). uv ~ 12 unidades/repeticion -> losas ~1.5u.
+        const float S = 160.0f;                 // suelo mas chico (jugador acotado a r~82) -> menos fill/minificacion
+        const float uv = 2.0f * S / 12.0f;      // ~27 repeticiones -> losas visibles cerca
         addQuadT(g_solidWorld, i, -S,0.0f,-S,  S,0.0f,-S,  S,0.0f,S,  -S,0.0f,S,
-                 0.0f,0.0f, uv,uv, warmTint(RGBA(120, 108, 94, 255)));   // mas CLARO para que la textura de adoquin se lea
+                 0.0f,0.0f, uv,uv, RGBA(216, 198, 174, 255));   // adoquin gotico claro/calido (se ve, no gris plano)
     }
     g_floorCount = i;      // piso = [0, g_floorCount)  (siempre se dibuja)
     g_srangeCount = 0;
@@ -484,9 +488,8 @@ static void buildSolidWorld() {
     }
     g_spireEnd = i;        // agujas = [g_spireStart, g_spireEnd)  (siempre)
     g_tailStart = i;       // cola (mirador/arcos/puente/cathedral) = [g_tailStart, g_solidVerts)  (siempre)
-    // plataforma de piedra del mirador (suelo solido bajo el spawn)
-    addSolidBoxT(g_solidWorld, i, 0.0f, -0.5f, -2.5f, 22.0f, 13.0f, 0.55f,
-                 warmTint(RGBA(74, 70, 76, 255)));
+    // plataforma QUITADA: el jugador se para directo sobre el PISO grande (asi se
+    // ve la textura de losas bajo el personaje, no la plataforma chica tapandola).
     // baranda de METAL del mirador -> buffer g_metal (textura de acero)
     int mi = 0;
     const unsigned int iron = RGBA(120, 124, 140, 255); // acero claro (para que se vea la textura)
@@ -1247,7 +1250,7 @@ int main(void) {
         // piedra texturizada (torres, agujas, muros, suelo, plataforma)
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexMode(GU_PSM_8888, 0, 0, GU_TRUE);   // GU_TRUE = texturas SWIZZLED (PSP real)
-        sceGuTexImage(0, STEX, STEX, STEX, g_stoneTexS);   // PISO: piedra (se ve bien) en losas grandes
+        sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);   // PISO: adoquin gotico (genGround, alto contraste: juntas oscuras + losas)
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);   // 1 texel/pixel: gran ahorro de fill en PSP real
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
