@@ -77,6 +77,20 @@ static void buildGothicBldg(TexVertex *buf, int &i, float cx, float cz,
     if (detailStartOut) *detailStartOut = i;
     addTowerDetail(buf, i, cx, cz, w, d, bodyTop, stone);   // ~510-654 verts (culleable por LOD)
 
+    // ---- FACHADA a nivel de SUELO (lo que se ve de cerca): PORTAL ojival + lancets ----
+    {
+        const float pw  = w * 0.34f;
+        const float ph  = (h1 < 15.0f) ? (h1 * 0.75f) : 12.0f;
+        const float pzf = cz + d * 0.5f;                          // cara que da a la plaza (+Z)
+        const unsigned int frame = heightHaze(brighten(stone, 1.3f), ph * 0.5f);
+        const unsigned int dark  = RGBA(8, 9, 14, 255);           // hueco oscuro (recesado)
+        addSolidBoxT(buf, i, cx, 0.0f, pzf + 0.12f, pw * 1.32f, 0.5f, ph * 1.10f, frame);        // 30 jamba/marco
+        addSolidBoxT(buf, i, cx, 0.0f, pzf + 0.32f, pw,         0.6f, ph,         dark);         // 30 vano de la puerta
+        addPyramidT (buf, i, cx, ph,   pzf + 0.28f, pw * 1.18f, 0.6f, pw * 0.95f, frame);        // 12 ARCO apuntado
+        addSolidBoxT(buf, i, cx - pw * 1.00f, ph * 0.20f, pzf + 0.16f, pw * 0.26f, 0.4f, ph * 1.15f, brighten(win, 0.85f)); // 30 lancet izq
+        addSolidBoxT(buf, i, cx + pw * 1.00f, ph * 0.20f, pzf + 0.16f, pw * 0.26f, 0.4f, ph * 1.15f, brighten(win, 0.85f)); // 30 lancet der
+    }
+
     // ---- VENTANAS OJIVALES en las 4 caras (mas densas hacia arriba = nave de catedral) ----
     int rows = (int)(bodyTop / 5.0f); if (rows > 12) rows = 12; if (rows < 2) rows = 2;
     for (int r = 0; r < rows; ++r) {
