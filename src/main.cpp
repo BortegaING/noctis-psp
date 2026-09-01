@@ -527,6 +527,7 @@ static float groundHeight(float px, float pz, float py) {
 // de una estructura y por DEBAJO de su techo (no bloquea al estar encima).
 static bool blocked(float px, float pz, float py) {
     const float r = 1.1f;
+    if (px * px + pz * pz > 82.0f * 82.0f) return true;   // borde del pueblo/balcon: no se sale hacia el mar de agujas
     for (int s = 0; s < g_cityCount; ++s) {
         const CityBldg &b = g_city[s];
         if (py < b.h - 0.8f) {
@@ -1275,8 +1276,8 @@ int main(void) {
 
         // ---- HUNTER (idle sutil: leve balanceo) ; encara heroYaw ----
         {
-            // camina: rebote por paso + balanceo lateral + leve inclinacion al avanzar
-            float bobY = moving ? (fabsf(sinf(walkPhase)) * 0.14f) : (sinf(idleT) * 0.03f);
+            // camina: rebote SUAVE (no salto) + leve balanceo al avanzar
+            float bobY = moving ? (sinf(walkPhase) * 0.045f) : (sinf(idleT) * 0.03f);
             sceGumLoadIdentity();
             ScePspFVector3 pp = { playerX, playerY + bobY, playerZ };
             sceGumTranslate(&pp);
@@ -1284,8 +1285,8 @@ int main(void) {
             if (gravG == 1) gm.z = 3.14159f; else if (gravG == 2) gm.z = -1.5708f; else if (gravG == 3) gm.z = 1.5708f;
             else if (gravG == 4) gm.x = 1.5708f; else if (gravG == 5) gm.x = -1.5708f;
             sceGumRotateXYZ(&gm);
-            float sway = moving ? (sinf(walkPhase * 0.5f) * 0.06f) : 0.0f;
-            ScePspFVector3 fr = { (moving ? 0.08f : 0.0f), heroYaw + sinf(idleT * 0.6f) * 0.02f, sway };
+            float sway = moving ? (sinf(walkPhase * 0.5f) * 0.03f) : 0.0f;
+            ScePspFVector3 fr = { (moving ? 0.045f : 0.0f), heroYaw + sinf(idleT * 0.6f) * 0.02f, sway };
             sceGumRotateXYZ(&fr);
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_heroV, 0, g_hero);
         }

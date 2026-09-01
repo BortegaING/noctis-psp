@@ -11,13 +11,38 @@ static void buildGothicBldg(TexVertex *buf, int &i, float cx, float cz,
     const bool cathedral = (h > 120.0f);   // landmark: mas agujas / mas alto
     const bool ruin      = (h < 40.0f);    // ruina: sin campanario, techo bajo y roto (asimetrico)
 
-    // ---- CUERPO: 2 cajas, la superior mas angosta -> bodyTop ~ h*0.70 ----
+    // ---- CUERPO en CRUZ LATINA + muros en TALUD (deja de ser una caja recta) ----
     const float bodyTop = h * 0.70f;
-    const float h1 = bodyTop * 0.58f;                       // planta baja (ancho pleno)
-    const float h2 = bodyTop - h1;                          // cuerpo superior (retranqueado)
-    const float w2 = w * 0.86f, d2 = d * 0.86f;
-    addSolidBoxT(buf, i, cx, 0.0f, cz, w,  d,  h1, heightHaze(stone, h1 * 0.5f));              // 30
-    addSolidBoxT(buf, i, cx, h1,   cz, w2, d2, h2, heightHaze(stone, h1 + h2 * 0.5f));         // 30
+    const float w2 = w * 0.86f, d2 = d * 0.86f;                 // cuerpo superior (lo usan el alero/techo de abajo)
+
+    // (1) NAVE en TALUD: 3 tiers que se ANGOSTAN con la altura -> perfil escalonado, no rectangular
+    const float h1 = bodyTop * 0.42f;                           // planta baja ancho pleno (la usa el portal)
+    const float hm = bodyTop * 0.34f;                           // cuerpo medio
+    const float ht = bodyTop - h1 - hm;                         // cuerpo alto (retranqueo) -> remata en w2,d2
+    addSolidBoxT(buf, i, cx, 0.0f,    cz, w,       d,       h1, heightHaze(stone, h1 * 0.5f));               // 30
+    addSolidBoxT(buf, i, cx, h1,      cz, w*0.93f, d*0.94f, hm, heightHaze(stone, h1 + hm * 0.5f));          // 30
+    addSolidBoxT(buf, i, cx, h1 + hm, cz, w2,      d2,      ht, heightHaze(stone, h1 + hm + ht * 0.5f));     // 30
+
+    // (2) TRANSEPTO / crucero: brazo perpendicular que sobresale a los lados -> planta en CRUZ LATINA (no un bloque)
+    addSolidBoxT(buf, i, cx, 0.0f, cz - d * 0.05f, w * 1.26f, d * 0.44f, bodyTop * 0.40f,
+                 heightHaze(stone, bodyTop * 0.20f));                                                        // 30
+
+    // (3) ABSIDE poligonal: 3 gajos en ABANICO atras (-Z) formando un remate curvo (sin matrices, solo offset ~40deg)
+    const float apZ0 = cz - d * 0.44f;                          // arranca del muro trasero
+    const float apR  = d * 0.34f;
+    const float apW  = w * 0.34f, apD = d * 0.30f, apH = bodyTop * 0.50f;
+    const unsigned int apC = heightHaze(stone, apH * 0.5f);
+    addSolidBoxT(buf, i, cx,               0.0f, apZ0 - apR,        apW,       apD, apH,        apC);        // 30 gajo centro
+    addSolidBoxT(buf, i, cx - apR * 0.64f, 0.0f, apZ0 - apR*0.77f,  apW*0.82f, apD, apH*0.94f,  apC);        // 30 gajo izq (girado por posicion)
+    addSolidBoxT(buf, i, cx + apR * 0.64f, 0.0f, apZ0 - apR*0.77f,  apW*0.82f, apD, apH*0.94f,  apC);        // 30 gajo der
+
+    // (4) CONTRAFUERTES de esquina: 4 machones que SOBRESALEN en las esquinas (rompe la silueta cuadrada), alturas variadas
+    const float cbx = w * 0.5f, cbz = d * 0.5f, cbw = w * 0.16f, cbd = d * 0.16f, cbh = bodyTop * 0.64f;
+    const unsigned int cbC = heightHaze(stone, cbh * 0.5f);
+    addSolidBoxT(buf, i, cx - cbx, 0.0f, cz - cbz, cbw, cbd, cbh,         cbC);                              // 30 NW
+    addSolidBoxT(buf, i, cx + cbx, 0.0f, cz - cbz, cbw, cbd, cbh * 0.86f, cbC);                              // 30 NE
+    addSolidBoxT(buf, i, cx - cbx, 0.0f, cz + cbz, cbw, cbd, cbh * 0.94f, cbC);                              // 30 SW
+    addSolidBoxT(buf, i, cx + cbx, 0.0f, cz + cbz, cbw, cbd, cbh * 0.78f, cbC);                              // 30 SE
 
     // ---- TECHO EMPINADO de pizarra (la clave del gotico): alero + aguja piramidal ALTA ----
     const float eaveTop = bodyTop + h * 0.03f;
