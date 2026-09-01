@@ -207,6 +207,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "cand/wraith.h"
 #include "atmosphere.h"   // Vacio/Abismo (ruinas suspendidas) + siluetas colosales lejanas
 #include "weapons_fx.h"   // FX/comportamiento distinto por arma a distancia (10)
+#include "gravity.h"      // 6 direcciones de gravedad (mecanica firma, directiva 22)
 #if VIEWER_MODE
 static LineVertex __attribute__((aligned(16))) g_candBuf[4][3300];
 static int g_candV[4];
@@ -917,6 +918,10 @@ int main(void) {
     for (int s = 0; s < 24; ++s) g_shots[s].life = 0;
     for (int s = 0; s < 12; ++s) g_sparks[s].life = 0;
     const int   SHOT_LIFE = 55;
+    // ---- gravedad (Triangulo cicla 6 direcciones) ----
+    int   gravG = 0, prevTri = 0;
+    float gvr = 0.0f, gvf = 0.0f, gvg = 0.0f;   // vel en el plano (right,fwd) + a lo largo de la gravedad
+    static const char *kGravName[6] = { "ABAJO", "ARRIBA", "+X", "-X", "+Z", "-Z" };
 
     while (!g_exit) {
         sceCtrlReadBufferPositive(&pad, 1);
@@ -936,6 +941,7 @@ int main(void) {
                 wishX = (ax / mag) * k;   // derecha = +X
                 wishZ = (ay / mag) * k;   // arriba (ay<0) = adelante (-Z)
             }
+            if (gravG == 0) {   // ===== MOVIMIENTO NORMAL (gravedad abajo, sin cambios) =====
             // ===== aceleracion / friccion (fluido) =====
             float targetVX = wishX * RUN_SPEED, targetVZ = wishZ * RUN_SPEED;
             float ctrl = grounded ? ACCEL_GND : ACCEL_AIR;
@@ -958,6 +964,7 @@ int main(void) {
                 while (dA < -3.14159265f) dA += 6.28318531f;
                 heroYaw += dA * 0.20f;   // el personaje encara la direccion de avance
             }
+            }   // fin MOVIMIENTO NORMAL (gravG==0); el resto de gravedades cae abajo
             // ===== ARMAS: L apunta, R dispara; D-pad cambia; Circulo melee =====
             // cambio de arma a distancia (D-pad izq/der) y melee (D-pad arr/aba)
             int dR = (pad.Buttons & PSP_CTRL_RIGHT) ? 1 : 0, dL = (pad.Buttons & PSP_CTRL_LEFT) ? 1 : 0;
@@ -967,6 +974,10 @@ int main(void) {
             if (dU && !prevDU) curMelee  = (curMelee + 1) % kMeleeCount;
             if (dD && !prevDD) curMelee  = (curMelee - 1 + kMeleeCount) % kMeleeCount;
             prevDR = dR; prevDL = dL; prevDU = dU; prevDD = dD;
+            // Triangulo cicla la DIRECCION de gravedad (0=abajo .. 5=-Z)
+            { int tri = (pad.Buttons & PSP_CTRL_TRIANGLE) ? 1 : 0;
+              if (tri && !prevTri) { gravG = (gravG + 1) % 6; velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f; }
+              prevTri = tri; }
 
             aiming = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
             if (aiming) {   // al apuntar, el personaje encara al frente (-Z)
@@ -1021,6 +1032,7 @@ int main(void) {
                 }
             }
             prevCircle = (pad.Buttons & PSP_CTRL_CIRCLE) ? 1 : 0;
+            if (gravG == 0) {
             // ===== salto: coyote time + buffer + salto variable =====
             if (grounded) coyote = COYOTE_MAX; else if (coyote > 0) coyote--;
             int jumpNow = (pad.Buttons & PSP_CTRL_CROSS) ? 1 : 0;
@@ -1048,6 +1060,43 @@ int main(void) {
             moving = (velX * velX + velZ * velZ > 0.002f) ? 1 : 0;
             if (moving) walkPhase += 0.30f;
             idleT += 0.05f;
+            } else {
+                // ===== GRAVEDAD NO-ABAJO: caer/mover/saltar segun gravDir (v1 wall-walk) =====
+                float rx, ry, rz, ffx, ffy, ffz, gx, gy, gz;
+                gravBasis(gravG, &rx, &ry, &rz, &ffx, &ffy, &ffz);
+                gravDirVec(gravG, &gx, &gy, &gz);
+                float ctrlg = grounded ? ACCEL_GND : ACCEL_AIR;
+                float wr = wishX * RUN_SPEED, wf = (-wishZ) * RUN_SPEED;   // wishZ: arriba(ay<0)=adelante
+                gvr += (wr - gvr) * ctrlg;
+                gvf += (wf - gvf) * ctrlg;
+                if (grounded && wishX == 0.0f && wishZ == 0.0f) { gvr -= gvr * STOP_FRIC; gvf -= gvf * STOP_FRIC; }
+                int jn = (pad.Buttons & PSP_CTRL_CROSS) ? 1 : 0;
+                if (jn && !prevJump && grounded) { gvg = -JUMP_VEL; grounded = 0; }
+                if (!jn && gvg < 0.0f) gvg *= SHORTHOP;
+                prevJump = jn;
+                if ((pad.Buttons & PSP_CTRL_SQUARE) && en > 0.0f) {       // planeo a lo largo de gravDir
+                    gvg -= FLOAT_LIFT; if (gvg < -FLOAT_UPCAP) gvg = -FLOAT_UPCAP;
+                    en -= EN_FLOAT; grounded = 0;
+                } else {
+                    gvg += GRAVITY;
+                }
+                float vX = rx * gvr + ffx * gvf + gx * gvg;
+                float vY = ry * gvr + ffy * gvf + gy * gvg;
+                float vZ = rz * gvr + ffz * gvf + gz * gvg;
+                grounded = 0;
+                float nX = playerX + vX;
+                if (nX > -140.0f && nX < 140.0f && !blocked(nX, playerZ, playerY)) playerX = nX; else if (gx != 0.0f) { grounded = 1; gvg = 0.0f; }
+                float nZ = playerZ + vZ;
+                if (nZ > -140.0f && nZ < 140.0f && !blocked(playerX, nZ, playerY)) playerZ = nZ; else if (gz != 0.0f) { grounded = 1; gvg = 0.0f; }
+                float nY = playerY + vY;
+                if (nY < 0.0f) { nY = 0.0f; if (gy < 0.0f) { grounded = 1; gvg = 0.0f; } }
+                if (!blocked(playerX, playerZ, nY)) playerY = nY; else if (gy != 0.0f) { grounded = 1; gvg = 0.0f; }
+                if (grounded && en < EN_MAX) en += EN_REGEN;
+                if (en > EN_MAX) en = EN_MAX; if (en < 0.0f) en = 0.0f;
+                if (gvr * gvr + gvf * gvf > 0.004f) heroYaw = atan2f(gvr, gvf);   // encara el avance en el plano
+                moving = (gvr * gvr + gvf * gvf > 0.002f) ? 1 : 0;
+                idleT += 0.05f;
+            }
 
             // recoleccion de recursos por proximidad
             for (int r = 0; r < kResourceCount && r < 64; ++r) {
@@ -1119,7 +1168,8 @@ int main(void) {
             ScePspFVector3 camOff = { 0.0f, -62.0f, -180.0f };
             ScePspFVector3 pOff   = { 0.0f, -6.0f, 18.0f };
 #else
-            ScePspFVector3 rot    = { DEG2RAD(12.0f), camYaw, 0.0f };
+            float gpit, gyaw, grol; gravCamEuler(gravG, DEG2RAD(12.0f), &gpit, &gyaw, &grol);
+            ScePspFVector3 rot    = { gpit, gyaw + camYaw, grol };   // reorienta segun gravedad
             ScePspFVector3 camOff = { 0.0f, -4.2f, -11.5f };
             ScePspFVector3 pOff   = { -playerX, -playerY, -playerZ };
 #endif
@@ -1191,6 +1241,10 @@ int main(void) {
             sceGumLoadIdentity();
             ScePspFVector3 pp = { playerX, playerY + bobY, playerZ };
             sceGumTranslate(&pp);
+            ScePspFVector3 gm = { 0.0f, 0.0f, 0.0f };   // reorienta el modelo (pies hacia gravDir)
+            if (gravG == 1) gm.z = 3.14159f; else if (gravG == 2) gm.z = -1.5708f; else if (gravG == 3) gm.z = 1.5708f;
+            else if (gravG == 4) gm.x = 1.5708f; else if (gravG == 5) gm.x = -1.5708f;
+            sceGumRotateXYZ(&gm);
             ScePspFVector3 fr = { 0.0f, heroYaw + sinf(idleT * 0.6f) * 0.02f, 0.0f };
             sceGumRotateXYZ(&fr);
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_heroV, 0, g_hero);
@@ -1314,7 +1368,7 @@ int main(void) {
         drawText(barX + barW + 4, 11, 1.0f, RGBA(220, 220, 230, 255), "1200");
         snprintf(hud, sizeof(hud), "%d", (int)en);
         drawText(barX + barW + 4, 23, 1.0f, RGBA(220, 220, 230, 255), hud);
-        drawText(barX + barW + 4, 35, 1.0f, RGBA(220, 220, 230, 255), "100%");
+        drawText(barX + barW + 4, 35, 1.0f, RGBA(220, 220, 230, 255), kGravName[gravG]);   // direccion de gravedad
 
         snprintf(hud, sizeof(hud), "DISTRITO: Campanario    FPS %d", fps);
         drawText(8, 58, 1.0f, RGBA(150, 160, 190, 255), hud);
@@ -1339,7 +1393,7 @@ int main(void) {
         snprintf(hud, sizeof(hud), "X %d  Z %d  Y %d", (int)playerX, (int)playerZ, (int)playerY);
         drawText(8, 230, 1.0f, RGBA(110, 130, 160, 255), hud);
         drawText(8, 244, 1.0f, RGBA(110, 130, 160, 255),
-                 "Stick  X salto  Cuad planeo  L mira  R tiro  Dpad arma  O melee");
+                 "X salto  Cuad planeo  L/R arma  Dpad cambia  O melee  Tri GRAVEDAD");
         if (paused) {
             drawText(206, 104, 2.0f, RGBA(232, 222, 242, 255), "PAUSA");
             drawText(163, 130, 1.0f, RGBA(165, 175, 205, 255), "START continuar   HOME salir");
