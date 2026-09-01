@@ -560,18 +560,39 @@ static void addChain(LineVertex *buf, int &i, float ax, float ay, float az,
 // generadores de textura + ambiente del agente (mas detallados)
 #include "agent_textures.h"
 
-// texturas del juego (rellenadas por los generadores del agente)
+// ---- SWIZZLE de texturas ----
+// En la PSP REAL, una textura NO swizzled con filtrado se muestrea con muchos
+// cache-miss -> rendimiento pesimo (el emulador no lo nota, por eso corria a 60
+// en PPSSPP y a 2 FPS en hardware). Swizzlear reordena la textura al layout que
+// la GE lee en bloques de 16x8 bytes -> gran salto de FPS en PSP real.
+// width = ANCHO EN BYTES (para 8888 = px*4), height = filas. Se corre 1 vez.
+static void swizzleTex(unsigned char *out, const unsigned char *in, int width, int height) {
+    const int rowblocks = width / 16;
+    for (int j = 0; j < height; ++j) {
+        for (int i = 0; i < width; ++i) {
+            const int blockx = i / 16, blocky = j / 8;
+            const int x = i - blockx * 16, y = j - blocky * 8;
+            const int block = blockx + blocky * rowblocks;
+            out[block * 128 + x + y * 16] = in[i + j * width];  // 128 = 16*8 bytes/bloque
+        }
+    }
+}
+
+// texturas del juego (rellenadas por los generadores del agente) + copia swizzled
 #define WTEX 32
 static unsigned int __attribute__((aligned(16))) g_winTex[WTEX * WTEX];
-static void buildWinTex() { genWindow(g_winTex, WTEX); sceKernelDcacheWritebackAll(); }
+static unsigned int __attribute__((aligned(16))) g_winTexS[WTEX * WTEX];
+static void buildWinTex() { genWindow(g_winTex, WTEX); swizzleTex((unsigned char*)g_winTexS, (const unsigned char*)g_winTex, WTEX * 4, WTEX); sceKernelDcacheWritebackAll(); }
 
 #define MTEX 64
 static unsigned int __attribute__((aligned(16))) g_metalTex[MTEX * MTEX];
-static void buildMetalTex() { genMetal(g_metalTex, MTEX); sceKernelDcacheWritebackAll(); }
+static unsigned int __attribute__((aligned(16))) g_metalTexS[MTEX * MTEX];
+static void buildMetalTex() { genMetal(g_metalTex, MTEX); swizzleTex((unsigned char*)g_metalTexS, (const unsigned char*)g_metalTex, MTEX * 4, MTEX); sceKernelDcacheWritebackAll(); }
 
 #define STEX 128
 static unsigned int __attribute__((aligned(16))) g_stoneTex[STEX * STEX];
-static void buildStoneTex() { genStone(g_stoneTex, STEX); sceKernelDcacheWritebackAll(); }
+static unsigned int __attribute__((aligned(16))) g_stoneTexS[STEX * STEX];
+static void buildStoneTex() { genStone(g_stoneTex, STEX); swizzleTex((unsigned char*)g_stoneTexS, (const unsigned char*)g_stoneTex, STEX * 4, STEX); sceKernelDcacheWritebackAll(); }
 
 static void buildChains() {
     int i = 0;
@@ -787,7 +808,8 @@ static void initGu() {
     sceGuEnable(GU_SCISSOR_TEST);
     sceGuDepthFunc(GU_GEQUAL);
     sceGuEnable(GU_DEPTH_TEST);
-    sceGuDisable(GU_CULL_FACE);
+    sceGuFrontFace(GU_CCW);      // caras salientes en CCW (ver addQuad/addSolidBox)
+    sceGuEnable(GU_CULL_FACE);   // descarta caras traseras -> ~2x en geometria solida (PSP real)
     sceGuDisable(GU_TEXTURE_2D);
     sceGuShadeModel(GU_SMOOTH);
     sceGuFinish();
@@ -996,7 +1018,7 @@ int main(void) {
 #else
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
-        sceGumPerspective(75.0f, 16.0f / 9.0f, 0.5f, 1000.0f);
+        sceGumPerspective(75.0f, 16.0f / 9.0f, 0.8f, 350.0f);
 
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
@@ -1016,20 +1038,20 @@ int main(void) {
 
         // piedra texturizada (torres, agujas, muros, suelo, plataforma)
         sceGuEnable(GU_TEXTURE_2D);
-        sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-        sceGuTexImage(0, STEX, STEX, STEX, g_stoneTex);
+        sceGuTexMode(GU_PSM_8888, 0, 0, GU_TRUE);   // GU_TRUE = texturas SWIZZLED (PSP real)
+        sceGuTexImage(0, STEX, STEX, STEX, g_stoneTexS);
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
-        sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+        sceGuTexFilter(GU_NEAREST, GU_NEAREST);   // 1 texel/pixel: gran ahorro de fill en PSP real
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_solidVerts, 0, g_solidWorld);
 
         // ventanas: textura de vidriera (CLAMP: cada ventana = 1 textura)
-        sceGuTexImage(0, WTEX, WTEX, WTEX, g_winTex);
+        sceGuTexImage(0, WTEX, WTEX, WTEX, g_winTexS);
         sceGuTexWrap(GU_CLAMP, GU_CLAMP);
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_winVerts, 0, g_win);
 
         // metal: baranda con textura de acero (REPEAT)
-        sceGuTexImage(0, MTEX, MTEX, MTEX, g_metalTex);
+        sceGuTexImage(0, MTEX, MTEX, MTEX, g_metalTexS);
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_metalVerts, 0, g_metal);
         sceGuDisable(GU_TEXTURE_2D);
