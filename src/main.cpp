@@ -31,6 +31,7 @@ static const unsigned int HAZE = RGBA(34, 38, 52, 255); // bruma FRIA azul-gris:
 #define WSCALE 1.45f  // separa el distrito para abrir la vista (mas skyline/agujas)
 #define VIEWER_MODE 0     // 1 = visor de personaje; 0 = juego
 #define HERO_SHOWCASE 1   // (dentro del visor) 1 = solo el HUNTER en primer plano
+#define FLYCAM 0          // 1 = camara de vista elevada (SOLO para capturar el horizonte/abismo)
 
 #define LINE_FLAGS (GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D)
 
@@ -160,6 +161,10 @@ static TexVertex __attribute__((aligned(16))) g_metal[4000];       // metal (bar
 static int g_metalVerts = 0;
 static LineVertex __attribute__((aligned(16))) g_env[3000];        // ambiente (braseros, estandartes)
 static int g_envVerts = 0;
+static LineVertex __attribute__((aligned(16))) g_void[2000];       // ruinas suspendidas del abismo
+static int g_voidVerts = 0;
+static LineVertex __attribute__((aligned(16))) g_farSil[2000];     // siluetas colosales del horizonte
+static int g_farSilVerts = 0;
 
 // ===== CULLING por estructura + LOD (rendimiento PSP, directiva 36-37-52) =====
 // El mundo se hornea segmentado: [piso][22 torres][60 agujas][cola: mirador/
@@ -200,6 +205,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "cand/hunter.h"
 #include "cand/ff.h"
 #include "cand/wraith.h"
+#include "atmosphere.h"   // Vacio/Abismo (ruinas suspendidas) + siluetas colosales lejanas
 #if VIEWER_MODE
 static LineVertex __attribute__((aligned(16))) g_candBuf[4][3300];
 static int g_candV[4];
@@ -869,6 +875,8 @@ int main(void) {
     buildNpcs();
     buildChains();
     buildEnv();
+    g_farSilVerts = buildFarSilhouettes(g_farSil);
+    g_voidVerts   = buildVoidLayer(g_void);
     buildFontAtlas();
     initGu();
 
@@ -1060,14 +1068,20 @@ int main(void) {
 #else
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
-        sceGumPerspective(75.0f, 16.0f / 9.0f, 0.8f, 350.0f);
+        sceGumPerspective(75.0f, 16.0f / 9.0f, 0.8f, 1200.0f); // far grande: caben las siluetas colosales
 
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
         {
+#if FLYCAM
+            ScePspFVector3 rot    = { DEG2RAD(24.0f), 0.0f, 0.0f };   // vista elevada para el horizonte
+            ScePspFVector3 camOff = { 0.0f, -62.0f, -180.0f };
+            ScePspFVector3 pOff   = { 0.0f, -6.0f, 18.0f };
+#else
             ScePspFVector3 rot    = { DEG2RAD(12.0f), camYaw, 0.0f };
             ScePspFVector3 camOff = { 0.0f, -4.2f, -11.5f };
             ScePspFVector3 pOff   = { -playerX, -playerY, -playerZ };
+#endif
             // orden correcto de camara orbital: offset (espacio camara) -> giro
             // -> centrar en el jugador. Asi el jugador NO se va al girar.
             sceGumTranslate(&camOff);
@@ -1121,6 +1135,9 @@ int main(void) {
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_metalVerts, 0, g_metal);
         sceGuDisable(GU_TEXTURE_2D);
 
+        // atmosfera de fondo: siluetas colosales lejanas + ruinas suspendidas del abismo
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_farSilVerts, 0, g_farSil);
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidVerts, 0, g_void);
         // cables + robots + ambiente (braseros) sin textura
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_chainVerts, 0, g_chains);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
