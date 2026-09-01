@@ -26,8 +26,8 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 #define RGBA(r, g, b, a) ((unsigned int)(((a) << 24) | ((b) << 16) | ((g) << 8) | (r))) // 0xAABBGGRR
 
 static unsigned int __attribute__((aligned(16))) g_list[262144];
-static const unsigned int CLEAR_COLOR = RGBA(16, 14, 20, 255);
-static const unsigned int HAZE = RGBA(70, 64, 62, 255); // bruma oscura (moody, 3rd Birthday)
+static const unsigned int CLEAR_COLOR = RGBA(9, 10, 15, 255);   // vacio frio (abismo BLAME!)
+static const unsigned int HAZE = RGBA(34, 38, 52, 255); // bruma FRIA azul-gris: lo lejano se disuelve aqui
 #define WSCALE 1.45f  // separa el distrito para abrir la vista (mas skyline/agujas)
 #define VIEWER_MODE 0     // 1 = visor de personaje; 0 = juego
 #define HERO_SHOWCASE 1   // (dentro del visor) 1 = solo el HUNTER en primer plano
@@ -701,9 +701,9 @@ static void gradQuad(int y0, int y1, unsigned int cTop, unsigned int cBot) {
     sceGuDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 6, 0, v);
 }
 static void drawBackdrop() {
-    const unsigned int top    = RGBA(18, 16, 20, 255);
-    const unsigned int haze   = RGBA(82, 74, 70, 255);
-    const unsigned int floorc = RGBA(14, 12, 15, 255);
+    const unsigned int top    = RGBA(11, 12, 19, 255);   // cielo/altura: casi negro frio
+    const unsigned int haze   = RGBA(40, 44, 58, 255);   // banda de bruma en el horizonte (fria)
+    const unsigned int floorc = RGBA(7, 8, 12, 255);     // hacia el vacio inferior
     gradQuad(0, 150, top, haze);
     gradQuad(150, SCR_HEIGHT, haze, floorc);
 }
