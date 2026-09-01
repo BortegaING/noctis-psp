@@ -165,6 +165,8 @@ static LineVertex __attribute__((aligned(16))) g_void[2000];       // ruinas sus
 static int g_voidVerts = 0;
 static LineVertex __attribute__((aligned(16))) g_farSil[2000];     // siluetas colosales del horizonte
 static int g_farSilVerts = 0;
+static LineVertex __attribute__((aligned(16))) g_vprops[2500];     // props del pueblo (faroles, rejas, tumbas)
+static int g_vpropsVerts = 0;
 
 // ===== CULLING por estructura + LOD (rendimiento PSP, directiva 36-37-52) =====
 // El mundo se hornea segmentado: [piso][22 torres][60 agujas][cola: mirador/
@@ -208,6 +210,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "atmosphere.h"   // Vacio/Abismo (ruinas suspendidas) + siluetas colosales lejanas
 #include "weapons_fx.h"   // FX/comportamiento distinto por arma a distancia (10)
 #include "gravity.h"      // 6 direcciones de gravedad (mecanica firma, directiva 22)
+#include "village_props.h" // props del pueblo (faroles calidos, rejas, tumbas) - BLAME!/Bloodborne
 #if VIEWER_MODE
 static LineVertex __attribute__((aligned(16))) g_candBuf[4][3300];
 static int g_candV[4];
@@ -907,6 +910,7 @@ int main(void) {
     buildEnv();
     g_farSilVerts = buildFarSilhouettes(g_farSil);
     g_voidVerts   = buildVoidLayer(g_void);
+    g_vpropsVerts = buildVillageProps(g_vprops);
     buildFontAtlas();
     initGu();
 
@@ -1258,6 +1262,7 @@ int main(void) {
         // atmosfera de fondo: siluetas colosales lejanas + ruinas suspendidas del abismo
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_farSilVerts, 0, g_farSil);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidVerts, 0, g_void);
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);   // props del pueblo
         // cables + robots + ambiente (braseros) sin textura
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_chainVerts, 0, g_chains);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
