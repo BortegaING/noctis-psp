@@ -26,8 +26,8 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 #define RGBA(r, g, b, a) ((unsigned int)(((a) << 24) | ((b) << 16) | ((g) << 8) | (r))) // 0xAABBGGRR
 
 static unsigned int __attribute__((aligned(16))) g_list[262144];
-static const unsigned int CLEAR_COLOR = RGBA(9, 10, 15, 255);   // vacio frio (abismo BLAME!)
-static const unsigned int HAZE = RGBA(34, 38, 52, 255); // bruma FRIA azul-gris: lo lejano se disuelve aqui
+static const unsigned int CLEAR_COLOR = RGBA(66, 62, 56, 255);  // cielo brumoso gris-marron (referencia), NO negro
+static const unsigned int HAZE = RGBA(100, 94, 84, 255);// bruma CALIDA gris: el mar de agujas se disuelve aqui
 #define WSCALE 2.25f  // separa los edificios (menos juntos) y mas caen fuera de vista (mas FPS)
 #define VIEWER_MODE 0     // 1 = visor de personaje; 0 = juego
 #define HERO_SHOWCASE 1   // (dentro del visor) 1 = solo el HUNTER en primer plano
@@ -167,6 +167,8 @@ static LineVertex __attribute__((aligned(16))) g_farSil[2000];     // siluetas c
 static int g_farSilVerts = 0;
 static LineVertex __attribute__((aligned(16))) g_vprops[2500];     // props del pueblo (faroles, rejas, tumbas)
 static int g_vpropsVerts = 0;
+static LineVertex __attribute__((aligned(16))) g_spire[5000];      // mar denso de agujas goticas (referencia)
+static int g_spireVerts = 0;
 
 // ===== CULLING por estructura + LOD (rendimiento PSP, directiva 36-37-52) =====
 // El mundo se hornea segmentado: [piso][22 torres][60 agujas][cola: mirador/
@@ -211,6 +213,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "weapons_fx.h"   // FX/comportamiento distinto por arma a distancia (10)
 #include "gravity.h"      // 6 direcciones de gravedad (mecanica firma, directiva 22)
 #include "village_props.h" // props del pueblo (faroles calidos, rejas, tumbas) - BLAME!/Bloodborne
+#include "spirescape.h"    // MAR DENSO de agujas goticas en bruma (el look de la referencia)
 #if VIEWER_MODE
 static LineVertex __attribute__((aligned(16))) g_candBuf[4][3300];
 static int g_candV[4];
@@ -417,7 +420,8 @@ struct CityBldg { float x, z, w, d, h; unsigned int color; };
 static CityBldg g_city[256];
 static int g_cityCount = 0;
 #include "city.h"          // buildCity() llena g_city (16 edificios espaciados, plaza al centro)
-#include "gothic_bldg.h"   // buildGothicBldg(): edificio gotico Bloodborne/MediEvil (techo/aguja/torretas)
+#include "gothic_bldg.h"   // buildGothicBldg(): edificio gotico (mansiones/casonas)
+#include "cathedral.h"     // buildCathedral(): catedral Yharnam ornamentada (landmarks, h>120)
 
 // edificio SIMPLE de ciudad (pocos verts -> muchos edificios + culling = rinde)
 static void buildCityBldg(TexVertex *buf, int &i, float cx, float cz,
@@ -460,7 +464,8 @@ static void buildSolidWorld() {
         float dd = sqrtf(b.x * b.x + b.z * b.z);
         StructRange &r = g_srange[g_srangeCount];
         r.sStart = i; r.wStart = g_winVerts; r.cx = b.x; r.cz = b.z; r.sDetail = i;
-        buildGothicBldg(g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail);
+        if (b.h > 120.0f) buildCathedral (g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail);
+        else              buildGothicBldg(g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail);
         r.sCount = i - r.sStart; r.wCount = g_winVerts - r.wStart;
         g_srangeCount++;
     }
@@ -739,9 +744,9 @@ static void gradQuad(int y0, int y1, unsigned int cTop, unsigned int cBot) {
     sceGuDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 6, 0, v);
 }
 static void drawBackdrop() {
-    const unsigned int top    = RGBA(11, 12, 19, 255);   // cielo/altura: casi negro frio
-    const unsigned int haze   = RGBA(40, 44, 58, 255);   // banda de bruma en el horizonte (fria)
-    const unsigned int floorc = RGBA(7, 8, 12, 255);     // hacia el vacio inferior
+    const unsigned int top    = RGBA(74, 70, 62, 255);   // cielo brumoso alto (gris-marron)
+    const unsigned int haze   = RGBA(104, 98, 88, 255);  // banda de bruma en el horizonte (calida, mas clara)
+    const unsigned int floorc = RGBA(40, 37, 33, 255);   // niebla baja entre las agujas
     gradQuad(0, 150, top, haze);
     gradQuad(150, SCR_HEIGHT, haze, floorc);
 }
@@ -906,11 +911,12 @@ int main(void) {
     buildCandidates();
 #endif
     buildNpcs();
-    // buildChains();   // cadenas quitadas para la ciudad abierta (g_chainVerts=0)
+    buildChains();   // cadenas colgantes (atmosfera de la referencia)
     buildEnv();
     g_farSilVerts = buildFarSilhouettes(g_farSil);
     g_voidVerts   = buildVoidLayer(g_void);
     g_vpropsVerts = buildVillageProps(g_vprops);
+    g_spireVerts  = buildSpirescape(g_spire);
     buildFontAtlas();
     initGu();
 
@@ -1200,9 +1206,9 @@ int main(void) {
             ScePspFVector3 camOff = { 0.0f, -46.0f, -118.0f };
             ScePspFVector3 pOff   = { 0.0f, -2.0f, -8.0f };
 #else
-            float gpit, gyaw, grol; gravCamEuler(gravG, DEG2RAD(11.0f), &gpit, &gyaw, &grol);
+            float gpit, gyaw, grol; gravCamEuler(gravG, DEG2RAD(8.0f), &gpit, &gyaw, &grol);
             ScePspFVector3 rot    = { gpit, gyaw + camYaw, grol };   // reorienta segun gravedad
-            ScePspFVector3 camOff = { 0.0f, -3.6f, -9.0f };          // 3a persona CERCA del personaje
+            ScePspFVector3 camOff = { 0.0f, -4.8f, -11.5f };         // cerca pero deja ver el mar de agujas al frente
             ScePspFVector3 pOff   = { -playerX, -playerY, -playerZ };
 #endif
             // orden correcto de camara orbital: offset (espacio camara) -> giro
@@ -1260,8 +1266,7 @@ int main(void) {
         sceGuDisable(GU_TEXTURE_2D);
 
         // atmosfera de fondo: siluetas colosales lejanas + ruinas suspendidas del abismo
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_farSilVerts, 0, g_farSil);   // pueblo lejano en el horizonte
-        // sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidVerts, 0, g_void);    // VACIO/abismo QUITADO (no mas BLAME void)
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_spireVerts, 0, g_spire);     // MAR DENSO de agujas (el look de la referencia)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);   // props del pueblo
         // cables + robots + ambiente (braseros) sin textura
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_chainVerts, 0, g_chains);
