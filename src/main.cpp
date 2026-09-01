@@ -448,7 +448,7 @@ static void buildSolidWorld() {
     g_winVerts = 0;
     // suelo de piedra (plano texturizado grande) bajo todo
     {
-        const float S = 135.0f, uv = 2.0f * S / TILE;
+        const float S = 360.0f, uv = 2.0f * S / TILE;   // SUELO grande y solido (sin vacio)
         addQuadT(g_solidWorld, i, -S,0.0f,-S,  S,0.0f,-S,  S,0.0f,S,  -S,0.0f,S,
                  0.0f,0.0f, uv,uv, warmTint(RGBA(50, 48, 54, 255)));
     }
@@ -1260,8 +1260,8 @@ int main(void) {
         sceGuDisable(GU_TEXTURE_2D);
 
         // atmosfera de fondo: siluetas colosales lejanas + ruinas suspendidas del abismo
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_farSilVerts, 0, g_farSil);
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidVerts, 0, g_void);
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_farSilVerts, 0, g_farSil);   // pueblo lejano en el horizonte
+        // sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidVerts, 0, g_void);    // VACIO/abismo QUITADO (no mas BLAME void)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);   // props del pueblo
         // cables + robots + ambiente (braseros) sin textura
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_chainVerts, 0, g_chains);
@@ -1270,7 +1270,8 @@ int main(void) {
 
         // ---- HUNTER (idle sutil: leve balanceo) ; encara heroYaw ----
         {
-            float bobY = sinf(idleT) * 0.03f;
+            // camina: rebote por paso + balanceo lateral + leve inclinacion al avanzar
+            float bobY = moving ? (fabsf(sinf(walkPhase)) * 0.14f) : (sinf(idleT) * 0.03f);
             sceGumLoadIdentity();
             ScePspFVector3 pp = { playerX, playerY + bobY, playerZ };
             sceGumTranslate(&pp);
@@ -1278,7 +1279,8 @@ int main(void) {
             if (gravG == 1) gm.z = 3.14159f; else if (gravG == 2) gm.z = -1.5708f; else if (gravG == 3) gm.z = 1.5708f;
             else if (gravG == 4) gm.x = 1.5708f; else if (gravG == 5) gm.x = -1.5708f;
             sceGumRotateXYZ(&gm);
-            ScePspFVector3 fr = { 0.0f, heroYaw + sinf(idleT * 0.6f) * 0.02f, 0.0f };
+            float sway = moving ? (sinf(walkPhase * 0.5f) * 0.06f) : 0.0f;
+            ScePspFVector3 fr = { (moving ? 0.08f : 0.0f), heroYaw + sinf(idleT * 0.6f) * 0.02f, sway };
             sceGumRotateXYZ(&fr);
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_heroV, 0, g_hero);
         }
