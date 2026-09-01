@@ -1196,9 +1196,9 @@ int main(void) {
             ScePspFVector3 camOff = { 0.0f, -46.0f, -118.0f };
             ScePspFVector3 pOff   = { 0.0f, -2.0f, -8.0f };
 #else
-            float gpit, gyaw, grol; gravCamEuler(gravG, DEG2RAD(24.0f), &gpit, &gyaw, &grol);
+            float gpit, gyaw, grol; gravCamEuler(gravG, DEG2RAD(11.0f), &gpit, &gyaw, &grol);
             ScePspFVector3 rot    = { gpit, gyaw + camYaw, grol };   // reorienta segun gravedad
-            ScePspFVector3 camOff = { 0.0f, -12.0f, -23.0f };        // 3a persona alta y atras: revela el skyline
+            ScePspFVector3 camOff = { 0.0f, -3.6f, -9.0f };          // 3a persona CERCA del personaje
             ScePspFVector3 pOff   = { -playerX, -playerY, -playerZ };
 #endif
             // orden correcto de camara orbital: offset (espacio camara) -> giro
