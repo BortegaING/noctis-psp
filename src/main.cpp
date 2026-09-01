@@ -26,8 +26,8 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 #define RGBA(r, g, b, a) ((unsigned int)(((a) << 24) | ((b) << 16) | ((g) << 8) | (r))) // 0xAABBGGRR
 
 static unsigned int __attribute__((aligned(16))) g_list[262144];
-static const unsigned int CLEAR_COLOR = RGBA(66, 62, 56, 255);  // cielo brumoso gris-marron (referencia), NO negro
-static const unsigned int HAZE = RGBA(100, 94, 84, 255);// bruma CALIDA gris: el mar de agujas se disuelve aqui
+static const unsigned int CLEAR_COLOR = RGBA(38, 35, 31, 255);  // cielo brumoso OSCURO (calido, no negro)
+static const unsigned int HAZE = RGBA(66, 61, 54, 255); // bruma calida OSCURA: el mar de agujas se disuelve aqui
 #define WSCALE 2.25f  // separa los edificios (menos juntos) y mas caen fuera de vista (mas FPS)
 #define VIEWER_MODE 0     // 1 = visor de personaje; 0 = juego
 #define HERO_SHOWCASE 1   // (dentro del visor) 1 = solo el HUNTER en primer plano
@@ -464,8 +464,7 @@ static void buildSolidWorld() {
         float dd = sqrtf(b.x * b.x + b.z * b.z);
         StructRange &r = g_srange[g_srangeCount];
         r.sStart = i; r.wStart = g_winVerts; r.cx = b.x; r.cz = b.z; r.sDetail = i;
-        if (b.h > 120.0f) buildCathedral (g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail);
-        else              buildGothicBldg(g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail);
+        buildGothicBldg(g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail);
         r.sCount = i - r.sStart; r.wCount = g_winVerts - r.wStart;
         g_srangeCount++;
     }
@@ -638,6 +637,7 @@ static void addChain(LineVertex *buf, int &i, float ax, float ay, float az,
 
 // generadores de textura + ambiente del agente (mas detallados)
 #include "agent_textures.h"
+#include "gothic_tex.h"    // genGothicFacade: fachada gotica (ventanas/arcos EN la textura, no geometria)
 
 // ---- SWIZZLE de texturas ----
 // En la PSP REAL, una textura NO swizzled con filtrado se muestrea con muchos
@@ -672,6 +672,11 @@ static void buildMetalTex() { genMetal(g_metalTex, MTEX); swizzleTex((unsigned c
 static unsigned int __attribute__((aligned(16))) g_stoneTex[STEX * STEX];
 static unsigned int __attribute__((aligned(16))) g_stoneTexS[STEX * STEX];
 static void buildStoneTex() { genStone(g_stoneTex, STEX); swizzleTex((unsigned char*)g_stoneTexS, (const unsigned char*)g_stoneTex, STEX * 4, STEX); sceKernelDcacheWritebackAll(); }
+
+// fachada gotica (ventanas ojivales en la TEXTURA): los edificios simples la usan
+static unsigned int __attribute__((aligned(16))) g_facadeTex[STEX * STEX];
+static unsigned int __attribute__((aligned(16))) g_facadeTexS[STEX * STEX];
+static void buildFacadeTex() { genGothicFacade(g_facadeTex, STEX); swizzleTex((unsigned char*)g_facadeTexS, (const unsigned char*)g_facadeTex, STEX * 4, STEX); sceKernelDcacheWritebackAll(); }
 
 static void buildChains() {
     int i = 0;
@@ -745,9 +750,9 @@ static void gradQuad(int y0, int y1, unsigned int cTop, unsigned int cBot) {
     sceGuDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 6, 0, v);
 }
 static void drawBackdrop() {
-    const unsigned int top    = RGBA(74, 70, 62, 255);   // cielo brumoso alto (gris-marron)
-    const unsigned int haze   = RGBA(104, 98, 88, 255);  // banda de bruma en el horizonte (calida, mas clara)
-    const unsigned int floorc = RGBA(40, 37, 33, 255);   // niebla baja entre las agujas
+    const unsigned int top    = RGBA(44, 41, 36, 255);   // cielo brumoso alto (oscuro, calido)
+    const unsigned int haze   = RGBA(72, 67, 60, 255);   // banda de bruma en el horizonte
+    const unsigned int floorc = RGBA(24, 22, 20, 255);   // niebla baja entre las agujas (mas oscura)
     gradQuad(0, 150, top, haze);
     gradQuad(150, SCR_HEIGHT, haze, floorc);
 }
@@ -904,6 +909,7 @@ int main(void) {
 
     buildWinTex();
     buildStoneTex();
+    buildFacadeTex();
     buildMetalTex();
     buildCity();          // genera la ciudad (g_city) ANTES del mundo/colision
     buildSolidWorld();
@@ -1230,7 +1236,8 @@ int main(void) {
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);   // 1 texel/pixel: gran ahorro de fill en PSP real
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
         // --- MUNDO SOLIDO con CULLING por estructura + LOD (solo lo cercano/al frente) ---
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso: siempre
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso: siempre (piedra)
+        sceGuTexImage(0, STEX, STEX, STEX, g_facadeTexS);   // EDIFICIOS: textura de FACHADA gotica (ventanas en la imagen)
         for (int s = 0; s < g_srangeCount; ++s) {
             const StructRange &r = g_srange[s];
             float ddx = r.cx - playerX, ddz = r.cz - playerZ;
@@ -1243,6 +1250,7 @@ int main(void) {
             else
                 sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, r.sCount, 0, g_solidWorld + r.sStart);             // completo
         }
+        sceGuTexImage(0, STEX, STEX, STEX, g_stoneTexS);   // vuelve a PIEDRA para agujas/cola
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_spireEnd - g_spireStart, 0, g_solidWorld + g_spireStart); // agujas (fondo)
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_solidVerts - g_tailStart, 0, g_solidWorld + g_tailStart);  // cola + cathedral
 

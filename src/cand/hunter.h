@@ -79,11 +79,13 @@ static int build_hunter(LineVertex *buf)
     addLimb(buf,i, -0.44f,1.18f,-0.06f, -0.48f,0.98f,-0.06f, 0.09f,0.0f, 4, skirtDk, coatDk); // lado izq
 
     // ================= CLEAVER (right hand, sawtooth, point-down) =============
-    addLimb(buf,i, 0.60f,1.50f,-0.06f, 0.72f,1.24f,-0.12f, 0.05f,0.05f, 5, coatDk, coatDk); // wrapped grip
-    addSolidBox(buf,i, 0.74f,0.50f,-0.12f, 0.34f,0.05f,0.74f, steel);   // broad flat blade (thin, flat prop)
-    addSolidBox(buf,i, 0.93f,0.58f,-0.12f, 0.07f,0.05f,0.10f, steel);   // sawtooth 1
-    addSolidBox(buf,i, 0.93f,0.78f,-0.12f, 0.07f,0.05f,0.10f, steel);   // sawtooth 2
-    addSolidBox(buf,i, 0.93f,0.98f,-0.12f, 0.07f,0.05f,0.10f, steel);   // sawtooth 3
+    // ESPADA con FORMA: empunadura + guarda + hoja que se AFILA hacia la punta
+    addLimb(buf,i, 0.60f,1.50f,-0.06f, 0.70f,1.28f,-0.11f, 0.05f,0.05f, 6, coatDk, coatDk); // empunadura
+    addSolidBox(buf,i, 0.71f,1.24f,-0.11f, 0.30f,0.07f,0.09f, RGBA(120,100,60,255));         // guarda (cruz)
+    addSolidBox(buf,i, 0.73f,0.80f,-0.115f, 0.30f,0.05f,0.46f, steel);                        // hoja ancha
+    addSolidBox(buf,i, 0.74f,0.50f,-0.115f, 0.21f,0.05f,0.32f, steel);                        // se angosta
+    addSolidBox(buf,i, 0.75f,0.28f,-0.115f, 0.12f,0.05f,0.24f, steel);                        // hacia la punta
+    addSolidBox(buf,i, 0.755f,0.15f,-0.115f, 0.05f,0.05f,0.15f, brighten(steel,1.3f));        // PUNTA/filo
     // ================= BELT BUCKLE (tiny flat prop) =================
     addSolidBox(buf,i, 0.00f,1.66f,-0.30f, 0.14f,0.05f,0.08f, steel);
 
