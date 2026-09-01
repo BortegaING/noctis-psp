@@ -26,8 +26,12 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 #define RGBA(r, g, b, a) ((unsigned int)(((a) << 24) | ((b) << 16) | ((g) << 8) | (r))) // 0xAABBGGRR
 
 static unsigned int __attribute__((aligned(16))) g_list[262144];
-static const unsigned int CLEAR_COLOR = RGBA(38, 35, 31, 255);  // cielo brumoso OSCURO (calido, no negro)
-static const unsigned int HAZE = RGBA(66, 61, 54, 255); // bruma calida OSCURA: el mar de agujas se disuelve aqui
+// Cielo/niebla: gris CALIDO LUMINOSO (no negro). Clave anti-"vacio": el cielo
+// debe ser MAS CLARO que la niebla para que las agujas lejanas se lean como
+// SILUETAS OSCURAS contra la bruma (look Bloodborne/BLAME), no como fantasmas
+// palidos flotando en negro. Antes: cielo 38 (mas oscuro que la niebla 66) -> vacio.
+static const unsigned int CLEAR_COLOR = RGBA(104, 98, 87, 255);  // cielo brumoso: overcast calido, el horizonte "brilla"
+static const unsigned int HAZE = RGBA(90, 84, 74, 255); // bruma calida: la geometria lejana se DISUELVE aqui (un pelo bajo el cielo)
 #define WSCALE 2.25f  // separa los edificios (menos juntos) y mas caen fuera de vista (mas FPS)
 #define VIEWER_MODE 0     // 1 = visor de personaje; 0 = juego
 #define HERO_SHOWCASE 1   // (dentro del visor) 1 = solo el HUNTER en primer plano
