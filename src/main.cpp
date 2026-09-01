@@ -161,6 +161,26 @@ static int g_metalVerts = 0;
 static LineVertex __attribute__((aligned(16))) g_env[3000];        // ambiente (braseros, estandartes)
 static int g_envVerts = 0;
 
+// ===== CULLING por estructura + LOD (rendimiento PSP, directiva 36-37-52) =====
+// El mundo se hornea segmentado: [piso][22 torres][60 agujas][cola: mirador/
+// arcos/puente/cathedral]. Guardamos el rango de cada torre para dibujar solo
+// las cercanas/al frente, y un nivel de LOD (saltar el detalle pesado lejos).
+struct StructRange {
+    int   sStart, sCount, sDetail;   // rango solido en g_solidWorld; inicio del detalle (para LOD)
+    int   wStart, wCount;            // rango de ventanas en g_win
+    float cx, cz;                    // centro (mundo) para el test de distancia
+};
+static StructRange g_srange[64];
+static int g_srangeCount = 0;
+static int g_floorCount   = 0;   // piso: [0, g_floorCount)
+static int g_spireStart   = 0, g_spireEnd = 0;   // agujas: siempre
+static int g_tailStart    = 0;   // cola (mirador..cathedral): [g_tailStart, g_solidVerts)
+static int g_winTailStart = 0;   // ventanas de agujas+cathedral: siempre
+// distancias (unidades de mundo). La niebla ya funde mas alla de ~98.
+static const float DRAW_DIST = 96.0f;   // mas alla -> no se dibuja la torre
+static const float LOD_DIST  = 46.0f;   // entre LOD_DIST y DRAW_DIST -> cuerpo sin detalle ni ventanas
+static const float BEHIND_CULL = 24.0f; // dz por detras de la camara -> descartar
+
 // piramide de 4 caras (aguja) sin textura -- para personaje/robots (LineVertex)
 static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
                        float w, float d, float apexH, unsigned int col) {
@@ -295,7 +315,8 @@ static unsigned int heightHaze(unsigned int base, float y) {
 
 // torre gotica detallada texturizada: cuerpo escalonado + aguja + pinaculos + contrafuertes
 static void buildTower(TexVertex *buf, int &i, float cx, float cz,
-                       float w, float d, float h, unsigned int baseColor, float dist) {
+                       float w, float d, float h, unsigned int baseColor, float dist,
+                       int *detailStartOut = 0) {
     const unsigned int stone = fadeToVoid(warmTint(brighten(baseColor, 1.45f)), dist);
     const unsigned int win   = RGBA(166, 108, 52, 255); // ambar TENUE (menos luz)
     float bodyTop;
@@ -330,6 +351,7 @@ static void buildTower(TexVertex *buf, int &i, float cx, float cz,
         addSolidBoxT(buf, i, cx, 0.0f, cz + d*0.5f + bd*0.35f, bw, bd, bh, bc);
     }
     // detalle arquitectonico (cornisas, pilastras, quoins, tuberias) anti-caja
+    if (detailStartOut) *detailStartOut = i;   // marca para LOD (saltar detalle lejos)
     addTowerDetail(buf, i, cx, cz, w, d, bodyTop, stone);
     int rows = (int)((bodyTop - 4.0f) / 4.5f);
     if (rows > 11) rows = 11;
@@ -388,14 +410,22 @@ static void buildSolidWorld() {
         addQuadT(g_solidWorld, i, -S,0.0f,-S,  S,0.0f,-S,  S,0.0f,S,  -S,0.0f,S,
                  0.0f,0.0f, uv,uv, warmTint(RGBA(50, 48, 54, 255)));
     }
+    g_floorCount = i;      // piso = [0, g_floorCount)  (siempre se dibuja)
+    g_srangeCount = 0;
     for (int s = 0; s < kStructureCount && s < 63; ++s) {
         if (i > 33000) break;
         const Structure &st = kStructures[s];
         float sx = st.x * WSCALE, sz = st.z * WSCALE;
         float d = sqrtf(sx * sx + sz * sz);
-        buildTower(g_solidWorld, i, sx, sz, st.w, st.d, st.h, st.color, d);
+        StructRange &r = g_srange[g_srangeCount];
+        r.sStart = i; r.wStart = g_winVerts; r.cx = sx; r.cz = sz; r.sDetail = i;
+        buildTower(g_solidWorld, i, sx, sz, st.w, st.d, st.h, st.color, d, &r.sDetail);
+        r.sCount = i - r.sStart; r.wCount = g_winVerts - r.wStart;
+        g_srangeCount++;
     }
+    g_winTailStart = g_winVerts;   // ventanas de aqui en adelante (agujas+cathedral) = siempre
     // mar de agujas de fondo (espiral aurea): densidad que se pierde en neblina
+    g_spireStart = i;
     for (int k = 0; k < 60; ++k) {
         if (i > 34000) break;
         float ang = (float)k * 2.3999632f;
@@ -407,6 +437,8 @@ static void buildSolidWorld() {
         float dd = sqrtf(cx * cx + cz * cz);
         buildSpire(g_solidWorld, i, cx, cz, ww, hh, kStructures[k % kStructureCount].color, dd);
     }
+    g_spireEnd = i;        // agujas = [g_spireStart, g_spireEnd)  (siempre)
+    g_tailStart = i;       // cola (mirador/arcos/puente/cathedral) = [g_tailStart, g_solidVerts)  (siempre)
     // plataforma de piedra del mirador (suelo solido bajo el spawn)
     addSolidBoxT(g_solidWorld, i, 0.0f, -0.5f, -2.5f, 22.0f, 13.0f, 0.55f,
                  warmTint(RGBA(74, 70, 76, 255)));
@@ -1053,12 +1085,35 @@ int main(void) {
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);   // 1 texel/pixel: gran ahorro de fill en PSP real
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_solidVerts, 0, g_solidWorld);
+        // --- MUNDO SOLIDO con CULLING por estructura + LOD (solo lo cercano/al frente) ---
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso: siempre
+        for (int s = 0; s < g_srangeCount; ++s) {
+            const StructRange &r = g_srange[s];
+            float ddx = r.cx - playerX, ddz = r.cz - playerZ;
+            if (ddz > BEHIND_CULL) continue;                    // detras de la camara (fija mira -Z)
+            float d2 = ddx * ddx + ddz * ddz;
+            if (d2 > DRAW_DIST * DRAW_DIST) continue;           // demasiado lejos (la niebla ya lo tapa)
+            if (d2 > LOD_DIST * LOD_DIST)
+                sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, r.sDetail - r.sStart, 0, g_solidWorld + r.sStart); // LOD: cuerpo sin detalle
+            else
+                sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, r.sCount, 0, g_solidWorld + r.sStart);             // completo
+        }
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_spireEnd - g_spireStart, 0, g_solidWorld + g_spireStart); // agujas (fondo)
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_solidVerts - g_tailStart, 0, g_solidWorld + g_tailStart);  // cola + cathedral
 
-        // ventanas: textura de vidriera (CLAMP: cada ventana = 1 textura)
+        // ventanas: textura de vidriera (CLAMP). Solo torres CERCANAS + agujas/cathedral (siempre).
         sceGuTexImage(0, WTEX, WTEX, WTEX, g_winTexS);
         sceGuTexWrap(GU_CLAMP, GU_CLAMP);
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_winVerts, 0, g_win);
+        for (int s = 0; s < g_srangeCount; ++s) {
+            const StructRange &r = g_srange[s];
+            if (r.wCount <= 0) continue;
+            float ddx = r.cx - playerX, ddz = r.cz - playerZ;
+            if (ddz > BEHIND_CULL) continue;
+            float d2 = ddx * ddx + ddz * ddz;
+            if (d2 > LOD_DIST * LOD_DIST) continue;             // ventanas solo de torres cercanas
+            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, r.wCount, 0, g_win + r.wStart);
+        }
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_winVerts - g_winTailStart, 0, g_win + g_winTailStart); // agujas + cathedral
 
         // metal: baranda con textura de acero (REPEAT)
         sceGuTexImage(0, MTEX, MTEX, MTEX, g_metalTexS);
