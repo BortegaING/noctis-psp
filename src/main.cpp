@@ -466,10 +466,10 @@ static void buildSolidWorld() {
         // PISO: adoquin (genGround, alto contraste) con color CLARO (el MODULATE
         // multiplica textura*color; textura ~90/255, asi que el color debe ser
         // claro para que se lea). uv ~ 12 unidades/repeticion -> losas ~1.5u.
-        const float S = 120.0f;                 // suelo mas chico (jugador acotado a r~82) -> menos fill/minificacion (R5)
+        const float S = 240.0f;                 // suelo GRANDE: llega hasta la niebla -> NUNCA se ve vacio al mirar lejos
         const float uv = 2.0f * S / 12.0f;      // densidad de losa fija a 12u (indep. de S) -> losas visibles cerca
         addQuadT(g_solidWorld, i, -S,0.0f,-S,  S,0.0f,-S,  S,0.0f,S,  -S,0.0f,S,
-                 0.0f,0.0f, uv,uv, RGBA(216, 198, 174, 255));   // adoquin gotico claro/calido (se ve, no gris plano)
+                 0.0f,0.0f, uv,uv, RGBA(168, 154, 136, 255));   // adoquin gotico calido-medio (funde con la niebla 104 en el horizonte)
     }
     g_floorCount = i;      // piso = [0, g_floorCount)  (siempre se dibuja)
     g_srangeCount = 0;
@@ -1267,8 +1267,8 @@ int main(void) {
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);   // 1 texel/pixel: gran ahorro de fill en PSP real
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
         // --- MUNDO SOLIDO con CULLING por estructura + LOD (solo lo cercano/al frente) ---
-        sceGuEnable(GU_CULL_FACE);   // R1: back-face culling en pases PROBADOS (piso, edificios, cola/catedral) -> ~1/2 del fill
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso: siempre (piedra)
+        sceGuDisable(GU_CULL_FACE);  // back-face culling OFF: winding MIXTO en este mundo -> cullear hacia DESAPARECER el piso (en HW/GL) y ver-por-dentro los muros. El ahorro real de FPS lo da el culling por DISTANCIA/LOD de abajo (seguro).
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso: SIEMPRE visible
         sceGuTexImage(0, STEX, STEX, STEX, g_facadeTexS);   // EDIFICIOS: textura de FACHADA gotica (ventanas en la imagen)
         for (int s = 0; s < g_srangeCount; ++s) {
             const StructRange &r = g_srange[s];
@@ -1308,7 +1308,7 @@ int main(void) {
         sceGuDisable(GU_TEXTURE_2D);
 
         // atmosfera de fondo: siluetas colosales lejanas + ruinas suspendidas del abismo
-        sceGuEnable(GU_CULL_FACE);   // R1: agujas + props + npc son cajas/piramides probadas -> cullables
+        sceGuDisable(GU_CULL_FACE);  // sin back-face culling (winding mixto): agujas/props solidas, sin ver-por-dentro
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_spireVerts, 0, g_spire);     // MAR DENSO de agujas (el look de la referencia)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);   // props del pueblo
         // cables + robots + ambiente (braseros) sin textura
