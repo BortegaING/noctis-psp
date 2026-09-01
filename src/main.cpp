@@ -1143,6 +1143,15 @@ int main(void) {
                 idleT += 0.05f;
             }
 
+            // ===== RED DE SEGURIDAD: si el jugador se fue al VACIO, reset al spawn =====
+            // (evita "caer al vacio por siempre" al cambiar de gravedad sin superficie)
+            if (playerY < -30.0f || playerY > 400.0f ||
+                playerX * playerX + playerZ * playerZ > 130.0f * 130.0f) {
+                playerX = 0.0f; playerY = 0.0f; playerZ = 0.0f;
+                velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f;
+                gravG = 0; grounded = 1;
+            }
+
             // recoleccion de recursos por proximidad
             for (int r = 0; r < kResourceCount && r < 64; ++r) {
                 if (collected[r]) continue;
