@@ -413,7 +413,8 @@ static void addRailing(TexVertex *buf, int &i, float x0, float z0,
 struct CityBldg { float x, z, w, d, h; unsigned int color; };
 static CityBldg g_city[256];
 static int g_cityCount = 0;
-#include "city.h"   // buildCity() llena g_city (layout procedural, plaza al centro)
+#include "city.h"          // buildCity() llena g_city (16 edificios espaciados, plaza al centro)
+#include "gothic_bldg.h"   // buildGothicBldg(): edificio gotico Bloodborne/MediEvil (techo/aguja/torretas)
 
 // edificio SIMPLE de ciudad (pocos verts -> muchos edificios + culling = rinde)
 static void buildCityBldg(TexVertex *buf, int &i, float cx, float cz,
@@ -456,7 +457,7 @@ static void buildSolidWorld() {
         float dd = sqrtf(b.x * b.x + b.z * b.z);
         StructRange &r = g_srange[g_srangeCount];
         r.sStart = i; r.wStart = g_winVerts; r.cx = b.x; r.cz = b.z; r.sDetail = i;
-        buildCityBldg(g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail);
+        buildGothicBldg(g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail);
         r.sCount = i - r.sStart; r.wCount = g_winVerts - r.wStart;
         g_srangeCount++;
     }
@@ -1191,9 +1192,9 @@ int main(void) {
         sceGumLoadIdentity();
         {
 #if FLYCAM
-            ScePspFVector3 rot    = { DEG2RAD(24.0f), 0.0f, 0.0f };   // vista elevada para el horizonte
-            ScePspFVector3 camOff = { 0.0f, -62.0f, -180.0f };
-            ScePspFVector3 pOff   = { 0.0f, -6.0f, 18.0f };
+            ScePspFVector3 rot    = { DEG2RAD(20.0f), 0.0f, 0.0f };   // panoramica de la ciudad dispersa
+            ScePspFVector3 camOff = { 0.0f, -46.0f, -118.0f };
+            ScePspFVector3 pOff   = { 0.0f, -2.0f, -8.0f };
 #else
             float gpit, gyaw, grol; gravCamEuler(gravG, DEG2RAD(24.0f), &gpit, &gyaw, &grol);
             ScePspFVector3 rot    = { gpit, gyaw + camYaw, grol };   // reorienta segun gravedad
