@@ -175,7 +175,7 @@ struct StructRange {
     int   wStart, wCount;            // rango de ventanas en g_win
     float cx, cz;                    // centro (mundo) para el test de distancia
 };
-static StructRange g_srange[64];
+static StructRange g_srange[256];
 static int g_srangeCount = 0;
 static int g_floorCount   = 0;   // piso: [0, g_floorCount)
 static int g_spireStart   = 0, g_spireEnd = 0;   // agujas: siempre
@@ -409,6 +409,36 @@ static void addRailing(TexVertex *buf, int &i, float x0, float z0,
     else                       addSolidBoxT(buf, i, mx, 1.28f, mz, 0.22f, len, 0.2f, col);
 }
 
+// ===== CIUDAD ABIERTA (grilla grande estilo Spider-Man 3 PSP) =====
+struct CityBldg { float x, z, w, d, h; unsigned int color; };
+static CityBldg g_city[256];
+static int g_cityCount = 0;
+#include "city.h"   // buildCity() llena g_city (layout procedural, plaza al centro)
+
+// edificio SIMPLE de ciudad (pocos verts -> muchos edificios + culling = rinde)
+static void buildCityBldg(TexVertex *buf, int &i, float cx, float cz,
+                          float w, float d, float h, unsigned int baseColor, float dist,
+                          int *detailStartOut) {
+    const unsigned int stone = fadeToVoid(brighten(baseColor, 1.35f), dist);
+    const unsigned int win   = RGBA(150, 118, 66, 255);          // ventana ambar tenue
+    if (h > 70.0f) {                                             // rascacielos: 2 tramos + remate
+        float h1 = h * 0.60f;
+        addSolidBoxT(buf, i, cx, 0.0f, cz, w, d, h1, heightHaze(stone, h1 * 0.5f));
+        addSolidBoxT(buf, i, cx, h1, cz, w * 0.74f, d * 0.74f, h - h1, heightHaze(stone, h1 + (h - h1) * 0.5f));
+        addPyramidT(buf, i, cx, h, cz, w * 0.74f, d * 0.74f, h * 0.08f, heightHaze(brighten(stone, 1.12f), h));
+    } else {                                                     // edificio: caja + parapeto
+        addSolidBoxT(buf, i, cx, 0.0f, cz, w, d, h, heightHaze(stone, h * 0.5f));
+        addSolidBoxT(buf, i, cx, h, cz, w * 1.04f, d * 1.04f, 1.3f, heightHaze(brighten(stone, 0.82f), h));
+    }
+    if (detailStartOut) *detailStartOut = i;                     // sin detalle pesado
+    int rows = (int)((h - 5.0f) / 6.0f); if (rows > 12) rows = 12;
+    for (int r = 0; r < rows; ++r) {
+        float y = 4.0f + r * 6.0f; if (y > h - 3.0f) break;
+        addWinRow(cx, cz, w, d, y, 0, win); addWinRow(cx, cz, w, d, y, 1, win);
+        addWinRow(cx, cz, w, d, y, 2, win); addWinRow(cx, cz, w, d, y, 3, win);
+    }
+}
+
 static void buildSolidWorld() {
     int i = 0;
     g_winVerts = 0;
@@ -420,21 +450,20 @@ static void buildSolidWorld() {
     }
     g_floorCount = i;      // piso = [0, g_floorCount)  (siempre se dibuja)
     g_srangeCount = 0;
-    for (int s = 0; s < kStructureCount && s < 63; ++s) {
-        if (i > 33000) break;
-        const Structure &st = kStructures[s];
-        float sx = st.x * WSCALE, sz = st.z * WSCALE;
-        float d = sqrtf(sx * sx + sz * sz);
+    for (int s = 0; s < g_cityCount && g_srangeCount < 256; ++s) {
+        if (i > 33500) break;
+        const CityBldg &b = g_city[s];
+        float dd = sqrtf(b.x * b.x + b.z * b.z);
         StructRange &r = g_srange[g_srangeCount];
-        r.sStart = i; r.wStart = g_winVerts; r.cx = sx; r.cz = sz; r.sDetail = i;
-        buildTower(g_solidWorld, i, sx, sz, st.w, st.d, st.h, st.color, d, &r.sDetail);
+        r.sStart = i; r.wStart = g_winVerts; r.cx = b.x; r.cz = b.z; r.sDetail = i;
+        buildCityBldg(g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail);
         r.sCount = i - r.sStart; r.wCount = g_winVerts - r.wStart;
         g_srangeCount++;
     }
     g_winTailStart = g_winVerts;   // ventanas de aqui en adelante (agujas+cathedral) = siempre
     // mar de agujas de fondo (espiral aurea): densidad que se pierde en neblina
     g_spireStart = i;
-    for (int k = 0; k < 26; ++k) {   // menos agujas de fondo (ahorro de verts)
+    for (int k = 0; k < 0; ++k) {   // agujas quitadas: la ciudad las reemplaza
         if (i > 34000) break;
         float ang = (float)k * 2.3999632f;
         float rad = 36.0f + (float)((k * 37) % 72);  // 36..107
@@ -473,15 +502,13 @@ static void buildSolidWorld() {
 // altura del suelo bajo el jugador (0, o el techo de una estructura si esta
 // por encima de el). Permite pararse en azoteas al caer sobre ellas.
 static float groundHeight(float px, float pz, float py) {
-    float g = 0.0f;
-    for (int s = 0; s < kStructureCount; ++s) {
-        const Structure &st = kStructures[s];
-        const float cx = st.x * WSCALE, cz = st.z * WSCALE;
-        const float x0 = cx - st.w * 0.5f, x1 = cx + st.w * 0.5f;
-        const float z0 = cz - st.d * 0.5f, z1 = cz + st.d * 0.5f;
+    float g = 0.0f;   // suelo/plaza en y=0; los TECHOS de los edificios se pueden pisar
+    for (int s = 0; s < g_cityCount; ++s) {
+        const CityBldg &b = g_city[s];
+        const float x0 = b.x - b.w * 0.5f, x1 = b.x + b.w * 0.5f;
+        const float z0 = b.z - b.d * 0.5f, z1 = b.z + b.d * 0.5f;
         if (px >= x0 && px <= x1 && pz >= z0 && pz <= z1) {
-            const float top = st.y + st.h;
-            if (top > g && top <= py + 1.0f) g = top;
+            if (b.h > g && b.h <= py + 1.0f) g = b.h;
         }
     }
     return g;
@@ -491,12 +518,11 @@ static float groundHeight(float px, float pz, float py) {
 // de una estructura y por DEBAJO de su techo (no bloquea al estar encima).
 static bool blocked(float px, float pz, float py) {
     const float r = 1.1f;
-    for (int s = 0; s < kStructureCount; ++s) {
-        const Structure &st = kStructures[s];
-        if (py < st.y + st.h - 0.8f) {
-            const float cx = st.x * WSCALE, cz = st.z * WSCALE;
-            const float x0 = cx - st.w * 0.5f - r, x1 = cx + st.w * 0.5f + r;
-            const float z0 = cz - st.d * 0.5f - r, z1 = cz + st.d * 0.5f + r;
+    for (int s = 0; s < g_cityCount; ++s) {
+        const CityBldg &b = g_city[s];
+        if (py < b.h - 0.8f) {
+            const float x0 = b.x - b.w * 0.5f - r, x1 = b.x + b.w * 0.5f + r;
+            const float z0 = b.z - b.d * 0.5f - r, z1 = b.z + b.d * 0.5f + r;
             if (px > x0 && px < x1 && pz > z0 && pz < z1) return true;
         }
     }
@@ -869,13 +895,14 @@ int main(void) {
     buildWinTex();
     buildStoneTex();
     buildMetalTex();
+    buildCity();          // genera la ciudad (g_city) ANTES del mundo/colision
     buildSolidWorld();
     buildHero();
 #if VIEWER_MODE
     buildCandidates();
 #endif
     buildNpcs();
-    buildChains();
+    // buildChains();   // cadenas quitadas para la ciudad abierta (g_chainVerts=0)
     buildEnv();
     g_farSilVerts = buildFarSilhouettes(g_farSil);
     g_voidVerts   = buildVoidLayer(g_void);
@@ -1168,9 +1195,9 @@ int main(void) {
             ScePspFVector3 camOff = { 0.0f, -62.0f, -180.0f };
             ScePspFVector3 pOff   = { 0.0f, -6.0f, 18.0f };
 #else
-            float gpit, gyaw, grol; gravCamEuler(gravG, DEG2RAD(12.0f), &gpit, &gyaw, &grol);
+            float gpit, gyaw, grol; gravCamEuler(gravG, DEG2RAD(20.0f), &gpit, &gyaw, &grol);
             ScePspFVector3 rot    = { gpit, gyaw + camYaw, grol };   // reorienta segun gravedad
-            ScePspFVector3 camOff = { 0.0f, -4.2f, -11.5f };
+            ScePspFVector3 camOff = { 0.0f, -9.0f, -19.0f };         // mas alta y atras: revela la escala
             ScePspFVector3 pOff   = { -playerX, -playerY, -playerZ };
 #endif
             // orden correcto de camara orbital: offset (espacio camara) -> giro
