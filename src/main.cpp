@@ -452,9 +452,9 @@ static void buildSolidWorld() {
     g_winVerts = 0;
     // suelo de piedra (plano texturizado grande) bajo todo
     {
-        const float S = 360.0f, uv = 2.0f * S / TILE;   // SUELO grande y solido (sin vacio)
+        const float S = 360.0f, uv = 16.0f;   // SUELO grande; losas GRANDES (poco tiling = se ve, no gris)
         addQuadT(g_solidWorld, i, -S,0.0f,-S,  S,0.0f,-S,  S,0.0f,S,  -S,0.0f,S,
-                 0.0f,0.0f, uv,uv, warmTint(RGBA(62, 54, 46, 255)));   // adoquin mas rico/calido
+                 0.0f,0.0f, uv,uv, warmTint(RGBA(120, 108, 94, 255)));   // mas CLARO para que la textura de adoquin se lea
     }
     g_floorCount = i;      // piso = [0, g_floorCount)  (siempre se dibuja)
     g_srangeCount = 0;
@@ -1225,9 +1225,9 @@ int main(void) {
         sceGumLoadIdentity();
         {
 #if FLYCAM
-            ScePspFVector3 rot    = { DEG2RAD(20.0f), 0.0f, 0.0f };   // panoramica de la ciudad dispersa
-            ScePspFVector3 camOff = { 0.0f, -46.0f, -118.0f };
-            ScePspFVector3 pOff   = { 0.0f, -2.0f, -8.0f };
+            ScePspFVector3 rot    = { DEG2RAD(48.0f), 0.0f, 0.0f };   // mira el PISO del mundo (adoquin)
+            ScePspFVector3 camOff = { 0.0f, -20.0f, -10.0f };
+            ScePspFVector3 pOff   = { 0.0f, -2.0f, -34.0f };
 #else
             float gpit, gyaw, grol; gravCamEuler(gravG, DEG2RAD(8.0f), &gpit, &gyaw, &grol);
             ScePspFVector3 rot    = { gpit, gyaw + camYaw, grol };   // reorienta segun gravedad
@@ -1247,7 +1247,7 @@ int main(void) {
         // piedra texturizada (torres, agujas, muros, suelo, plataforma)
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexMode(GU_PSM_8888, 0, 0, GU_TRUE);   // GU_TRUE = texturas SWIZZLED (PSP real)
-        sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);   // PISO: adoquin de todo el mundo
+        sceGuTexImage(0, STEX, STEX, STEX, g_stoneTexS);   // PISO: piedra (se ve bien) en losas grandes
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);   // 1 texel/pixel: gran ahorro de fill en PSP real
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
