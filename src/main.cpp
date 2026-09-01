@@ -514,6 +514,9 @@ static int g_npcKilled[64] = {0};   // robots derribados a tiros (no se dibujan)
 // ===== ARMA / DISPAROS (L apunta, R dispara) =====
 struct Shot { float x, y, z, vx, vy, vz; int life; };
 static Shot g_shots[24];
+// chispa/estallido al derribar un robot (feedback de impacto)
+struct Spark { float x, y, z; int life; };
+static Spark g_sparks[12];
 
 // robots solidos variados (oxidado/acero/oscuro/teal), con ojo luminoso
 static void buildNpcs() {
@@ -866,6 +869,7 @@ int main(void) {
     int   aiming = 0, fireCD = 0, reloadCD = 0, muzzle = 0;
     int   ammo = 40, ammoReserve = 280;
     for (int s = 0; s < 24; ++s) g_shots[s].life = 0;
+    for (int s = 0; s < 12; ++s) g_sparks[s].life = 0;
     const float SHOT_SPEED = 1.7f;
     const int   SHOT_LIFE = 55, FIRE_CD = 7, MAG = 40;
 
@@ -991,10 +995,16 @@ int main(void) {
                     float dx = g_shots[s].x - kNpcs[n].x, dz = g_shots[s].z - kNpcs[n].z;
                     float hh = 1.5f + 0.18f * (float)(n % 3);
                     if (dx*dx + dz*dz < 0.5f*0.5f && g_shots[s].y > 0.0f && g_shots[s].y < hh + 0.6f) {
-                        g_npcKilled[n] = 1; buildNpcs(); g_shots[s].life = 0; break;
+                        g_npcKilled[n] = 1; buildNpcs();
+                        for (int q = 0; q < 12; ++q) if (g_sparks[q].life <= 0) {
+                            g_sparks[q].x = kNpcs[n].x; g_sparks[q].y = g_shots[s].y; g_sparks[q].z = kNpcs[n].z;
+                            g_sparks[q].life = 16; break;
+                        }
+                        g_shots[s].life = 0; break;
                     }
                 }
             }
+            for (int q = 0; q < 12; ++q) if (g_sparks[q].life > 0) g_sparks[q].life--;
         }
 
         // FPS
@@ -1105,6 +1115,19 @@ int main(void) {
             int vi = 0;
             addSolidBox(v, vi, playerX + fx * 0.7f, playerY + 1.5f - 0.12f, playerZ + fz * 0.7f,
                         0.24f, 0.24f, 0.24f, RGBA(255, 235, 170, 255));
+            sceGumLoadIdentity();
+            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
+        }
+        // ---- chispas de impacto (robot derribado) ----
+        for (int q = 0; q < 12; ++q) {
+            if (g_sparks[q].life <= 0) continue;
+            float t = (float)g_sparks[q].life / 16.0f;       // 1..0
+            float sz = 0.25f + (1.0f - t) * 0.9f;            // crece al estallar
+            int br = (int)(120 + 135 * t);
+            unsigned int col = RGBA(255, br, 60 + (int)(80 * t), 255);
+            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
+            int vi = 0;
+            addSolidBox(v, vi, g_sparks[q].x, g_sparks[q].y - sz * 0.5f, g_sparks[q].z, sz, sz, sz, col);
             sceGumLoadIdentity();
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
         }
