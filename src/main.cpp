@@ -638,6 +638,7 @@ static void addChain(LineVertex *buf, int &i, float ax, float ay, float az,
 // generadores de textura + ambiente del agente (mas detallados)
 #include "agent_textures.h"
 #include "gothic_tex.h"    // genGothicFacade: fachada gotica (ventanas/arcos EN la textura, no geometria)
+#include "ground_tex.h"    // genGround: adoquin/losas gotico para el PISO de todo el mundo
 
 // ---- SWIZZLE de texturas ----
 // En la PSP REAL, una textura NO swizzled con filtrado se muestrea con muchos
@@ -677,6 +678,11 @@ static void buildStoneTex() { genStone(g_stoneTex, STEX); swizzleTex((unsigned c
 static unsigned int __attribute__((aligned(16))) g_facadeTex[STEX * STEX];
 static unsigned int __attribute__((aligned(16))) g_facadeTexS[STEX * STEX];
 static void buildFacadeTex() { genGothicFacade(g_facadeTex, STEX); swizzleTex((unsigned char*)g_facadeTexS, (const unsigned char*)g_facadeTex, STEX * 4, STEX); sceKernelDcacheWritebackAll(); }
+
+// adoquin/losas para el PISO de todo el mundo
+static unsigned int __attribute__((aligned(16))) g_groundTex[STEX * STEX];
+static unsigned int __attribute__((aligned(16))) g_groundTexS[STEX * STEX];
+static void buildGroundTex() { genGround(g_groundTex, STEX); swizzleTex((unsigned char*)g_groundTexS, (const unsigned char*)g_groundTex, STEX * 4, STEX); sceKernelDcacheWritebackAll(); }
 
 static void buildChains() {
     int i = 0;
@@ -910,6 +916,7 @@ int main(void) {
     buildWinTex();
     buildStoneTex();
     buildFacadeTex();
+    buildGroundTex();
     buildMetalTex();
     buildCity();          // genera la ciudad (g_city) ANTES del mundo/colision
     buildSolidWorld();
@@ -1240,7 +1247,7 @@ int main(void) {
         // piedra texturizada (torres, agujas, muros, suelo, plataforma)
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexMode(GU_PSM_8888, 0, 0, GU_TRUE);   // GU_TRUE = texturas SWIZZLED (PSP real)
-        sceGuTexImage(0, STEX, STEX, STEX, g_stoneTexS);
+        sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);   // PISO: adoquin de todo el mundo
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);   // 1 texel/pixel: gran ahorro de fill en PSP real
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
