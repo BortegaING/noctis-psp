@@ -166,6 +166,8 @@ static void addSolidBox(LineVertex *buf, int &i, float cx, float baseY, float cz
 
 static TexVertex __attribute__((aligned(16))) g_solidWorld[36000]; // piedra texturizada (+ detalle)
 static int g_solidVerts = 0;
+static TexVertex __attribute__((aligned(16))) g_apron[3600];       // PISO cercano fino que SIGUE al jugador (tapa el hueco del piso grueso)
+static int g_apronCount = 0;
 static TexVertex __attribute__((aligned(16))) g_win[18000];        // ventanas (vidriera texturizada)
 static int g_winVerts = 0;
 static TexVertex __attribute__((aligned(16))) g_metal[4000];       // metal (baranda)
@@ -463,6 +465,29 @@ static void buildCityBldg(TexVertex *buf, int &i, float cx, float cz,
         addWinRow(cx, cz, w, d, y, 0, win); addWinRow(cx, cz, w, d, y, 1, win);
         addWinRow(cx, cz, w, d, y, 2, win); addWinRow(cx, cz, w, d, y, 3, win);
     }
+}
+
+// PISO cercano fino (celdas 2.5u): tapa el hueco que dejan las celdas grandes del piso
+// bajo la camara (la celda que cruza el ojo se recorta -> hueco visible con celdas de 25u).
+// Se hornea centrado en origen; en el render se TRASLADA al jugador (snap a 12u para que la
+// textura calce con el piso grueso). uv = local/12.
+static void buildApron() {
+    int i = 0;
+    const float HALF = 30.0f;
+    const int   N    = 24;                          // 24x24 celdas de 2.5u (<2.6u -> el hueco cae fuera de pantalla)
+    const float CELL = (2.0f * HALF) / (float)N;    // 2.5u
+    const float invUV = 1.0f / 12.0f;
+    const unsigned int fcol = RGBA(240, 230, 214, 255);   // REPLACE ignora el color
+    for (int gz = 0; gz < N; ++gz) {
+        float z0 = -HALF + CELL * (float)gz, z1 = z0 + CELL;
+        float v0 = z0 * invUV, v1 = z1 * invUV;
+        for (int gx = 0; gx < N; ++gx) {
+            float x0 = -HALF + CELL * (float)gx, x1 = x0 + CELL;
+            float u0 = x0 * invUV, u1 = x1 * invUV;
+            addQuadT(g_apron, i, x0,0.0f,z0, x1,0.0f,z0, x1,0.0f,z1, x0,0.0f,z1, u0,v0, u1,v1, fcol);
+        }
+    }
+    g_apronCount = i;
 }
 
 static void buildSolidWorld() {
@@ -942,6 +967,7 @@ int main(void) {
     buildMetalTex();
     buildCity();          // genera la ciudad (g_city) ANTES del mundo/colision
     buildSolidWorld();
+    buildApron();   // piso cercano fino (sigue al jugador en el render)
     buildHero();
 #if VIEWER_MODE
     buildCandidates();
@@ -1316,7 +1342,16 @@ int main(void) {
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
         // --- MUNDO SOLIDO con CULLING por estructura + LOD (solo lo cercano/al frente) ---
         sceGuDisable(GU_CULL_FACE);  // PISO: quads de UNA cara -> el culling no ahorra fill y su winding es opuesto al de las cajas -> OFF garantiza que el piso SIEMPRE se ve.
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso teselado: SIEMPRE visible (REPLACE = brillo de la textura)
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso teselado GRUESO: SIEMPRE visible (REPLACE = brillo de la textura)
+        // APRON: piso cercano FINO que sigue al jugador (celdas 2.5u -> sin hueco bajo la
+        // camara). snap a 12u para que la textura calce con el piso grueso; y=0.03 gana el z-fight.
+        {
+            ScePspFVector3 ap = { floorf(playerX / 12.0f + 0.5f) * 12.0f, 0.03f,
+                                  floorf(playerZ / 12.0f + 0.5f) * 12.0f };
+            sceGumTranslate(&ap);
+            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_apronCount, 0, g_apron);
+            sceGumLoadIdentity();
+        }
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);   // el resto del mundo vuelve a MODULATE (textura*color para tinte/niebla)
         sceGuTexImage(0, STEX, STEX, STEX, g_facadeTexS);   // EDIFICIOS: textura de FACHADA gotica (ventanas en la imagen)
         sceGuEnable(GU_CULL_FACE);   // CATEDRALES: cajas/quads CERRADOS con winding consistente (auditoria) -> cull quita ~mitad del fill. Exterior=GU_CCW. Si se ve POR DENTRO, invertir NOCTIS_FRONTFACE (linea 41).
