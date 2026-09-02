@@ -189,6 +189,7 @@ struct StructRange {
     int   sStart, sCount, sDetail;   // rango solido en g_solidWorld; inicio del detalle (para LOD)
     int   wStart, wCount;            // rango de ventanas en g_win
     float cx, cz;                    // centro (mundo) para el test de distancia
+    float rad;                       // radio del footprint (cull direccional conservador, 1ra persona)
 };
 static StructRange g_srange[256];
 static int g_srangeCount = 0;
@@ -197,9 +198,9 @@ static int g_spireStart   = 0, g_spireEnd = 0;   // agujas: siempre
 static int g_tailStart    = 0;   // cola (mirador..cathedral): [g_tailStart, g_solidVerts)
 static int g_winTailStart = 0;   // ventanas de agujas+cathedral: siempre
 // distancias (unidades de mundo). La niebla ya funde mas alla de ~98.
-static const float DRAW_DIST = 58.0f;   // rango de mundo mas corto -> mas FPS
-static const float LOD_DIST  = 26.0f;   // entre LOD_DIST y DRAW_DIST -> cuerpo sin detalle
-static const float BEHIND_CULL = 24.0f; // dz por detras de la camara -> descartar
+static const float DRAW_DIST = 70.0f;   // los 5 muros ENCIERRAN al jugador (centros hasta ~58) -> no cullear la sala por distancia
+static const float LOD_DIST  = 22.0f;   // los muros estan siempre mas lejos -> cuerpo sin detalle (barato)
+static const float BEHIND_CULL = 24.0f; // (sin uso: reemplazado por el cull por vector de camara en 1ra persona)
 
 // piramide de 4 caras (aguja) sin textura -- para personaje/robots (LineVertex)
 static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
@@ -222,6 +223,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "cand/wraith.h"
 #include "atmosphere.h"   // Vacio/Abismo (ruinas suspendidas) + siluetas colosales lejanas
 #include "weapons_fx.h"   // FX/comportamiento distinto por arma a distancia (10)
+#include "viewmodel.h"    // arma en 1ra persona (pistola de chispa) + spec de movimiento
 #include "gravity.h"      // 6 direcciones de gravedad (mecanica firma, directiva 22)
 #include "village_props.h" // props del pueblo (faroles calidos, rejas, tumbas) - BLAME!/Bloodborne
 #include "spirescape.h"    // MAR DENSO de agujas goticas en bruma (el look de la referencia)
@@ -461,17 +463,28 @@ static void buildCityBldg(TexVertex *buf, int &i, float cx, float cz,
 static void buildSolidWorld() {
     int i = 0;
     g_winVerts = 0;
-    // suelo de piedra (plano texturizado grande) bajo todo
+    // PISO TESELADO: grilla de quads chicos (NO un quad gigante). En hardware de
+    // funcion fija un triangulo enorme que cruza la camara/plano cercano se DESCARTA
+    // -> por eso en 1ra persona (camara dentro del plano) el piso desaparecia. Teselado:
+    // los quads detras se cullean limpio, los de adelante se dibujan. Cubre todo el mapa.
     {
-        // PISO: adoquin (genGround, alto contraste) con color CLARO (el MODULATE
-        // multiplica textura*color; textura ~90/255, asi que el color debe ser
-        // claro para que se lea). uv ~ 12 unidades/repeticion -> losas ~1.5u.
-        const float S = 240.0f;                 // suelo GRANDE: llega hasta la niebla -> NUNCA se ve vacio al mirar lejos
-        const float uv = 2.0f * S / 12.0f;      // densidad de losa fija a 12u (indep. de S) -> losas visibles cerca
-        addQuadT(g_solidWorld, i, -S,0.0f,-S,  S,0.0f,-S,  S,0.0f,S,  -S,0.0f,S,
-                 0.0f,0.0f, uv,uv, RGBA(168, 154, 136, 255));   // adoquin gotico calido-medio (funde con la niebla 104 en el horizonte)
+        const float HALF = 300.0f;              // medio-lado del piso: cubre patio + edificios + margen (el backdrop tapa mas alla)
+        const int   N    = 24;                  // 24x24 celdas -> cada celda 25u (chica: no cruza mal la camara)
+        const float CELL = (2.0f * HALF) / (float)N;  // 25u
+        const float invUV = 1.0f / 12.0f;       // textura cada 12u (continua entre celdas)
+        const unsigned int fcol = RGBA(240, 230, 214, 255);  // REPLACE ignora esto, pero queda por si se pasa a MODULATE
+        for (int gz = 0; gz < N; ++gz) {
+            float z0 = -HALF + CELL * (float)gz, z1 = z0 + CELL;
+            float v0 = z0 * invUV, v1 = z1 * invUV;
+            for (int gx = 0; gx < N; ++gx) {
+                float x0 = -HALF + CELL * (float)gx, x1 = x0 + CELL;
+                float u0 = x0 * invUV, u1 = x1 * invUV;
+                addQuadT(g_solidWorld, i, x0,0.0f,z0,  x1,0.0f,z0,  x1,0.0f,z1,  x0,0.0f,z1,
+                         u0,v0, u1,v1, fcol);
+            }
+        }
     }
-    g_floorCount = i;      // piso = [0, g_floorCount)  (siempre se dibuja)
+    g_floorCount = i;      // piso = [0, g_floorCount)  (siempre se dibuja; 24x24x6 = 3456 verts)
     g_srangeCount = 0;
     for (int s = 0; s < g_cityCount && g_srangeCount < 256; ++s) {
         if (i > 33500) break;
@@ -479,6 +492,7 @@ static void buildSolidWorld() {
         float dd = sqrtf(b.x * b.x + b.z * b.z);
         StructRange &r = g_srange[g_srangeCount];
         r.sStart = i; r.wStart = g_winVerts; r.cx = b.x; r.cz = b.z; r.sDetail = i;
+        r.rad = 0.5f * sqrtf(b.w * b.w + b.d * b.d);   // circulo que envuelve el footprint (margen del cull direccional)
         buildGothicBldg(g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail);
         r.sCount = i - r.sStart; r.wCount = g_winVerts - r.wStart;
         g_srangeCount++;
@@ -576,6 +590,7 @@ static int g_chUpperV = 0, g_chHeadV = 0, g_chLegV = 0, g_chArmV = 0, g_chSwordV
 // Construido con las primitivas organicas (cilindros conicos + elipsoides +
 // abrigo hasta la rodilla con piernas a la vista), NO cubos.
 static LineVertex __attribute__((aligned(16))) g_hero[3200];
+static LineVertex __attribute__((aligned(16))) g_vm[640];   // viewmodel del arma (1ra persona)
 static int g_heroV = 0;
 static void buildHero() {
     g_heroV = build_hunter(g_hero);
@@ -651,7 +666,8 @@ static void addChain(LineVertex *buf, int &i, float ax, float ay, float az,
 
 // generadores de textura + ambiente del agente (mas detallados)
 #include "agent_textures.h"
-#include "gothic_tex.h"    // genGothicFacade: fachada gotica (ventanas/arcos EN la textura, no geometria)
+#include "gothic_tex.h"    // genGothicFacade: fachada gotica antigua (queda para referencia)
+#include "facade_tex.h"    // genFacade: fachada BRUTALISTA (hormigon + ventanas pintadas, agente atmosfera)
 #include "ground_tex.h"    // genGround: adoquin/losas gotico para el PISO de todo el mundo
 
 // ---- SWIZZLE de texturas ----
@@ -691,7 +707,7 @@ static void buildStoneTex() { genStone(g_stoneTex, STEX); swizzleTex((unsigned c
 // fachada gotica (ventanas ojivales en la TEXTURA): los edificios simples la usan
 static unsigned int __attribute__((aligned(16))) g_facadeTex[STEX * STEX];
 static unsigned int __attribute__((aligned(16))) g_facadeTexS[STEX * STEX];
-static void buildFacadeTex() { genGothicFacade(g_facadeTex, STEX); swizzleTex((unsigned char*)g_facadeTexS, (const unsigned char*)g_facadeTex, STEX * 4, STEX); sceKernelDcacheWritebackAll(); }
+static void buildFacadeTex() { genFacade(g_facadeTex, STEX); swizzleTex((unsigned char*)g_facadeTexS, (const unsigned char*)g_facadeTex, STEX * 4, STEX); sceKernelDcacheWritebackAll(); }
 
 // adoquin/losas para el PISO de todo el mundo
 static unsigned int __attribute__((aligned(16))) g_groundTex[STEX * STEX];
@@ -789,13 +805,12 @@ static void gradQuadV(int x0, int x1, unsigned int cL, unsigned int cR) {
 }
 // vineta cinematografica: bordes oscuros que se funden hacia el centro
 static void drawVignette() {
-    const unsigned int e  = RGBA(0, 0, 0, 155);
-    const unsigned int eB = RGBA(0, 0, 0, 200);
+    const unsigned int e  = RGBA(0, 0, 0, 105);     // bordes mas suaves
     const unsigned int t  = RGBA(0, 0, 0, 0);
-    gradQuad(0, 70, e, t);                          // arriba
-    gradQuad(SCR_HEIGHT - 80, SCR_HEIGHT, t, eB);   // abajo (mas oscuro)
-    gradQuadV(0, 76, e, t);                         // izquierda
-    gradQuadV(SCR_WIDTH - 76, SCR_WIDTH, t, e);     // derecha
+    gradQuad(0, 56, e, t);                           // arriba
+    gradQuadV(0, 60, e, t);                          // izquierda
+    gradQuadV(SCR_WIDTH - 60, SCR_WIDTH, t, e);      // derecha
+    // SIN banda inferior: la vieja (alpha 200) aplastaba el PISO a ~0.22 -> se veia como VACIO.
 }
 
 // texto 2D (requiere textura de fuente activada por el que llama)
@@ -966,6 +981,13 @@ int main(void) {
     int   paused = 0, prevStart = 0;
     float walkPhase = 0.0f, idleT = 0.0f;   // animacion del personaje
     int   moving = 0;
+    // ===== PRIMERA PERSONA: mirada + head-bob + sway del arma (constantes del agente de jugabilidad) =====
+    float camPitch = 0.0f;                          // mirar arriba/abajo
+    float yawRate = 0.0f, pitchRate = 0.0f;         // suavizado de la mirada (alimenta el sway del arma)
+    float bobPhase = 0.0f, bobX = 0.0f, bobY = 0.0f;// head-bob segun velocidad
+    float vmSway = 0.0f, vmBob = 0.0f;              // offsets suavizados del arma en pantalla
+    const float TURN_MAX = 0.045f, LOOK_SMOOTH = 0.25f, PITCH_SPD = 0.030f, PITCH_CLAMP = 1.30f;
+    const float FP_SPEED = 0.11f, FP_ACCEL = 0.16f, FP_STOP = 0.20f, EYE_H = 1.7f, COURT = 38.0f, STRAFE_SIGN = 1.0f;
 
     int fps = 0, frameAccum = 0;
     long long lastTick = sceKernelGetSystemTimeWide();
@@ -1008,43 +1030,67 @@ int main(void) {
                 wishX = (ax / mag) * k;   // derecha = +X
                 wishZ = (ay / mag) * k;   // arriba (ay<0) = adelante (-Z)
             }
-            if (gravG == 0) {   // ===== MOVIMIENTO NORMAL (gravedad abajo, sin cambios) =====
-            // ===== aceleracion / friccion (fluido) =====
-            float targetVX = wishX * RUN_SPEED, targetVZ = wishZ * RUN_SPEED;
-            float ctrl = grounded ? ACCEL_GND : ACCEL_AIR;
-            velX += (targetVX - velX) * ctrl;
-            velZ += (targetVZ - velZ) * ctrl;
-            if (grounded && wishX == 0.0f && wishZ == 0.0f) { velX -= velX * STOP_FRIC; velZ -= velZ * STOP_FRIC; }
-            // ===== colision por ejes separados (desliza por muros) =====
-            float nx = playerX + velX;
-            if (!blocked(nx, playerZ, playerY)) playerX = nx; else velX = 0.0f;
-            float nz = playerZ + velZ;
-            if (!blocked(playerX, nz, playerY)) playerZ = nz; else velZ = 0.0f;
-            // ===== el PERSONAJE gira hacia donde avanza; la CAMARA NO rota =====
-            // Antes la camara rotaba al moverse y desorientaba: "adelante" en el
-            // stick terminaba moviendote de lado. Ahora la camara queda fija
-            // (solo sigue la POSICION) y solo el modelo encara el avance.
-            if (velX * velX + velZ * velZ > 0.004f) {
-                float moveAng = atan2f(velX, -velZ);
-                float dA = moveAng - heroYaw;
-                while (dA >  3.14159265f) dA -= 6.28318531f;
-                while (dA < -3.14159265f) dA += 6.28318531f;
-                heroYaw += dA * 0.20f;   // el personaje encara la direccion de avance
+            if (gravG == 0) {   // ===== PRIMERA PERSONA: nub gira+camina; D-pad strafe(izq/der)+mirar(arr/aba) =====
+            // -- girar (yaw) con nub X, suavizado (curva cuadratica: preciso al centro) --
+            float turnIn = 0.0f;
+            if (ax > DEADZONE || ax < -DEADZONE) {
+                float k = (ax < 0.0f ? -ax : ax); k = (k - DEADZONE) / (1.0f - DEADZONE); if (k > 1.0f) k = 1.0f;
+                turnIn = (ax < 0.0f ? -(k * k) : (k * k));
             }
-            }   // fin MOVIMIENTO NORMAL (gravG==0); el resto de gravedades cae abajo
+            yawRate += (turnIn * TURN_MAX - yawRate) * LOOK_SMOOTH;
+            camYaw  += yawRate;
+            // -- mirar arriba/abajo (pitch) con D-pad; vuelve al centro al soltar; clamp --
+            int lookU = (pad.Buttons & PSP_CTRL_UP) ? 1 : 0, lookD = (pad.Buttons & PSP_CTRL_DOWN) ? 1 : 0;
+            pitchRate += (((lookU ? PITCH_SPD : 0.0f) - (lookD ? PITCH_SPD : 0.0f)) - pitchRate) * LOOK_SMOOTH;
+            camPitch  += pitchRate;
+            if (!lookU && !lookD) camPitch *= 0.90f;
+            if (camPitch >  PITCH_CLAMP) camPitch =  PITCH_CLAMP;
+            if (camPitch < -PITCH_CLAMP) camPitch = -PITCH_CLAMP;
+            // -- avanzar/retroceder (nub Y) + strafe (D-pad izq/der), relativo a la MIRADA --
+            float fwdIn = 0.0f;
+            if (ay > DEADZONE || ay < -DEADZONE) {
+                float k = (ay < 0.0f ? -ay : ay); k = (k - DEADZONE) / (1.0f - DEADZONE); if (k > 1.0f) k = 1.0f;
+                fwdIn = (ay < 0.0f ? k : -k);   // nub arriba (ay<0) = adelante
+            }
+            float strafeIn = ((pad.Buttons & PSP_CTRL_RIGHT) ? 1.0f : 0.0f) - ((pad.Buttons & PSP_CTRL_LEFT) ? 1.0f : 0.0f);
+            float fX = sinf(camYaw), fZ = -cosf(camYaw);     // adelante (horizontal)
+            float rX = cosf(camYaw), rZ = sinf(camYaw);      // derecha
+            float wvx = (fX * fwdIn + rX * strafeIn * STRAFE_SIGN) * FP_SPEED;
+            float wvz = (fZ * fwdIn + rZ * strafeIn * STRAFE_SIGN) * FP_SPEED;
+            velX += (wvx - velX) * FP_ACCEL;
+            velZ += (wvz - velZ) * FP_ACCEL;
+            if (fwdIn == 0.0f && strafeIn == 0.0f && grounded) { velX -= velX * FP_STOP; velZ -= velZ * FP_STOP; }
+            // -- colision por ejes separados (desliza por muros) --
+            float nx = playerX + velX; if (!blocked(nx, playerZ, playerY)) playerX = nx; else velX = 0.0f;
+            float nz = playerZ + velZ; if (!blocked(playerX, nz, playerY)) playerZ = nz; else velZ = 0.0f;
+            // -- BORDES IMPASABLES: patio jugable +-COURT (agente mundo) -> nunca al vacio --
+            if (playerX >  COURT) playerX =  COURT; else if (playerX < -COURT) playerX = -COURT;
+            if (playerZ >  COURT) playerZ =  COURT; else if (playerZ < -COURT) playerZ = -COURT;
+            heroYaw = camYaw;   // disparo/melee usan heroYaw = hacia donde miras
+            // -- head-bob por velocidad --
+            float spd = sqrtf(velX * velX + velZ * velZ);
+            if (spd > 0.008f) bobPhase += 0.30f + 0.9f * (spd / FP_SPEED);
+            float bt = spd / FP_SPEED; if (bt > 1.0f) bt = 1.0f;
+            bobY = sinf(bobPhase * 2.0f) * 0.028f * bt;
+            bobX = sinf(bobPhase)        * 0.018f * bt;
+            // -- sway/bob del arma (suavizado: el arma sigue con retraso la mirada y se asienta al parar) --
+            float swayT = -yawRate * 1.4f - strafeIn * 0.9f + bobX * 0.6f;
+            float bobT  =  bobY - pitchRate * 0.20f;
+            vmSway += (swayT - vmSway) * 0.15f;
+            vmBob  += (bobT  - vmBob ) * 0.18f;
+            }   // fin PRIMERA PERSONA (gravG==0)
             // ===== ARMAS: L apunta, R dispara; D-pad cambia; Circulo melee =====
             // cambio de arma a distancia (D-pad izq/der) y melee (D-pad arr/aba)
             int dR = (pad.Buttons & PSP_CTRL_RIGHT) ? 1 : 0, dL = (pad.Buttons & PSP_CTRL_LEFT) ? 1 : 0;
             int dU = (pad.Buttons & PSP_CTRL_UP) ? 1 : 0,    dD = (pad.Buttons & PSP_CTRL_DOWN) ? 1 : 0;
-            if (dR && !prevDR) curRanged = (curRanged + 1) % kRangedCount;
-            if (dL && !prevDL) curRanged = (curRanged - 1 + kRangedCount) % kRangedCount;
-            if (dU && !prevDU) curMelee  = (curMelee + 1) % kMeleeCount;
-            if (dD && !prevDD) curMelee  = (curMelee - 1 + kMeleeCount) % kMeleeCount;
+            // D-pad reservado para strafe (izq/der) + mirar (arr/aba) en 1ra persona;
+            // el cambio de arma se movera a un modificador (p.ej. mantener L) mas adelante.
+            (void)dR; (void)dL; (void)dU; (void)dD;
             prevDR = dR; prevDL = dL; prevDU = dU; prevDD = dD;
             // Triangulo cicla la DIRECCION de gravedad (0=abajo .. 5=-Z)
-            { int tri = (pad.Buttons & PSP_CTRL_TRIANGLE) ? 1 : 0;
-              if (tri && !prevTri) { gravG = (gravG + 1) % 6; velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f; }
-              prevTri = tri; }
+            // GRAVEDAD (Triangulo) DESHABILITADA en 1ra persona por ahora: se reintroduce
+            // con camara gravedad-consciente en una tanda dedicada. gravG queda en 0.
+            { int tri = (pad.Buttons & PSP_CTRL_TRIANGLE) ? 1 : 0; (void)tri; prevTri = tri; }
 
             aiming = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
             if (aiming) {   // al apuntar, el personaje encara al frente (-Z)
@@ -1234,7 +1280,7 @@ int main(void) {
 #else
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
-        sceGumPerspective(72.0f, 16.0f / 9.0f, 0.8f, 300.0f); // R2: far 420->300 recorta el anillo externo de agujas + mejora Z (la bruma tapa el corte; la catedral z=-170 sigue entrando)
+        sceGumPerspective(66.0f, 16.0f / 9.0f, 0.5f, 280.0f); // 1ra persona: FOV natural (menos fill horizontal); far 280 (el backdrop 2D tapa el corte; catedral z=-170 entra)
 
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
@@ -1243,40 +1289,49 @@ int main(void) {
             ScePspFVector3 rot    = { DEG2RAD(48.0f), 0.0f, 0.0f };   // mira el PISO del mundo (adoquin)
             ScePspFVector3 camOff = { 0.0f, -20.0f, -10.0f };
             ScePspFVector3 pOff   = { 0.0f, -2.0f, -34.0f };
-#else
-            float gpit, gyaw, grol; gravCamEuler(gravG, DEG2RAD(8.0f), &gpit, &gyaw, &grol);
-            ScePspFVector3 rot    = { gpit, gyaw + camYaw, grol };   // reorienta segun gravedad
-            ScePspFVector3 camOff = { 0.0f, -4.8f, -11.5f };         // cerca pero deja ver el mar de agujas al frente
-            ScePspFVector3 pOff   = { -playerX, -playerY, -playerZ };
-#endif
-            // orden correcto de camara orbital: offset (espacio camara) -> giro
-            // -> centrar en el jugador. Asi el jugador NO se va al girar.
             sceGumTranslate(&camOff);
             sceGumRotateXYZ(&rot);
             sceGumTranslate(&pOff);
+#else
+            // PRIMERA PERSONA (lookAt): el "adelante" del movimiento y de la camara son
+            // el MISMO vector por construccion -> sin bugs de signo al girar. Ojo a la
+            // altura de la cabeza + head-bob; pivota en el ojo (pitch natural).
+            float cp = cosf(camPitch), sp = sinf(camPitch);
+            float sy = sinf(camYaw),   cy = cosf(camYaw);
+            ScePspFVector3 eye = { playerX + bobX * 0.5f, playerY + EYE_H + bobY, playerZ };
+            ScePspFVector3 fwd = { cp * sy, sp, -cp * cy };
+            ScePspFVector3 ctr = { eye.x + fwd.x, eye.y + fwd.y, eye.z + fwd.z };
+            ScePspFVector3 up  = { 0.0f, 1.0f, 0.0f };
+            sceGumLookAt(&eye, &ctr, &up);
+#endif
         }
 
         sceGumMatrixMode(GU_MODEL);
         sceGumLoadIdentity();
 
+        // vector ADELANTE de la camara en XZ (yaw=0 mira -Z). Cull direccional: descarta
+        // estructuras cuyo footprint quedo detras de la mirada (funciona en cualquier giro).
+        const float fwdX = sinf(camYaw);
+        const float fwdZ = -cosf(camYaw);
+
         // piedra texturizada (torres, agujas, muros, suelo, plataforma)
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexMode(GU_PSM_8888, 0, 0, GU_TRUE);   // GU_TRUE = texturas SWIZZLED (PSP real)
         sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);   // PISO: adoquin gotico (genGround, alto contraste: juntas oscuras + losas)
-        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
+        sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGB);   // PISO en REPLACE: brillo = textura directa (el MODULATE lo dejaba casi negro = vacio)
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);   // 1 texel/pixel: gran ahorro de fill en PSP real
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
         // --- MUNDO SOLIDO con CULLING por estructura + LOD (solo lo cercano/al frente) ---
         sceGuDisable(GU_CULL_FACE);  // back-face culling OFF: winding MIXTO en este mundo -> cullear hacia DESAPARECER el piso (en HW/GL) y ver-por-dentro los muros. El ahorro real de FPS lo da el culling por DISTANCIA/LOD de abajo (seguro).
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso: SIEMPRE visible
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso teselado: SIEMPRE visible (REPLACE = brillo de la textura)
+        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);   // el resto del mundo vuelve a MODULATE (textura*color para tinte/niebla)
         sceGuTexImage(0, STEX, STEX, STEX, g_facadeTexS);   // EDIFICIOS: textura de FACHADA gotica (ventanas en la imagen)
         for (int s = 0; s < g_srangeCount; ++s) {
             const StructRange &r = g_srange[s];
             float ddx = r.cx - playerX, ddz = r.cz - playerZ;
-            if (ddz > BEHIND_CULL) continue;                    // detras de la camara (fija mira -Z)
+            if (ddx * fwdX + ddz * fwdZ < -r.rad) continue;     // footprint completo detras de la mirada -> cull (por yaw)
             float d2 = ddx * ddx + ddz * ddz;
             if (d2 > DRAW_DIST * DRAW_DIST) continue;           // demasiado lejos (la niebla ya lo tapa)
-            { float axl = ddx < 0 ? -ddx : ddx; if (ddz < -1.0f && d2 > 625.0f && axl > -ddz * 2.0f) continue; } // muy a los lados (fuera del campo de vision)
             if (d2 > LOD_DIST * LOD_DIST)
                 sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, r.sDetail - r.sStart, 0, g_solidWorld + r.sStart); // LOD: cuerpo sin detalle
             else
@@ -1284,7 +1339,9 @@ int main(void) {
         }
         sceGuTexImage(0, STEX, STEX, STEX, g_stoneTexS);   // vuelve a PIEDRA para agujas/cola
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_spireEnd - g_spireStart, 0, g_solidWorld + g_spireStart); // agujas (fondo)
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_solidVerts - g_tailStart, 0, g_solidWorld + g_tailStart);  // cola + cathedral
+        // cola (arcos/puente/catedral) agrupada al NORTE (-Z): saltar si miras claramente al sur
+        if (fwdZ < 0.30f)   // fwdZ>~0 = mirando +Z (sur) -> todo el racimo -Z queda detras
+            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_solidVerts - g_tailStart, 0, g_solidWorld + g_tailStart);
 
         // ventanas: textura de vidriera (CLAMP). Solo torres CERCANAS + agujas/cathedral (siempre).
         sceGuDisable(GU_CULL_FACE);  // ventanas (addWinRow) tienen winding INCONSISTENTE -> NO cullear; metal tambien queda OFF
@@ -1294,7 +1351,7 @@ int main(void) {
             const StructRange &r = g_srange[s];
             if (r.wCount <= 0) continue;
             float ddx = r.cx - playerX, ddz = r.cz - playerZ;
-            if (ddz > BEHIND_CULL) continue;
+            if (ddx * fwdX + ddz * fwdZ < -r.rad) continue;     // cull por yaw (consistente con el cuerpo)
             float d2 = ddx * ddx + ddz * ddz;
             if (d2 > LOD_DIST * LOD_DIST) continue;             // ventanas solo de torres cercanas
             sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, r.wCount, 0, g_win + r.wStart);
@@ -1317,28 +1374,16 @@ int main(void) {
         sceGuDisable(GU_CULL_FACE);  // braseros (g_env) + HUNTER + balas: winding NO verificado -> culling OFF (seguro)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_envVerts, 0, g_env);
 
-        // ---- HUNTER (idle sutil: leve balanceo) ; encara heroYaw ----
-        {
-            // camina: rebote SUAVE (no salto) + leve balanceo al avanzar
-            float bobY = moving ? (sinf(walkPhase) * 0.045f) : (sinf(idleT) * 0.03f);
-            sceGumLoadIdentity();
-            ScePspFVector3 pp = { playerX, playerY + bobY, playerZ };
-            sceGumTranslate(&pp);
-            ScePspFVector3 gm = { 0.0f, 0.0f, 0.0f };   // reorienta el modelo (pies hacia gravDir)
-            if (gravG == 1) gm.z = 3.14159f; else if (gravG == 2) gm.z = -1.5708f; else if (gravG == 3) gm.z = 1.5708f;
-            else if (gravG == 4) gm.x = 1.5708f; else if (gravG == 5) gm.x = -1.5708f;
-            sceGumRotateXYZ(&gm);
-            float sway = moving ? (sinf(walkPhase * 0.5f) * 0.03f) : 0.0f;
-            ScePspFVector3 fr = { (moving ? 0.045f : 0.0f), heroYaw + sinf(idleT * 0.6f) * 0.02f, sway };
-            sceGumRotateXYZ(&fr);
-            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_heroV, 0, g_hero);
-        }
+        // ---- PRIMERA PERSONA: el personaje NO se dibuja (la camara esta en su cabeza).
+        //      El arma se dibuja como viewmodel en un pase propio, justo antes del HUD.
 
         // recursos: brillan al acercarse (seccion 12)
         for (int r = 0; r < kResourceCount && r < 64; ++r) {
             if (collected[r]) continue;
             float dx = kResources[r].x * WSCALE - playerX, dz = kResources[r].z * WSCALE - playerZ;
             float d = sqrtf(dx * dx + dz * dz);
+            if (d > 16.0f) continue;                          // gema lejos -> sin draw-call/matriz por gema
+            if (dx * fwdX + dz * fwdZ < -1.5f) continue;      // gema detras de la mirada
             float t = (d < 14.0f) ? (1.0f - d / 14.0f) : 0.0f; // 0 lejos .. 1 cerca
             int br = 60 + (int)(190 * t);
             unsigned int col = RGBA(br, 90 + (int)(95 * t), 140 + (int)(95 * t), 255);
@@ -1395,6 +1440,23 @@ int main(void) {
                         reach * 1.2f, 0.28f, reach * 1.2f, RGBA(205, 225, 255, 255));
             sceGumLoadIdentity();
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
+        }
+
+        // ---- ARMA en 1ra persona (viewmodel): pase propio, ENCIMA del mundo ----
+        sceGuClear(GU_DEPTH_BUFFER_BIT);            // el arma no la ocluyen los muros
+        sceGuDisable(GU_TEXTURE_2D);
+        sceGumMatrixMode(GU_PROJECTION);
+        sceGumLoadIdentity();
+        sceGumPerspective(70.0f, 16.0f / 9.0f, 0.05f, 50.0f);   // near muy corto: el arma esta pegada a la camara
+        sceGumMatrixMode(GU_VIEW);
+        sceGumLoadIdentity();
+        sceGumMatrixMode(GU_MODEL);
+        sceGumLoadIdentity();
+        { ScePspFVector3 zf = { 1.0f, 1.0f, -1.0f }; sceGumScale(&zf); }   // arma autorada con adelante +Z -> escena -Z
+        {
+            int vmV = buildViewmodel(g_vm, vmSway, vmBob);
+            sceGuDisable(GU_CULL_FACE);
+            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vmV, 0, g_vm);
         }
 
         // ---------- HUD (2D) ----------

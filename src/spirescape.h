@@ -1,7 +1,17 @@
 #pragma once
-// PROJECT NOCTIS: BOSQUE DENSO DE AGUJAS GOTICAS -> el telon de fondo definitorio. Cientos de siluetas de torres/agujas finas apinadas que se pierden en la bruma calida-gris (Cathedral Ward de Bloodborne x escala BLAME!), vistas desde un balcon que las domina. Reparto por espiral aurea + hashing entero (determinista, sin rand). <= 4200 verts.
+// PROJECT NOCTIS -- TELON DE FONDO = MEGAESTRUCTURA BRUTALISTA ENVOLVENTE.
+// El patio esta DENTRO del castillo-BLAME!: pocas masas GRANDES (torres
+// monoliticas + losas escalonadas coronadas por aguja gotica) + puentes
+// horizontales (firma BLAME!) anillando el patio en TODAS las direcciones,
+// r ~90..420. Fill-rate barato: pocos objetos, siluetas enormes. Fade fuerte
+// por DISTANCIA (fadeToVoid con pseudo-distancia comprimida) y por ALTURA
+// (spireSky, replica de heightHaze con la constante HAZE ya en scope: heightHaze
+// se define despues de este include, no se puede llamar aqui) -> perspectiva
+// aerea: lo lejano/alto se funde en la bruma calida, JAMAS vacio negro.
+// Determinista: espiral aurea + hashing entero, sin rand, sin asignacion.
+// Presupuesto ajustado: 3084 verts (<= 3500).
 
-// hash entero de 32 bits (overflow unsigned = definido): mezcla fuerte para altura/ancho/color/jitter/tier.
+// hash entero de 32 bits (overflow unsigned = definido): mezcla fuerte.
 static inline unsigned int spireHash(unsigned int x) {
     x = x * 2654435761u; x ^= x >> 15;
     x = x * 2246822519u; x ^= x >> 13;
@@ -9,107 +19,107 @@ static inline unsigned int spireHash(unsigned int x) {
     return x;
 }
 
-// color gris-pardo calido desaturado (silueta en niebla): mas ALTO = mas claro (bruma aerea). Nunca azul frio: r>=g>=b siempre.
-static inline unsigned int spireColor(float h, unsigned int hc) {
-    float t = (h - 70.0f) / 350.0f;                 // 70..420 -> 0..1
-    if (t < 0.0f) t = 0.0f; if (t > 1.0f) t = 1.0f; // clamp
-    int j = (int)(hc % 9u) - 4;                     // jitter -4..+4 (igual en los 3 canales -> conserva calidez)
-    int r = 50 + (int)(34.0f * t) + j;              // 50..84 (lejos/oscuro .. cerca/alto)
-    int g = 48 + (int)(32.0f * t) + j;              // 48..80
-    int b = 46 + (int)(28.0f * t) + j;              // 46..74
-    if (r < 0) r = 0; if (r > 255) r = 255;
-    if (g < 0) g = 0; if (g > 255) g = 255;
-    if (b < 0) b = 0; if (b > 255) b = 255;
-    return RGBA(r, g, b, 255);
+// pseudo-distancia COMPRIMIDA: mapea el radio del anillo (90..420) dentro del
+// rango util de fadeToVoid (26..98) para que el fade GRADUE a lo ancho del
+// campo (cerca = silueta oscura legible, lejos = casi-niebla) en vez de saturar
+// de golpe. r*0.22: r=90 -> ~sin fade (oscuro); r=420 -> ~niebla.
+static inline float spireFog(float r) { return r * 0.22f; }
+
+// niebla por ALTURA (identica a heightHaze de main.cpp, replicada porque aquel
+// se declara DESPUES de este include). HAZE(90,84,74) ya esta en scope.
+static inline unsigned int spireSky(unsigned int base, float y) {
+    float t = y / 190.0f; if (t < 0.0f) t = 0.0f; if (t > 0.82f) t = 0.82f;
+    int br = base & 0xFF, bg = (base >> 8) & 0xFF, bb = (base >> 16) & 0xFF;
+    int cr = HAZE & 0xFF, cg = (HAZE >> 8) & 0xFF, cb = (HAZE >> 16) & 0xFF;
+    int r  = br + (int)((cr - br) * t);
+    int g  = bg + (int)((cg - bg) * t);
+    int b2 = bb + (int)((cb - bb) * t);
+    return RGBA(r, g, b2, 255);
+}
+
+// pizarra calida casi-negra -> fadeToVoid(distancia) + spireSky(altura) la
+// disuelven en la bruma. r>=g>=b siempre (calido, nunca azul frio).
+static inline unsigned int spireMat(unsigned int base, float r, float ymid) {
+    return spireSky(fadeToVoid(base, spireFog(r)), ymid);
 }
 
 static int buildSpirescape(LineVertex *buf) {
     int i = 0;
-    const float GA = 2.39996f;                      // angulo aureo -> dispersion irregular sin arcos visibles
+    const float GA = 2.39996f;                         // angulo aureo: cubre 360 sin arcos visibles
 
-    // ================= AGUJAS SUELTAS (130) =================
-    // cada k: espiral aurea + radio hash (solapan en pantalla = bosque). Sesgo de densidad a -Z (frente de camara)
-    // plegando ~70% de las que caen detras hacia el frente, dejando ~30% detras para ENVOLVER al jugador.
-    for (int k = 0; k < 32; ++k) {   // aun menos agujas (fill-rate PSP); igual se lee el bosque
-        const unsigned int hT = spireHash((unsigned int)(k * 4 + 1));   // tier (fija el conteo de verts)
-        const unsigned int hR = spireHash((unsigned int)(k * 9 + 2));   // radio
-        const unsigned int hW = spireHash((unsigned int)(k * 9 + 3));   // ancho
-        const unsigned int hJ = spireHash((unsigned int)(k * 9 + 4));   // jitter angular
-        const unsigned int hF = spireHash((unsigned int)(k * 9 + 5));   // pliegue al frente
-        const unsigned int hH = spireHash((unsigned int)(k * 9 + 7));   // altura
-        const unsigned int hC = spireHash((unsigned int)(k * 9 + 8));   // color
+    // pizarra calida base (todas las masas parten de aqui; el fade la disuelve)
+    const unsigned int SLATE = warmTint(RGBA(56, 50, 42, 255)); // -> ~(67,51,34): pardo oscuro calido
 
-        float a = (float)k * GA + ((float)(hJ % 100) / 100.0f - 0.5f) * 0.22f;
-        float r = 55.0f + (float)(hR % 326u);                          // 55..380
-        float cx = cosf(a) * r;
-        float cz = sinf(a) * r;
-        if (cz > 0.0f && (hF % 10u) < 7u) cz = -cz;                     // sesgo -Z (frente denso, retaguardia rala)
+    // ================= MASAS BRUTALISTAS (30) =================
+    // 2 torres + 2 losas + 1 torronazo por cada 5 (k%5): presupuesto EXACTO.
+    // Reparto por espiral aurea en TODO el circulo (la camara gira libre ahora:
+    // sin sesgo -Z), radio 90..419 -> se solapan a distintas profundidades.
+    for (int k = 0; k < 30; ++k) {
+        const unsigned int hR = spireHash((unsigned int)(k * 7 + 1));   // radio
+        const unsigned int hH = spireHash((unsigned int)(k * 7 + 2));   // altura
+        const unsigned int hW = spireHash((unsigned int)(k * 7 + 3));   // ancho/fondo
+        const unsigned int hJ = spireHash((unsigned int)(k * 7 + 4));   // jitter angular
+        const unsigned int hC = spireHash((unsigned int)(k * 7 + 5));   // jitter color
 
-        // altura: mayoria 70..219, ~22% torres-catedral 240..419 (agujas altisimas dispersas en la multitud)
-        float h = ((hH % 100u) < 22u) ? (240.0f + (float)(hH % 180u))
-                                      : ( 70.0f + (float)(hH % 150u));
-        float w = 2.0f + (float)(hW % 4u);                             // 2..5: finas, tipo aguja
-        const unsigned int col = spireColor(h, hC);
+        const float a  = (float)k * GA + ((float)(hJ % 100) / 100.0f - 0.5f) * 0.26f;
+        const float r  = 90.0f + (float)(hR % 330u);   // 90..419: envuelve todas las direcciones
+        const float cx = cosf(a) * r;
+        const float cz = sinf(a) * r;
 
-        const unsigned int tier = hT % 100u;
-        if (tier < 86u) {
-            // NEEDLE: la aguja ES la torre -> una sola piramide finisima y altisima (12)
-            addPyramid(buf, i, cx, 0.0f, cz, w * 0.9f, w * 0.9f, h, brighten(col, 1.06f));
-        } else if (tier < 97u) {
-            // FUSTE SIMPLE: caja delgada + aguja piramidal ALTA (30 + 12)
-            const float bh = h * 0.60f;
-            addSolidBox(buf, i, cx, 0.0f, cz, w, w, bh, col);
-            addPyramid (buf, i, cx, bh,  cz, w, w, h * 0.46f, brighten(col, 1.12f));
+        // color por masa: leve jitter calido sobre la pizarra (r>=g>=b conservado)
+        const unsigned int base = brighten(SLATE, 1.0f + ((float)(hC % 11u) - 5.0f) * 0.02f);
+
+        const int type = k % 5;
+        if (type == 0 || type == 1) {
+            // TORRE MONOLITICA: 3 cajas ahusadas + aguja gotica alta (90 + 12 = 102)
+            const float H  = 130.0f + (float)(hH % 190u);              // 130..319
+            const float W  = 22.0f + (float)(hW % 20u);               // 22..41
+            const float D  = W * (0.80f + (float)((hW >> 5) % 5u) * 0.06f);
+            const float h1 = H * 0.50f, h2 = H * 0.30f, h3 = H - h1 - h2;
+            addSolidBox(buf, i, cx, 0.0f,     cz, W,        D,        h1, spireMat(base,               r, h1 * 0.5f));
+            addSolidBox(buf, i, cx, h1,       cz, W * 0.72f, D * 0.72f, h2, spireMat(brighten(base, 1.05f), r, h1 + h2 * 0.5f));
+            addSolidBox(buf, i, cx, h1 + h2,  cz, W * 0.50f, D * 0.50f, h3, spireMat(brighten(base, 1.10f), r, h1 + h2 + h3 * 0.5f));
+            addPyramid (buf, i, cx, H,        cz, W * 0.50f, D * 0.50f, H * 0.55f, spireMat(base, r, H));
+        } else if (type == 2 || type == 3) {
+            // LOSA ESCALONADA BRUTALISTA: 2 cajas ANCHAS + aguja corta (60 + 12 = 72)
+            const float H  = 100.0f + (float)(hH % 150u);              // 100..249
+            const float W  = 34.0f + (float)(hW % 30u);               // 34..63 (masa ancha)
+            const float D  = 20.0f + (float)((hW >> 6) % 16u);        // 20..35
+            const float h1 = H * 0.58f, h2 = H - h1;
+            addSolidBox(buf, i, cx, 0.0f, cz, W,        D,        h1, spireMat(base,               r, h1 * 0.5f));
+            addSolidBox(buf, i, cx, h1,   cz, W * 0.74f, D * 0.90f, h2, spireMat(brighten(base, 1.06f), r, h1 + h2 * 0.5f));
+            addPyramid (buf, i, cx, H,    cz, W * 0.30f, D * 0.60f, H * 0.35f, spireMat(base, r, H));
         } else {
-            // FUSTE AHUSADO: 2 cajas que se estrechan + aguja (30 + 30 + 12) -> torre-aguja imponente
-            const float b1 = h * 0.40f, b2 = h * 0.34f;
-            addSolidBox(buf, i, cx, 0.0f,     cz, w,        w,        b1, col);
-            addSolidBox(buf, i, cx, b1,       cz, w * 0.68f, w * 0.68f, b2, brighten(col, 1.06f));
-            addPyramid (buf, i, cx, b1 + b2,  cz, w * 0.68f, w * 0.68f, h * 0.36f, brighten(col, 1.12f));
+            // TORRONAZO CATEDRAL: 3 cajas + aguja alta + 2 pinaculos flanqueantes (90 + 12 + 24 = 126)
+            const float H  = 220.0f + (float)(hH % 190u);              // 220..409: hitos que salen de la vista
+            const float W  = 30.0f + (float)(hW % 20u);               // 30..49
+            const float D  = W * 0.9f;
+            const float h1 = H * 0.46f, h2 = H * 0.30f, h3 = H - h1 - h2;
+            addSolidBox(buf, i, cx, 0.0f,     cz, W,        D,        h1, spireMat(base,               r, h1 * 0.5f));
+            addSolidBox(buf, i, cx, h1,       cz, W * 0.74f, D * 0.74f, h2, spireMat(brighten(base, 1.05f), r, h1 + h2 * 0.5f));
+            addSolidBox(buf, i, cx, h1 + h2,  cz, W * 0.52f, D * 0.52f, h3, spireMat(brighten(base, 1.10f), r, h1 + h2 + h3 * 0.5f));
+            addPyramid (buf, i, cx, H,        cz, W * 0.52f, D * 0.52f, H * 0.60f, spireMat(base, r, H));
+            const unsigned int cp = spireMat(base, r, H * 0.9f);
+            addPyramid (buf, i, cx - W * 0.34f, h1 + h2, cz, W * 0.20f, W * 0.20f, H * 0.34f, cp);
+            addPyramid (buf, i, cx + W * 0.34f, h1 + h2, cz, W * 0.20f, W * 0.20f, H * 0.34f, cp);
         }
     }
 
-    // ================= CATEDRALES / HITOS (14) =================
-    // cuerpo escalonado (2 cajas) coronado por un RACIMO de 4 agujas finas: los grandes referentes del gentio.
-    for (int c = 0; c < 3; ++c) {   // menos catedrales de fondo (FPS)
-        const unsigned int hA = spireHash((unsigned int)(c * 11 + 101));  // angulo/radio
-        const unsigned int hB = spireHash((unsigned int)(c * 11 + 102));  // dimensiones
-        const unsigned int hF = spireHash((unsigned int)(c * 11 + 103));  // pliegue frente
-        const unsigned int hN = spireHash((unsigned int)(c * 11 + 104));  // alturas del racimo
-        const unsigned int hC = spireHash((unsigned int)(c * 11 + 105));  // color
-
-        float a = (float)c * (GA * 1.7f) + 0.6f;
-        float r = 70.0f + (float)(hA % 280u);                            // 70..349 (dentro del campo)
-        float cx = cosf(a) * r;
-        float cz = sinf(a) * r;
-        if (cz > 0.0f && (hF % 10u) < 7u) cz = -cz;                       // tambien sesgadas al frente
-
-        float H = 160.0f + (float)(hB % 180u);                           // 160..339: masas altas = hitos
-        float W = 14.0f + (float)((hB >> 5) % 12u);                      // 14..25: mas anchas
-        float D = W * (0.82f + (float)((hB >> 9) % 6u) * 0.05f);         // 0.82..1.07 * W
-        const unsigned int col = spireColor(H, hC);
-
-        // cuerpo: 2 cajas escalonadas (60)
-        const float bh1 = H * 0.55f, bh2 = H * 0.28f;
-        addSolidBox(buf, i, cx, 0.0f, cz, W,          D,          bh1, col);
-        addSolidBox(buf, i, cx, bh1,  cz, W * 0.78f,  D * 0.78f,  bh2, brighten(col, 1.05f));
-        const float top = bh1 + bh2;                                     // ~0.83 H
-
-        // aguja CENTRAL del racimo: fuste fino + piramide alta (30 + 12)
-        const float cw = W * 0.22f;
-        const float ch = H * 0.42f;
-        addSolidBox(buf, i, cx + W * 0.06f, top,             cz - D * 0.04f, cw, cw, ch * 0.66f, brighten(col, 1.02f));
-        addPyramid (buf, i, cx + W * 0.06f, top + ch * 0.66f, cz - D * 0.04f, cw, cw, ch * 0.60f, brighten(col, 1.14f));
-
-        // 3 agujas FLANQUEANTES (piramide sola, alturas variadas por hash) (12 * 3)
-        const float ox[3] = { -W * 0.34f,  W * 0.34f, -W * 0.10f };
-        const float oz[3] = { -D * 0.28f,  D * 0.30f,  D * 0.36f };
-        const float nw = W * 0.13f;
-        for (int s = 0; s < 3; ++s) {
-            float nh = H * (0.30f + (float)((hN >> (s * 4)) % 5u) * 0.04f); // 0.30..0.46 H
-            addPyramid(buf, i, cx + ox[s], top, cz + oz[s], nw, nw, nh, brighten(col, 1.10f));
-        }
+    // ================= PUENTES BLAME! (8) =================
+    // losas horizontales colgadas en alto que "cruzan" entre torres lejanas:
+    // firma de megaestructura. Caja larga y fina (axis-aligned, alterna X/Z).
+    for (int b = 0; b < 8; ++b) {
+        const unsigned int hb = spireHash((unsigned int)(b * 13 + 201));
+        const float a   = (float)b * GA + 0.9f;
+        const float r   = 140.0f + (float)(hb % 190u);          // 140..329
+        const float cx  = cosf(a) * r;
+        const float cz  = sinf(a) * r;
+        const float yb  = 55.0f + (float)((hb >> 5) % 130u);    // 55..184 de altura
+        const float len = 80.0f + (float)((hb >> 9) % 90u);     // 80..169 de largo
+        const unsigned int c = spireMat(SLATE, r, yb);
+        if (b & 1) addSolidBox(buf, i, cx, yb, cz, len,  7.0f, 5.0f, c);   // largo en X
+        else       addSolidBox(buf, i, cx, yb, cz, 7.0f, len,  5.0f, c);   // largo en Z
     }
 
-    return i;   // 130 agujas + 14 catedrales(racimo x4) = 4122 verts
+    return i;   // 30 masas (12 torres + 12 losas + 6 torronazos) + 8 puentes = 3084 verts
 }

@@ -1,7 +1,24 @@
 #pragma once
-// NOCTIS - geometria de ESCALA/ATMOSFERA: ruinas suspendidas en el abismo + horizonte de monolitos que se disuelven en la niebla (megaestructura BLAME!, directiva 5 y 7).
+// NOCTIS - geometria de ESCALA/ATMOSFERA: ruinas suspendidas en el abismo +
+// horizonte de monolitos COLOSALES que se disuelven en la niebla (megaestructura
+// BLAME!). El anillo lejano CIERRA los 360 grados: ninguna direccion muestra
+// vacio. Determinista (espiral aurea / hashing entero), sin rand, sin asignacion.
 
-// Ruinas colgando en el vacio + motas de luz distantes; sesgadas HACIA ABAJO para que mirar al abismo revele estructuras que se pierden en la oscuridad.
+// niebla por ALTURA para el anillo lejano (replica de heightHaze de main.cpp,
+// que se declara DESPUES de este include; HAZE ya esta en scope). Las cimas
+// colosales se funden en el cielo brumoso -> "salen de la vista".
+static inline unsigned int farSky(unsigned int base, float y) {
+    float t = y / 260.0f; if (t < 0.0f) t = 0.0f; if (t > 0.88f) t = 0.88f;
+    int br = base & 0xFF, bg = (base >> 8) & 0xFF, bb = (base >> 16) & 0xFF;
+    int cr = HAZE & 0xFF, cg = (HAZE >> 8) & 0xFF, cb = (HAZE >> 16) & 0xFF;
+    int r  = br + (int)((cr - br) * t);
+    int g  = bg + (int)((cg - bg) * t);
+    int b2 = bb + (int)((cb - bb) * t);
+    return RGBA(r, g, b2, 255);
+}
+
+// Ruinas colgando en el vacio + motas de luz distantes; sesgadas HACIA ABAJO
+// para que mirar al abismo revele estructuras que se pierden en la oscuridad.
 static int buildVoidLayer(LineVertex *buf) {
     int i = 0;
     const float GA = 2.39996f; // angulo aureo -> dispersion irregular, "antigua e incomprensible"
@@ -64,39 +81,40 @@ static int buildVoidLayer(LineVertex *buf) {
         addSolidBox(buf, i, mx, my, mz, s, s, s, lc);
     }
 
-    return i;
+    return i;   // 20 ruinas + 24 motas = 1440 verts
 }
 
-// Anillo de monolitos COLOSALES en el horizonte: cajas conicas apiladas + aguja, apenas mas claros que la niebla para leerse como escala extrema disolviendose en bruma.
+// Anillo de monolitos COLOSALES cerrando los 360 grados del horizonte. Impostores
+// muy fundidos en niebla (casi el color de HAZE) -> escala extrema, coste minimo.
+// CLAVE anti-vacio: reparto en pasos ANGULARES REGULARES (sin jitter angular) y
+// planta CUADRADA de lado s = r*0.55, cuya anchura angular (~0.55 rad) SUPERA el
+// paso (2*PI/18 = 0.349 rad) en cualquier orientacion -> impostores adyacentes
+// SIEMPRE se solapan: NINGUNA direccion de brujula deja ver vacio.
 static int buildFarSilhouettes(LineVertex *buf) {
     int i = 0;
-    const int N = 14;
+    const int   N    = 18;
+    const float STEP = 6.2831853f / (float)N;   // 20 grados exactos entre impostores
+
+    // pizarra calida base; el fade la lleva casi al color de la niebla (r>=g>=b)
+    const unsigned int BASE = warmTint(RGBA(70, 64, 55, 255));
 
     for (int k = 0; k < N; ++k) {
-        // reparto irregular en todo el circulo: base regular + jitter determinista
-        const float ang = (float)k * (6.2831853f / (float)N) + (float)(k % 3) * 0.42f;
-        const float r   = 200.0f + (float)((k * 97) % 220);   // 200..419
+        const float ang = (float)k * STEP;                   // paso EXACTO -> anillo sin brechas
+        const float r   = 320.0f + (float)((k * 97) % 110);  // 320..429
         const float cx  = cosf(ang) * r;
         const float cz  = sinf(ang) * r;
 
-        const float h     = 300.0f + (float)((k * 151) % 600);// 300..899: algunas verdaderamente gigantes
-        const float baseY = -(float)((k * 53) % 40);          // 0 .. -39: algo hundidas bajo el horizonte
-        const float w     = 46.0f + (float)((k * 71) % 54);   // 46..99
+        const float s = r * 0.55f;                           // planta cuadrada: cobertura angular > STEP
+        const float H = 300.0f + (float)((k * 151) % 420);   // 300..719: colosales, salen de la vista
 
-        // casi el color de la niebla; las mas altas, un pelo mas claras (bruma aerea = lejania)
-        const float t  = (h - 300.0f) / 600.0f;               // 0..1
-        const int   rr = 24 + (int)(10.0f * t);               // 24..34
-        const int   gg = 26 + (int)(10.0f * t);               // 26..36
-        const int   bb = 36 + (int)(12.0f * t);               // 36..48
-        const unsigned int col = RGBA(rr, gg, bb, 255);
+        // color casi-niebla, graduado por distancia (mas lejos = mas fundido)
+        const unsigned int col = fadeToVoid(BASE, r * 0.24f);
 
-        // pila conica (3 cajas ahusadas) + aguja: monolito lejano, no edificio detallado
-        const float h1 = h * 0.50f, h2 = h * 0.30f, h3 = h - h1 - h2;
-        addSolidBox(buf, i, cx, baseY,            cz, w,         w,         h1, col);
-        addSolidBox(buf, i, cx, baseY + h1,       cz, w * 0.70f, w * 0.70f, h2, brighten(col, 1.06f));
-        addSolidBox(buf, i, cx, baseY + h1 + h2,  cz, w * 0.46f, w * 0.46f, h3, brighten(col, 1.12f));
-        addPyramid (buf, i, cx, baseY + h,        cz, w * 0.46f, w * 0.46f, h * 0.26f, brighten(col, 1.18f));
+        const float h1 = H * 0.55f, h2 = H * 0.30f, h3 = H - h1 - h2;
+        addSolidBox(buf, i, cx, 0.0f,      cz, s,         s,         h1, farSky(col,               h1 * 0.5f));
+        addSolidBox(buf, i, cx, h1,        cz, s * 0.64f, s * 0.64f, h2, farSky(brighten(col, 1.06f), h1 + h2 * 0.5f));
+        addPyramid (buf, i, cx, h1 + h2,   cz, s * 0.64f, s * 0.64f, h3 + H * 0.10f, farSky(brighten(col, 1.10f), H));
     }
 
-    return i;
+    return i;   // 18 impostores * (2 cajas + aguja = 72) = 1296 verts; anillo 360 continuo
 }
