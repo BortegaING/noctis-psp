@@ -38,7 +38,7 @@ static const unsigned int HAZE = RGBA(90, 84, 74, 255); // bruma calida: la geom
 // UNO de GU_CW/GU_CCW es el correcto para TODOS los pases a la vez. Arranca en CW.
 // >>> Si al capturar se ven las paredes/piso POR DENTRO (see-through), cambia esta
 //     UNICA linea a GU_CCW y recompila: queda resuelto para todo. <<<
-#define NOCTIS_FRONTFACE GU_CW
+#define NOCTIS_FRONTFACE GU_CCW
 #define WSCALE 2.25f  // separa los edificios (menos juntos) y mas caen fuera de vista (mas FPS)
 #define VIEWER_MODE 0     // 1 = visor de personaje; 0 = juego
 #define HERO_SHOWCASE 1   // (dentro del visor) 1 = solo el HUNTER en primer plano
@@ -332,7 +332,7 @@ static void addPinnacle(TexVertex *buf, int &i, float cx, float baseY, float cz,
 
 // niebla por ALTURA: las estructuras se disuelven en la bruma del cielo al subir
 static unsigned int heightHaze(unsigned int base, float y) {
-    float t = y / 190.0f; if (t < 0.0f) t = 0.0f; if (t > 0.82f) t = 0.82f;
+    float t = y / 190.0f; if (t < 0.0f) t = 0.0f; if (t > 0.90f) t = 0.90f;   // puntas de aguja se disuelven casi del todo en el horizonte (sin pop)
     int br = base & 0xFF,  bg = (base >> 8) & 0xFF,  bb = (base >> 16) & 0xFF;
     int cr = HAZE & 0xFF,  cg = (HAZE >> 8) & 0xFF,  cb = (HAZE >> 16) & 0xFF;
     int r  = br + (int)((cr - br) * t);
@@ -346,7 +346,7 @@ static void buildTower(TexVertex *buf, int &i, float cx, float cz,
                        float w, float d, float h, unsigned int baseColor, float dist,
                        int *detailStartOut = 0) {
     const unsigned int stone = fadeToVoid(warmTint(brighten(baseColor, 1.45f)), dist);
-    const unsigned int win   = RGBA(166, 108, 52, 255); // ambar TENUE (menos luz)
+    const unsigned int win   = RGBA(196, 120, 46, 255); // ambar mas fuerte (pocas vidrieras encendidas = acento calido en la sombra)
     float bodyTop;
     if (h > 45.0f) {
         const float h1 = h * 0.50f, h2 = h * 0.28f, h3 = h - h1 - h2;
@@ -539,7 +539,7 @@ static void buildSolidWorld() {
         addBridge(g_solidWorld, i, -30.0f, 26.0f, -34.0f, 30.0f, 26.0f, -34.0f, arc);
     }
     // The Cathedral: landmark del fondo (Benjamin la dejo, se ve bien)
-    buildTower(g_solidWorld, i, 0.0f, -170.0f, 96.0f, 96.0f, 480.0f, RGBA(38, 34, 58, 255), 0.0f);
+    buildTower(g_solidWorld, i, 0.0f, -170.0f, 96.0f, 96.0f, 480.0f, RGBA(44, 38, 40, 255), 56.0f);   // catedral lejana: fogueada (era slab plano dist=0) + tono calido
     g_solidVerts = i;
 }
 
@@ -968,7 +968,7 @@ int main(void) {
     const int   COYOTE_MAX = 6, JUMPBUF_MAX = 6;
     const float FLOAT_LIFT = 0.030f, FLOAT_GRAV = 0.006f, FLOAT_UPCAP = 0.12f, FLOAT_FALLCAP = -0.09f, EN_FLOAT = 6.0f, EN_REGEN = 5.0f;
     int   grounded = 1;
-    float camYaw = 0.0f;    // mirada inicial: al norte (-Z), hacia la puerta/vista
+    float camYaw = 0.0f;    // mirada inicial: al norte (-Z), hacia la Gran Catedral
     float heroYaw = 0.0f;   // hacia donde encara el modelo (gira al avanzar)
     int   paused = 0, prevStart = 0;
     float walkPhase = 0.0f, idleT = 0.0f;   // animacion del personaje
@@ -1315,10 +1315,11 @@ int main(void) {
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);   // 1 texel/pixel: gran ahorro de fill en PSP real
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
         // --- MUNDO SOLIDO con CULLING por estructura + LOD (solo lo cercano/al frente) ---
-        sceGuDisable(GU_CULL_FACE);  // back-face culling OFF: winding MIXTO en este mundo -> cullear hacia DESAPARECER el piso (en HW/GL) y ver-por-dentro los muros. El ahorro real de FPS lo da el culling por DISTANCIA/LOD de abajo (seguro).
+        sceGuDisable(GU_CULL_FACE);  // PISO: quads de UNA cara -> el culling no ahorra fill y su winding es opuesto al de las cajas -> OFF garantiza que el piso SIEMPRE se ve.
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso teselado: SIEMPRE visible (REPLACE = brillo de la textura)
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);   // el resto del mundo vuelve a MODULATE (textura*color para tinte/niebla)
         sceGuTexImage(0, STEX, STEX, STEX, g_facadeTexS);   // EDIFICIOS: textura de FACHADA gotica (ventanas en la imagen)
+        sceGuEnable(GU_CULL_FACE);   // CATEDRALES: cajas/quads CERRADOS con winding consistente (auditoria) -> cull quita ~mitad del fill. Exterior=GU_CCW. Si se ve POR DENTRO, invertir NOCTIS_FRONTFACE (linea 41).
         // 4 catedrales-landmark: dibujar SIEMPRE (nunca desaparecen al caminar), pero con
         // LOD -> lejos solo la MASA nucleo [sStart,sDetail); cerca (centro<LOD_DIST) completa
         // con su ornamento fino (aguja/arbotantes/pinaculos). sDetail lo fija cada catedral.
@@ -1329,6 +1330,7 @@ int main(void) {
             int count = (d2 > LOD_DIST * LOD_DIST) ? (r.sDetail - r.sStart) : r.sCount;
             sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, count, 0, g_solidWorld + r.sStart);
         }
+        sceGuDisable(GU_CULL_FACE);  // cola/torre de fondo (addArchSpan/addBridge/buildTower): winding NO verificado -> OFF por seguridad
         sceGuTexImage(0, STEX, STEX, STEX, g_stoneTexS);   // vuelve a PIEDRA para agujas/cola
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_spireEnd - g_spireStart, 0, g_solidWorld + g_spireStart); // agujas (fondo)
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_solidVerts - g_tailStart, 0, g_solidWorld + g_tailStart);  // cola/catedral: siempre
