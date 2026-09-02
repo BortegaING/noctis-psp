@@ -12,29 +12,29 @@ struct WeaponFX {
 
 static WeaponFX weaponFX(int idx) {
     WeaponFX f;
-    // valores por defecto (fallback seguro = Pistola Laser)
-    f.speed = 2.40f; f.size = 0.10f; f.col = RGBA(120,240,255,255); f.spread = 1; f.pierce = 0; f.fireFrames = 6;
+    // valores por defecto (fallback seguro = Pistola de Pulsos)
+    f.speed = 2.45f; f.size = 0.09f; f.col = RGBA(120,240,255,255); f.spread = 1; f.pierce = 0; f.fireFrames = 7;
     switch(idx) {
-        case 0: // Pistola Laser        - rapida, tracer fino cian, 1 bala, cadencia alta
-            f.speed = 2.40f; f.size = 0.10f; f.col = RGBA(120,240,255,255); f.spread = 1; f.pierce = 0; f.fireFrames = 6;  break;
-        case 1: // Rifle Gravitacional  - media, bala violeta gruesa, potente, cadencia media
-            f.speed = 1.60f; f.size = 0.30f; f.col = RGBA(170, 90,255,255); f.spread = 1; f.pierce = 0; f.fireFrames = 20; break;
-        case 2: // Carabina Energetica  - rapida, verde, cadencia alta, 1 bala
-            f.speed = 2.20f; f.size = 0.14f; f.col = RGBA(120,255,140,255); f.spread = 1; f.pierce = 0; f.fireFrames = 7;  break;
-        case 3: // Canion de Particulas - LENTA y GRANDE, naranja, mucho dano, cadencia muy baja, pierce 1
-            f.speed = 0.95f; f.size = 0.45f; f.col = RGBA(255,150, 40,255); f.spread = 1; f.pierce = 1; f.fireFrames = 42; break;
-        case 4: // Pistola de Pulsos    - media-rapida, azul, 1 bala, cadencia alta
-            f.speed = 2.00f; f.size = 0.16f; f.col = RGBA( 80,140,255,255); f.spread = 1; f.pierce = 0; f.fireFrames = 8;  break;
-        case 5: // Rifle de Precision   - MUY rapida, tracer finisimo blanco, cadencia baja, pierce 1
-            f.speed = 2.80f; f.size = 0.08f; f.col = RGBA(255,255,255,255); f.spread = 1; f.pierce = 1; f.fireFrames = 30; break;
-        case 6: // Lanzador de Energia  - lenta, bola teal grande, cadencia baja
-            f.speed = 1.10f; f.size = 0.38f; f.col = RGBA( 60,230,220,255); f.spread = 1; f.pierce = 0; f.fireFrames = 34; break;
-        case 7: // Arma de Fragmentacion- corta, naranja, SPREAD 5 en abanico, cadencia media
-            f.speed = 1.40f; f.size = 0.18f; f.col = RGBA(255,120, 30,255); f.spread = 5; f.pierce = 0; f.fireFrames = 18; break;
-        case 8: // Arma Gravitacional Exp.- media, purpura grande, cadencia media, pierce 1
-            f.speed = 1.70f; f.size = 0.34f; f.col = RGBA(200, 60,230,255); f.spread = 1; f.pierce = 1; f.fireFrames = 22; break;
-        case 9: // Reliquia Antigua     - lenta, dorada grande, PIERCE 1, cadencia muy baja, look raro/antiguo
-            f.speed = 1.00f; f.size = 0.40f; f.col = RGBA(255,205, 90,255); f.spread = 1; f.pierce = 1; f.fireFrames = 40; break;
+        case 0: // Pistola de Pulsos      - sidearm rapido, tracer fino cian, cadencia alta
+            f.speed = 2.45f; f.size = 0.09f; f.col = RGBA(120,240,255,255); f.spread = 1; f.pierce = 0; f.fireFrames = 7;  break;
+        case 1: // Lanza Gravitacional    - slug violeta grueso, lento y potente, cadencia media-baja
+            f.speed = 1.55f; f.size = 0.30f; f.col = RGBA(170, 90,255,255); f.spread = 1; f.pierce = 0; f.fireFrames = 25; break;
+        case 2: // Carabina Energetica    - automatica verde equilibrada, cadencia media
+            f.speed = 2.20f; f.size = 0.13f; f.col = RGBA(120,255,140,255); f.spread = 1; f.pierce = 0; f.fireFrames = 12; break;
+        case 3: // Canon de Particulas    - LENTO y ENORME, naranja, mucho dano, atraviesa
+            f.speed = 0.92f; f.size = 0.46f; f.col = RGBA(255,150, 40,255); f.spread = 1; f.pierce = 1; f.fireFrames = 44; break;
+        case 4: // Repetidor del Vacio    - full-auto azul, EL MAS RAPIDO, tracer chico, debil
+            f.speed = 2.10f; f.size = 0.12f; f.col = RGBA( 80,140,255,255); f.spread = 1; f.pierce = 0; f.fireFrames = 5;  break;
+        case 5: // Aguja de Riel          - railgun blanco finisimo, HIPERVELOZ, atraviesa, cadencia baja
+            f.speed = 2.85f; f.size = 0.07f; f.col = RGBA(255,255,255,255); f.spread = 1; f.pierce = 1; f.fireFrames = 30; break;
+        case 6: // Haz de Resonancia      - haz teal rapido que ENSARTA (pierce), cadencia alta sostenida
+            f.speed = 2.30f; f.size = 0.15f; f.col = RGBA( 60,230,220,255); f.spread = 1; f.pierce = 1; f.fireFrames = 10; break;
+        case 7: // Dispersor de Fragmentos- escopeta corta, naranja, SPREAD 5 en abanico, cadencia media
+            f.speed = 1.40f; f.size = 0.17f; f.col = RGBA(255,120, 30,255); f.spread = 5; f.pierce = 0; f.fireFrames = 20; break;
+        case 8: // Bobina de Singularidad - orbe magenta grande gravitacional, atraviesa, cadencia media
+            f.speed = 1.70f; f.size = 0.36f; f.col = RGBA(200, 60,230,255); f.spread = 1; f.pierce = 1; f.fireFrames = 22; break;
+        case 9: // Reliquia del Abismo    - orbe dorado enorme, EL MAS LENTO, atraviesa, look raro/antiguo
+            f.speed = 1.05f; f.size = 0.42f; f.col = RGBA(255,205, 90,255); f.spread = 1; f.pierce = 1; f.fireFrames = 46; break;
         default: break;
     }
     return f;
@@ -51,7 +51,7 @@ static unsigned int weaponMuzzle(int idx) {
         case 5: return RGBA(255,255,255,255); // blanco puro
         case 6: return RGBA(170,250,245,255); // teal palido
         case 7: return RGBA(255,190,120,255); // naranja fragmentacion
-        case 8: return RGBA(240,160,255,255); // purpura claro
+        case 8: return RGBA(240,160,255,255); // magenta claro
         case 9: return RGBA(255,235,170,255); // dorado palido
         default: return RGBA(255,255,255,255);
     }

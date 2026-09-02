@@ -16,18 +16,20 @@ struct RangedWeapon {
     int magazine;
 };
 
+// Cada arma es un nicho DISTINTO: cadencia, dano, alcance, energia, recarga, cargador.
+// (la cadencia REAL en pantalla la fija fireFrames en weapons_fx.h; rateMs va coherente)
 static const RangedWeapon kRanged[] = {
-    // name                               dmg  rateMs rangeM ener reloadMs mag
-    { "Pistola Laser",                     12,   150,    25,   3,     900,  15 },
-    { "Rifle Gravitacional",               40,   400,    60,  12,    1800,   8 },
-    { "Carabina Energetica",               22,   220,    45,   6,    1200,  20 },
-    { "Canion de Particulas",              95,  1200,    40,  30,    3000,   3 },
-    { "Pistola de Pulsos",                 16,   120,    20,   4,    1000,  18 },
-    { "Rifle de Precision",                80,   900,   120,  15,    2200,   5 },
-    { "Lanzador de Energia",               70,  1000,    35,  25,    2800,   4 },
-    { "Arma de Fragmentacion",             55,   700,    15,  10,    1600,   6 },
-    { "Arma Gravitacional Experimental",   60,   500,    55,  20,    2000,   7 },
-    { "Reliquia Antigua",                 110,  1500,    70,  40,    3500,   2 },
+    // name                         dmg  rateMs rangeM ener reloadMs mag
+    { "Pistola de Pulsos",           10,   110,    22,   2,     800,  18 }, // 0 sidearm rapido debil
+    { "Lanza Gravitacional",         44,   420,    65,  12,    1800,   8 }, // 1 slug pesado violeta
+    { "Carabina Energetica",         20,   200,    48,   5,    1100,  24 }, // 2 automatica equilibrada
+    { "Canon de Particulas",        100,  1300,    42,  34,    3200,   3 }, // 3 lento enorme, atraviesa
+    { "Repetidor del Vacio",          8,    80,    30,   3,    1000,  30 }, // 4 full-auto, el mas rapido
+    { "Aguja de Riel",               85,   900,   130,  15,    2200,   5 }, // 5 railgun largo, atraviesa
+    { "Haz de Resonancia",           26,   160,    55,   6,    1400,  20 }, // 6 haz sostenido que ensarta
+    { "Dispersor de Fragmentos",     14,   700,    15,  10,    1600,   6 }, // 7 escopeta abanico corto
+    { "Bobina de Singularidad",      58,   520,    50,  20,    2000,   7 }, // 8 orbe gravitacional pierce
+    { "Reliquia del Abismo",        120,  1500,    75,  40,    3500,   2 }, // 9 reliquia, el mas letal
 };
 static const int kRangedCount = (int)(sizeof(kRanged) / sizeof(kRanged[0]));
 
@@ -45,18 +47,19 @@ struct MeleeWeapon {
     int weight;
 };
 
+// Cada hoja se siente distinta por velocidad/alcance/dano/peso (speedMs y reach mandan).
 static const MeleeWeapon kMelee[] = {
     // name                     dmg  speedMs reach weight
-    { "Katana",                  30,    300,   12,     3 },
-    { "Katana Pesada",           45,    450,   13,     5 },
-    { "Espada Energetica",       40,    350,   12,     3 },
-    { "Hoja Gravitacional",      50,    500,   14,     4 },
-    { "Espada Industrial",       55,    600,   11,     7 },
-    { "Lanza",                   35,    400,   20,     4 },
-    { "Guadana",                 48,    550,   18,     5 },
-    { "Espada de Dos Manos",     70,    800,   16,     9 },
-    { "Hoja Experimental",       60,    420,   13,     4 },
-    { "Arma Ancestral",          85,    700,   15,     8 },
+    { "Katana",                  28,    260,   12,     3 }, // 0 rapida y equilibrada
+    { "Katana Pesada",           48,    460,   13,     6 }, // 1 mas lenta, mas dano
+    { "Espada Energetica",       34,    220,   11,     2 }, // 2 la mas rapida, ligera
+    { "Hoja Gravitacional",      52,    520,   15,     5 }, // 3 pesada, largo alcance
+    { "Espada Industrial",       60,    640,   11,     8 }, // 4 lenta, brutal, corta
+    { "Lanza",                   32,    380,   22,     4 }, // 5 el mayor alcance, poco dano
+    { "Guadana",                 50,    540,   19,     5 }, // 6 barrido largo medio-alto
+    { "Espada de Dos Manos",     74,    820,   17,     9 }, // 7 la mas lenta y demoledora
+    { "Hoja Experimental",       44,    340,   13,     3 }, // 8 agil y versatil
+    { "Arma Ancestral",          88,    700,   16,     8 }, // 9 rara, letal, largo alcance
 };
 static const int kMeleeCount = (int)(sizeof(kMelee) / sizeof(kMelee[0]));
 

@@ -199,7 +199,7 @@ static int g_tailStart    = 0;   // cola (mirador..cathedral): [g_tailStart, g_s
 static int g_winTailStart = 0;   // ventanas de agujas+cathedral: siempre
 // distancias (unidades de mundo). La niebla ya funde mas alla de ~98.
 static const float DRAW_DIST = 70.0f;   // los 5 muros ENCIERRAN al jugador (centros hasta ~58) -> no cullear la sala por distancia
-static const float LOD_DIST  = 22.0f;   // los muros estan siempre mas lejos -> cuerpo sin detalle (barato)
+static const float LOD_DIST  = 42.0f;   // plaza r46, landmarks ~60: al centro las 4 = solo nucleo (barato); al cruzar hacia una aparece su ornamento fino
 static const float BEHIND_CULL = 24.0f; // (sin uso: reemplazado por el cull por vector de camara en 1ra persona)
 
 // piramide de 4 caras (aguja) sin textura -- para personaje/robots (LineVertex)
@@ -227,6 +227,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "gravity.h"      // 6 direcciones de gravedad (mecanica firma, directiva 22)
 #include "village_props.h" // props del pueblo (faroles calidos, rejas, tumbas) - BLAME!/Bloodborne
 #include "spirescape.h"    // MAR DENSO de agujas goticas en bruma (el look de la referencia)
+#include "sky.h"           // drawSky(): cielo dramatico (luna + gradiente + nubes + silueta del horizonte)
 #if VIEWER_MODE
 static LineVertex __attribute__((aligned(16))) g_candBuf[4][3300];
 static int g_candV[4];
@@ -433,8 +434,12 @@ struct CityBldg { float x, z, w, d, h; unsigned int color; };
 static CityBldg g_city[256];
 static int g_cityCount = 0;
 #include "city.h"          // buildCity() llena g_city (16 edificios espaciados, plaza al centro)
-#include "gothic_bldg.h"   // buildGothicBldg(): edificio gotico (mansiones/casonas)
-#include "cathedral.h"     // buildCathedral(): catedral Yharnam ornamentada (landmarks, h>120)
+#include "gothic_bldg.h"   // buildGothicBldg(): edificio gotico (legacy, sin uso)
+#include "cathedral.h"     // buildCathedral(): catedral Yharnam ornamentada (legacy)
+#include "cathedral_grand.h"     // buildCathedralGrand():    landmark 0 (norte) - west-front + torres gemelas
+#include "cathedral_twin.h"      // buildCathedralTwin():     landmark 1 (este)  - agujas gemelas caladas
+#include "cathedral_basilica.h"  // buildCathedralBasilica(): landmark 2 (oeste) - nave larga + arbotantes
+#include "cathedral_bell.h"      // buildCathedralBell():     landmark 3 (sur)   - campanario/reloj
 
 // edificio SIMPLE de ciudad (pocos verts -> muchos edificios + culling = rinde)
 static void buildCityBldg(TexVertex *buf, int &i, float cx, float cz,
@@ -493,7 +498,12 @@ static void buildSolidWorld() {
         StructRange &r = g_srange[g_srangeCount];
         r.sStart = i; r.wStart = g_winVerts; r.cx = b.x; r.cz = b.z; r.sDetail = i;
         r.rad = 0.5f * sqrtf(b.w * b.w + b.d * b.d);   // circulo que envuelve el footprint (margen del cull direccional)
-        buildGothicBldg(g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail);
+        switch (s) {   // POCAS catedrales, cada una UNICA (despacho por indice; ver city.h)
+            case 0:  buildCathedralGrand   (g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail); break;
+            case 1:  buildCathedralTwin    (g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail); break;
+            case 2:  buildCathedralBasilica(g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail); break;
+            default: buildCathedralBell    (g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail); break;
+        }
         r.sCount = i - r.sStart; r.wCount = g_winVerts - r.wStart;
         g_srangeCount++;
     }
@@ -609,9 +619,10 @@ static const Npc kNpcs[] = {
     { 5.5f, -5.0f }, { -5.5f, -3.0f }
 };
 static const int kNpcCount = (int)(sizeof(kNpcs) / sizeof(kNpcs[0]));
-static LineVertex __attribute__((aligned(16))) g_npc[1800];
+#include "robots.h"   // buildRobots(): NPCs roboticos variados (mensajero/mecanico/guardian/dron/...)
+static LineVertex __attribute__((aligned(16))) g_npc[2400];
 static int g_npcVerts = 0;
-static int g_npcKilled[64] = {0};   // robots derribados a tiros (no se dibujan)
+static int g_npcKilled[64] = {0};   // (robots = habitantes, no enemigos; el kill-system queda inerte)
 
 // ===== ARMA / DISPAROS (L apunta, R dispara) =====
 struct Shot { float x, y, z, vx, vy, vz; int life; unsigned int col; float size; int pierce; };
@@ -620,27 +631,10 @@ static Shot g_shots[24];
 struct Spark { float x, y, z; int life; };
 static Spark g_sparks[12];
 
-// robots solidos variados (oxidado/acero/oscuro/teal), con ojo luminoso
+// NPCs roboticos variados y con alma (robots.h): mensajero, mecanico, guardian,
+// dron, anciano, walker... con distinto estado de conservacion y ojo luminoso.
 static void buildNpcs() {
-    int i = 0;
-    static const unsigned int pal[4] = {
-        RGBA(150, 92, 58, 255),   // oxidado
-        RGBA(120, 132, 152, 255), // acero
-        RGBA(74, 78, 92, 255),    // oscuro
-        RGBA(84, 168, 160, 255),  // teal
-    };
-    for (int n = 0; n < kNpcCount; ++n) {
-        if (g_npcKilled[n]) continue;   // derribado -> no se dibuja
-        const unsigned int col = pal[n % 4];
-        const float hh = 1.5f + 0.18f * (float)(n % 3);
-        const float x = kNpcs[n].x, z = kNpcs[n].z;
-        addSolidBox(g_npc, i, x, 0.0f, z, 0.70f, 0.55f, hh, col);                           // cuerpo
-        addSolidBox(g_npc, i, x - 0.18f, 0.0f, z, 0.22f, 0.28f, hh * 0.55f, brighten(col, 0.8f)); // pierna
-        addSolidBox(g_npc, i, x + 0.18f, 0.0f, z, 0.22f, 0.28f, hh * 0.55f, brighten(col, 0.8f)); // pierna
-        addSolidBox(g_npc, i, x, hh, z, 0.50f, 0.50f, 0.50f, brighten(col, 1.12f));          // cabeza
-        addSolidBox(g_npc, i, x, hh + 0.16f, z - 0.26f, 0.20f, 0.06f, 0.1f, RGBA(240, 180, 90, 255)); // ojo
-    }
-    g_npcVerts = i;
+    g_npcVerts = buildRobots(g_npc);
 }
 
 // --- cadenas colgantes entre torres (detalle iconico de la referencia) ---
@@ -985,7 +979,7 @@ int main(void) {
     float bobPhase = 0.0f, bobX = 0.0f, bobY = 0.0f;// head-bob segun velocidad
     float vmSway = 0.0f, vmBob = 0.0f;              // offsets suavizados del arma en pantalla
     const float TURN_MAX = 0.045f, LOOK_SMOOTH = 0.25f, PITCH_SPD = 0.030f, PITCH_CLAMP = 1.30f;
-    const float FP_SPEED = 0.11f, FP_ACCEL = 0.16f, FP_STOP = 0.20f, EYE_H = 1.7f, COURT = 38.0f, STRAFE_SIGN = 1.0f;
+    const float FP_SPEED = 0.11f, FP_ACCEL = 0.16f, FP_STOP = 0.20f, EYE_H = 1.7f, COURT = 46.0f, STRAFE_SIGN = 1.0f;
 
     int fps = 0, frameAccum = 0;
     long long lastTick = sceKernelGetSystemTimeWide();
@@ -1061,9 +1055,10 @@ int main(void) {
             // -- colision por ejes separados (desliza por muros) --
             float nx = playerX + velX; if (!blocked(nx, playerZ, playerY)) playerX = nx; else velX = 0.0f;
             float nz = playerZ + velZ; if (!blocked(playerX, nz, playerY)) playerZ = nz; else velZ = 0.0f;
-            // -- BORDES IMPASABLES: patio jugable +-COURT (agente mundo) -> nunca al vacio --
-            if (playerX >  COURT) playerX =  COURT; else if (playerX < -COURT) playerX = -COURT;
-            if (playerZ >  COURT) playerZ =  COURT; else if (playerZ < -COURT) playerZ = -COURT;
+            // -- BORDE de la PLAZA: clamp CIRCULAR (r=COURT). Los muros de las catedrales
+            //    frenan antes al acercarse; en los HUECOS entre ellas ves el vacio (no caes). --
+            { float pr2 = playerX * playerX + playerZ * playerZ;
+              if (pr2 > COURT * COURT) { float sc = COURT / sqrtf(pr2); playerX *= sc; playerZ *= sc; } }
             heroYaw = camYaw;   // disparo/melee usan heroYaw = hacia donde miras
             // -- head-bob por velocidad --
             float spd = sqrtf(velX * velX + velZ * velZ);
@@ -1270,7 +1265,7 @@ int main(void) {
 
         // fondo brumoso (2D, sin profundidad): neblina en el horizonte
         sceGuDisable(GU_DEPTH_TEST);
-        drawBackdrop();
+        drawSky();   // cielo gotico dramatico (2D): luna, gradiente, nubes, silueta del horizonte
         sceGuEnable(GU_DEPTH_TEST);
 
 #if VIEWER_MODE
@@ -1278,7 +1273,7 @@ int main(void) {
 #else
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
-        sceGumPerspective(66.0f, 16.0f / 9.0f, 0.5f, 280.0f); // 1ra persona: FOV natural (menos fill horizontal); far 280 (el backdrop 2D tapa el corte; catedral z=-170 entra)
+        sceGumPerspective(66.0f, 16.0f / 9.0f, 1.0f, 520.0f); // far 520: admite el anillo lejano (r 320..469) + ruinas del abismo (el 280 los recortaba); near 0.5->1.0 recupera precision del z-buffer 16-bit
 
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
@@ -1324,13 +1319,15 @@ int main(void) {
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso teselado: SIEMPRE visible (REPLACE = brillo de la textura)
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);   // el resto del mundo vuelve a MODULATE (textura*color para tinte/niebla)
         sceGuTexImage(0, STEX, STEX, STEX, g_facadeTexS);   // EDIFICIOS: textura de FACHADA gotica (ventanas en la imagen)
-        // SOLO 5 edificios que ENCIERRAN el patio: dibujar SIEMPRE y COMPLETOS.
-        // El cull por distancia/direccion los hacia DESAPARECER al caminar (el muro de
-        // enfrente superaba DRAW_DIST) o al girar (el de al lado quedaba "detras"). Con
-        // 5 masas cerradas no hay nada que cullear -> siempre visibles, sin popping.
+        // 4 catedrales-landmark: dibujar SIEMPRE (nunca desaparecen al caminar), pero con
+        // LOD -> lejos solo la MASA nucleo [sStart,sDetail); cerca (centro<LOD_DIST) completa
+        // con su ornamento fino (aguja/arbotantes/pinaculos). sDetail lo fija cada catedral.
         for (int s = 0; s < g_srangeCount; ++s) {
             const StructRange &r = g_srange[s];
-            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, r.sCount, 0, g_solidWorld + r.sStart);
+            float ddx = r.cx - playerX, ddz = r.cz - playerZ;
+            float d2 = ddx * ddx + ddz * ddz;
+            int count = (d2 > LOD_DIST * LOD_DIST) ? (r.sDetail - r.sStart) : r.sCount;
+            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, count, 0, g_solidWorld + r.sStart);
         }
         sceGuTexImage(0, STEX, STEX, STEX, g_stoneTexS);   // vuelve a PIEDRA para agujas/cola
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_spireEnd - g_spireStart, 0, g_solidWorld + g_spireStart); // agujas (fondo)
@@ -1343,10 +1340,7 @@ int main(void) {
         for (int s = 0; s < g_srangeCount; ++s) {
             const StructRange &r = g_srange[s];
             if (r.wCount <= 0) continue;
-            float ddx = r.cx - playerX, ddz = r.cz - playerZ;
-            if (ddx * fwdX + ddz * fwdZ < -r.rad) continue;     // cull por yaw (consistente con el cuerpo)
-            float d2 = ddx * ddx + ddz * ddz;
-            if (d2 > LOD_DIST * LOD_DIST) continue;             // ventanas solo de torres cercanas
+            // ventanas de las catedrales (g_win): SIEMPRE (landmarks lejanos pero pocos)
             sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, r.wCount, 0, g_win + r.wStart);
         }
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_winVerts - g_winTailStart, 0, g_win + g_winTailStart); // agujas + cathedral
@@ -1359,6 +1353,8 @@ int main(void) {
 
         // atmosfera de fondo: siluetas colosales lejanas + ruinas suspendidas del abismo
         sceGuDisable(GU_CULL_FACE);  // sin back-face culling (winding mixto): agujas/props solidas, sin ver-por-dentro
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_farSilVerts, 0, g_farSil);   // MEGAESTRUCTURA colosal del horizonte (360, en bruma)
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidVerts,   0, g_void);     // VACIO/ABISMO: ruinas suspendidas + luces lejanas
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_spireVerts, 0, g_spire);     // MAR DENSO de agujas (el look de la referencia)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);   // props del pueblo
         // cables + robots + ambiente (braseros) sin textura
