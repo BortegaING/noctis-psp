@@ -515,13 +515,11 @@ static void buildSolidWorld() {
     g_tailStart = i;       // cola (mirador/arcos/puente/cathedral) = [g_tailStart, g_solidVerts)  (siempre)
     // plataforma QUITADA: el jugador se para directo sobre el PISO grande (asi se
     // ve la textura de losas bajo el personaje, no la plataforma chica tapandola).
-    // baranda de METAL del mirador -> buffer g_metal (textura de acero)
+    // baranda de METAL del mirador QUITADA: una cerca de acero moderna desentonaba
+    // en un patio gotico (Bloodborne/BLAME). El patio queda abierto.
     int mi = 0;
-    const unsigned int iron = RGBA(120, 124, 140, 255); // acero claro (para que se vea la textura)
-    addRailing(g_metal, mi, -9.0f, -7.0f,  9.0f, -7.0f, iron); // frente
-    addRailing(g_metal, mi, -9.0f, -7.0f, -9.0f,  1.0f, iron); // lado izq
-    addRailing(g_metal, mi,  9.0f, -7.0f,  9.0f,  1.0f, iron); // lado der
-    g_metalVerts = mi;
+    (void)mi;
+    g_metalVerts = 0;
     // arcos goticos como portico del mirador (detalle del agente)
     {
         const unsigned int arc = warmTint(brighten(RGBA(40, 38, 48, 255), 1.4f));
@@ -976,7 +974,7 @@ int main(void) {
     const int   COYOTE_MAX = 6, JUMPBUF_MAX = 6;
     const float FLOAT_LIFT = 0.030f, FLOAT_GRAV = 0.006f, FLOAT_UPCAP = 0.12f, FLOAT_FALLCAP = -0.09f, EN_FLOAT = 6.0f, EN_REGEN = 5.0f;
     int   grounded = 1;
-    float camYaw = 0.0f;    // camara FIJA (no rota); solo sigue la posicion del jugador
+    float camYaw = 0.0f;    // mirada inicial: al norte (-Z), hacia la puerta/vista
     float heroYaw = 0.0f;   // hacia donde encara el modelo (gira al avanzar)
     int   paused = 0, prevStart = 0;
     float walkPhase = 0.0f, idleT = 0.0f;   // animacion del personaje
@@ -1326,22 +1324,17 @@ int main(void) {
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso teselado: SIEMPRE visible (REPLACE = brillo de la textura)
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);   // el resto del mundo vuelve a MODULATE (textura*color para tinte/niebla)
         sceGuTexImage(0, STEX, STEX, STEX, g_facadeTexS);   // EDIFICIOS: textura de FACHADA gotica (ventanas en la imagen)
+        // SOLO 5 edificios que ENCIERRAN el patio: dibujar SIEMPRE y COMPLETOS.
+        // El cull por distancia/direccion los hacia DESAPARECER al caminar (el muro de
+        // enfrente superaba DRAW_DIST) o al girar (el de al lado quedaba "detras"). Con
+        // 5 masas cerradas no hay nada que cullear -> siempre visibles, sin popping.
         for (int s = 0; s < g_srangeCount; ++s) {
             const StructRange &r = g_srange[s];
-            float ddx = r.cx - playerX, ddz = r.cz - playerZ;
-            if (ddx * fwdX + ddz * fwdZ < -r.rad) continue;     // footprint completo detras de la mirada -> cull (por yaw)
-            float d2 = ddx * ddx + ddz * ddz;
-            if (d2 > DRAW_DIST * DRAW_DIST) continue;           // demasiado lejos (la niebla ya lo tapa)
-            if (d2 > LOD_DIST * LOD_DIST)
-                sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, r.sDetail - r.sStart, 0, g_solidWorld + r.sStart); // LOD: cuerpo sin detalle
-            else
-                sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, r.sCount, 0, g_solidWorld + r.sStart);             // completo
+            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, r.sCount, 0, g_solidWorld + r.sStart);
         }
         sceGuTexImage(0, STEX, STEX, STEX, g_stoneTexS);   // vuelve a PIEDRA para agujas/cola
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_spireEnd - g_spireStart, 0, g_solidWorld + g_spireStart); // agujas (fondo)
-        // cola (arcos/puente/catedral) agrupada al NORTE (-Z): saltar si miras claramente al sur
-        if (fwdZ < 0.30f)   // fwdZ>~0 = mirando +Z (sur) -> todo el racimo -Z queda detras
-            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_solidVerts - g_tailStart, 0, g_solidWorld + g_tailStart);
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_solidVerts - g_tailStart, 0, g_solidWorld + g_tailStart);  // cola/catedral: siempre
 
         // ventanas: textura de vidriera (CLAMP). Solo torres CERCANAS + agujas/cathedral (siempre).
         sceGuDisable(GU_CULL_FACE);  // ventanas (addWinRow) tienen winding INCONSISTENTE -> NO cullear; metal tambien queda OFF
