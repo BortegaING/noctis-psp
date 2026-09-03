@@ -30,8 +30,8 @@ static unsigned int __attribute__((aligned(16))) g_list[262144];
 // debe ser MAS CLARO que la niebla para que las agujas lejanas se lean como
 // SILUETAS OSCURAS contra la bruma (look Bloodborne/BLAME), no como fantasmas
 // palidos flotando en negro. Antes: cielo 38 (mas oscuro que la niebla 66) -> vacio.
-static const unsigned int CLEAR_COLOR = RGBA(104, 98, 87, 255);  // cielo brumoso: overcast calido, el horizonte "brilla"
-static const unsigned int HAZE = RGBA(90, 84, 74, 255); // bruma calida: la geometria lejana se DISUELVE aqui (un pelo bajo el cielo)
+static const unsigned int CLEAR_COLOR = RGBA(26, 32, 46, 255);   // cielo FRIO nocturno (megaestructura BLAME): azul profundo -> contrasta con el calido de las catedrales
+static const unsigned int HAZE = RGBA(58, 70, 88, 255); // bruma FRIA azul-gris: la geometria lejana se disuelve en frio -> el ambar/piedra calida saltan al frente
 
 // Sentido de "cara frontal" para el back-face culling por-pase (R1 rendimiento).
 // El winding de cajas/piramides/piso es CONSISTENTE (probado), asi que exactamente
@@ -114,7 +114,7 @@ static unsigned int warmTint(unsigned int c) {
 // desvanece un color hacia el fondo (vacio) segun la distancia al centro del
 // distrito. Niebla "horneada" fiable (no depende del fog por hardware).
 static unsigned int fadeToVoid(unsigned int base, float dist) {
-    const float a = 26.0f, b = 98.0f; // cerca..lejos: se funde en la neblina
+    const float a = 50.0f, b = 330.0f; // EL POZO mide ~320u: el muro lejano (278u) y la Gran Catedral (236u) quedan como SILUETAS (~70-80% niebla), no desaparecen. (Antes b=98: todo lo que estaba a >98u era niebla pura.)
     float t = (dist - a) / (b - a);
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
@@ -166,8 +166,15 @@ static void addSolidBox(LineVertex *buf, int &i, float cx, float baseY, float cz
 
 static TexVertex __attribute__((aligned(16))) g_solidWorld[36000]; // piedra texturizada (+ detalle)
 static int g_solidVerts = 0;
-static TexVertex __attribute__((aligned(16))) g_apron[3600];       // PISO cercano fino que SIGUE al jugador (tapa el hueco del piso grueso)
+static TexVertex __attribute__((aligned(16))) g_apron[3600];       // (legacy plaza) piso cercano fino; sin uso en EL POZO
 static int g_apronCount = 0;
+// ===== EL POZO =====
+static int g_ledgeStart = 0, g_ledgeEnd = 0;   // balcon del jugador en g_solidWorld (textura industrial)
+static int g_wallStart  = 0, g_wallEnd  = 0;   // muros colosales del pozo en g_solidWorld (textura industrial)
+static LineVertex __attribute__((aligned(16))) g_bridges[3000];    // puentes/megavigas cruzando el pozo
+static int g_bridgesVerts = 0;
+static LineVertex __attribute__((aligned(16))) g_voidShaft[2800];  // vacio del pozo: estructuras que se pierden abajo/arriba
+static int g_voidShaftVerts = 0;
 static TexVertex __attribute__((aligned(16))) g_win[18000];        // ventanas (vidriera texturizada)
 static int g_winVerts = 0;
 static TexVertex __attribute__((aligned(16))) g_metal[4000];       // metal (baranda)
@@ -230,6 +237,8 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "village_props.h" // props del pueblo (faroles calidos, rejas, tumbas) - BLAME!/Bloodborne
 #include "spirescape.h"    // MAR DENSO de agujas goticas en bruma (el look de la referencia)
 #include "sky.h"           // drawSky(): cielo dramatico (luna + gradiente + nubes + silueta del horizonte)
+#include "bridges.h"       // EL POZO: buildBridges() megavigas/puentes cruzando el pozo a distintas alturas
+#include "void_shaft.h"    // EL POZO: buildVoidShaft() abismo sin fondo (balcones/tuberias/luces que se pierden)
 #if VIEWER_MODE
 static LineVertex __attribute__((aligned(16))) g_candBuf[4][3300];
 static int g_candV[4];
@@ -442,6 +451,8 @@ static int g_cityCount = 0;
 #include "cathedral_twin.h"      // buildCathedralTwin():     landmark 1 (este)  - agujas gemelas caladas
 #include "cathedral_basilica.h"  // buildCathedralBasilica(): landmark 2 (oeste) - nave larga + arbotantes
 #include "cathedral_bell.h"      // buildCathedralBell():     landmark 3 (sur)   - campanario/reloj
+#include "shaft_walls.h"         // EL POZO: buildShaftWalls() muros colosales industrial-goticos (octagono r~160, y -700..+500)
+#include "ledge.h"               // EL POZO: buildLedge() balcon del jugador (top teselado fino + baranda + soportes)
 
 // edificio SIMPLE de ciudad (pocos verts -> muchos edificios + culling = rinde)
 static void buildCityBldg(TexVertex *buf, int &i, float cx, float cz,
@@ -473,8 +484,8 @@ static void buildCityBldg(TexVertex *buf, int &i, float cx, float cz,
 // textura calce con el piso grueso). uv = local/12.
 static void buildApron() {
     int i = 0;
-    const float HALF = 30.0f;
-    const int   N    = 24;                          // 24x24 celdas de 2.5u (<2.6u -> el hueco cae fuera de pantalla)
+    const float HALF = 20.0f;                       // ±20: al borde de la plataforma (r72) el apron no se sale al vacio
+    const int   N    = 24;                          // 24x24 celdas ~1.7u (<2.6u -> el hueco cae fuera de pantalla)
     const float CELL = (2.0f * HALF) / (float)N;    // 2.5u
     const float invUV = 1.0f / 12.0f;
     const unsigned int fcol = RGBA(240, 230, 214, 255);   // REPLACE ignora el color
@@ -493,36 +504,30 @@ static void buildApron() {
 static void buildSolidWorld() {
     int i = 0;
     g_winVerts = 0;
-    // PISO TESELADO: grilla de quads chicos (NO un quad gigante). En hardware de
-    // funcion fija un triangulo enorme que cruza la camara/plano cercano se DESCARTA
-    // -> por eso en 1ra persona (camara dentro del plano) el piso desaparecia. Teselado:
-    // los quads detras se cullean limpio, los de adelante se dibujan. Cubre todo el mapa.
-    {
-        const float HALF = 300.0f;              // medio-lado del piso: cubre patio + edificios + margen (el backdrop tapa mas alla)
-        const int   N    = 24;                  // 24x24 celdas -> cada celda 25u (chica: no cruza mal la camara)
-        const float CELL = (2.0f * HALF) / (float)N;  // 25u
-        const float invUV = 1.0f / 12.0f;       // textura cada 12u (continua entre celdas)
-        const unsigned int fcol = RGBA(240, 230, 214, 255);  // REPLACE ignora esto, pero queda por si se pasa a MODULATE
-        for (int gz = 0; gz < N; ++gz) {
-            float z0 = -HALF + CELL * (float)gz, z1 = z0 + CELL;
-            float v0 = z0 * invUV, v1 = z1 * invUV;
-            for (int gx = 0; gx < N; ++gx) {
-                float x0 = -HALF + CELL * (float)gx, x1 = x0 + CELL;
-                float u0 = x0 * invUV, u1 = x1 * invUV;
-                addQuadT(g_solidWorld, i, x0,0.0f,z0,  x1,0.0f,z0,  x1,0.0f,z1,  x0,0.0f,z1,
-                         u0,v0, u1,v1, fcol);
-            }
-        }
-    }
-    g_floorCount = i;      // piso = [0, g_floorCount)  (siempre se dibuja; 24x24x6 = 3456 verts)
+    // ===== EL POZO (directiva §2-7: "dentro de una megaestructura de BLAME") =====
+    // NO hay piso de plaza: abajo esta el ABISMO. El jugador vive en un BALCON que
+    // sobresale del muro +Z hacia un pozo vertical colosal.
+    g_floorCount = 0;
+    // BALCON del jugador (top = grilla FINA: la camara nunca cruza un triangulo grande)
+    g_ledgeStart = i;
+    buildLedge(g_solidWorld, i);
+    g_ledgeEnd = i;
+    // MUROS colosales del pozo (octagono r~160, y -700..+500) con relieve industrial-gotico
+    g_wallStart = i;
+    buildShaftWalls(g_solidWorld, i);
+    g_wallEnd = i;
+    // CATEDRALES como HITOS contra los muros lejanos, cada una sobre su propia plataforma
     g_srangeCount = 0;
     for (int s = 0; s < g_cityCount && g_srangeCount < 256; ++s) {
         if (i > 33500) break;
         const CityBldg &b = g_city[s];
-        float dd = sqrtf(b.x * b.x + b.z * b.z);
+        float dd = sqrtf(b.x * b.x + (b.z - 118.0f) * (b.z - 118.0f));   // distancia al BALCON (niebla)
         StructRange &r = g_srange[g_srangeCount];
         r.sStart = i; r.wStart = g_winVerts; r.cx = b.x; r.cz = b.z; r.sDetail = i;
-        r.rad = 0.5f * sqrtf(b.w * b.w + b.d * b.d);   // circulo que envuelve el footprint (margen del cull direccional)
+        r.rad = 0.5f * sqrtf(b.w * b.w + b.d * b.d);
+        // plataforma bajo la catedral (losa gruesa, top en y=0) para que no flote en el vacio
+        addSolidBoxT(g_solidWorld, i, b.x, -8.0f, b.z, b.w + 14.0f, b.d + 14.0f, 8.0f,
+                     fadeToVoid(brighten(RGBA(64, 70, 80, 255), 1.6f), dd));
         switch (s) {   // POCAS catedrales, cada una UNICA (despacho por indice; ver city.h)
             case 0:  buildCathedralGrand   (g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail); break;
             case 1:  buildCathedralTwin    (g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail); break;
@@ -532,39 +537,10 @@ static void buildSolidWorld() {
         r.sCount = i - r.sStart; r.wCount = g_winVerts - r.wStart;
         g_srangeCount++;
     }
-    g_winTailStart = g_winVerts;   // ventanas de aqui en adelante (agujas+cathedral) = siempre
-    // mar de agujas de fondo (espiral aurea): densidad que se pierde en neblina
-    g_spireStart = i;
-    for (int k = 0; k < 0; ++k) {   // agujas quitadas: la ciudad las reemplaza
-        if (i > 34000) break;
-        float ang = (float)k * 2.3999632f;
-        float rad = 36.0f + (float)((k * 37) % 72);  // 36..107
-        float cx = cosf(ang) * rad;
-        float cz = sinf(ang) * rad;
-        float hh = 60.0f + (float)((k * 53) % 175);  // 60..234 (se pierden en la bruma)
-        float ww = 3.0f + (float)((k * 7) % 4);      // 3..6
-        float dd = sqrtf(cx * cx + cz * cz);
-        buildSpire(g_solidWorld, i, cx, cz, ww, hh, kStructures[k % kStructureCount].color, dd);
-    }
-    g_spireEnd = i;        // agujas = [g_spireStart, g_spireEnd)  (siempre)
-    g_tailStart = i;       // cola (mirador/arcos/puente/cathedral) = [g_tailStart, g_solidVerts)  (siempre)
-    // plataforma QUITADA: el jugador se para directo sobre el PISO grande (asi se
-    // ve la textura de losas bajo el personaje, no la plataforma chica tapandola).
-    // baranda de METAL del mirador QUITADA: una cerca de acero moderna desentonaba
-    // en un patio gotico (Bloodborne/BLAME). El patio queda abierto.
-    int mi = 0;
-    (void)mi;
+    g_winTailStart = g_winVerts;
+    g_spireStart = i; g_spireEnd = i;   // sin mar de agujas: los muros del pozo lo reemplazan
+    g_tailStart = i;                    // sin cola del patio viejo (arcos/puente/torre)
     g_metalVerts = 0;
-    // arcos goticos como portico del mirador (detalle del agente)
-    {
-        const unsigned int arc = warmTint(brighten(RGBA(40, 38, 48, 255), 1.4f));
-        addArchSpan(g_solidWorld, i, -13.0f, -9.0f, 7.0f, 0.0f, arc);
-        addArchSpan(g_solidWorld, i,  13.0f, -9.0f, 7.0f, 0.0f, arc);
-        // un puente/pasarela alto cruzando el fondo del mirador
-        addBridge(g_solidWorld, i, -30.0f, 26.0f, -34.0f, 30.0f, 26.0f, -34.0f, arc);
-    }
-    // The Cathedral: landmark del fondo (Benjamin la dejo, se ve bien)
-    buildTower(g_solidWorld, i, 0.0f, -170.0f, 96.0f, 96.0f, 480.0f, RGBA(44, 38, 40, 255), 56.0f);   // catedral lejana: fogueada (era slab plano dist=0) + tono calido
     g_solidVerts = i;
 }
 
@@ -684,7 +660,8 @@ static void addChain(LineVertex *buf, int &i, float ax, float ay, float az,
 // generadores de textura + ambiente del agente (mas detallados)
 #include "agent_textures.h"
 #include "gothic_tex.h"    // genGothicFacade: fachada gotica antigua (queda para referencia)
-#include "facade_tex.h"    // genFacade: fachada BRUTALISTA (hormigon + ventanas pintadas, agente atmosfera)
+#include "facade_tex.h"    // genFacade: fachada gotica grande (catedrales)
+#include "industrial_tex.h" // genIndustrial: muro industrial-gotico FRIO (EL POZO: balcon + muros)
 #include "ground_tex.h"    // genGround: adoquin/losas gotico para el PISO de todo el mundo
 
 // ---- SWIZZLE de texturas ----
@@ -725,6 +702,10 @@ static void buildStoneTex() { genStone(g_stoneTex, STEX); swizzleTex((unsigned c
 static unsigned int __attribute__((aligned(16))) g_facadeTex[STEX * STEX];
 static unsigned int __attribute__((aligned(16))) g_facadeTexS[STEX * STEX];
 static void buildFacadeTex() { genFacade(g_facadeTex, STEX); swizzleTex((unsigned char*)g_facadeTexS, (const unsigned char*)g_facadeTex, STEX * 4, STEX); sceKernelDcacheWritebackAll(); }
+// EL POZO: textura INDUSTRIAL-gotica fria (paneles/tuberias/remaches) para balcon + muros del pozo
+static unsigned int __attribute__((aligned(16))) g_indTex[STEX * STEX];
+static unsigned int __attribute__((aligned(16))) g_indTexS[STEX * STEX];
+static void buildIndTex() { genIndustrial(g_indTex, STEX); swizzleTex((unsigned char*)g_indTexS, (const unsigned char*)g_indTex, STEX * 4, STEX); sceKernelDcacheWritebackAll(); }
 
 // adoquin/losas para el PISO de todo el mundo
 static unsigned int __attribute__((aligned(16))) g_groundTex[STEX * STEX];
@@ -966,8 +947,9 @@ int main(void) {
     buildGroundTex();
     buildMetalTex();
     buildCity();          // genera la ciudad (g_city) ANTES del mundo/colision
+    buildIndTex();  // textura industrial del pozo (antes de renderizar)
     buildSolidWorld();
-    buildApron();   // piso cercano fino (sigue al jugador en el render)
+    buildApron();   // (legacy; no se dibuja en EL POZO)
     buildHero();
 #if VIEWER_MODE
     buildCandidates();
@@ -977,13 +959,19 @@ int main(void) {
     buildEnv();
     g_farSilVerts = buildFarSilhouettes(g_farSil);
     g_voidVerts   = buildVoidLayer(g_void);
+    // EL POZO: puentes + abismo del pozo
+    g_bridgesVerts   = buildBridges(g_bridges);
+    g_voidShaftVerts = buildVoidShaft(g_voidShaft);
+    // El fondo de la PLAZA vieja (agujas r90+, ruinas/siluetas exteriores, props y robots
+    // de plaza) quedaria FLOTANDO dentro del pozo o detras de sus muros -> apagado.
+    g_spireVerts = 0; g_vpropsVerts = 0; g_voidVerts = 0; g_farSilVerts = 0; g_npcVerts = 0; g_chainVerts = 0;
     g_vpropsVerts = buildVillageProps(g_vprops);
     g_spireVerts  = buildSpirescape(g_spire);
     buildFontAtlas();
     initGu();
 
     SceCtrlData pad;
-    float playerX = 0.0f, playerY = 0.0f, playerZ = 0.0f;
+    float playerX = 0.0f, playerY = 0.0f, playerZ = 118.0f;   // EL POZO: spawn en el BALCON (muro +Z), mirando -Z al abismo
     float velY = 0.0f, velX = 0.0f, velZ = 0.0f;
     int   coyote = 0, prevJump = 0, jumpBuf = 0;
     float en = 780.0f;
@@ -994,7 +982,7 @@ int main(void) {
     const int   COYOTE_MAX = 6, JUMPBUF_MAX = 6;
     const float FLOAT_LIFT = 0.030f, FLOAT_GRAV = 0.006f, FLOAT_UPCAP = 0.12f, FLOAT_FALLCAP = -0.09f, EN_FLOAT = 6.0f, EN_REGEN = 5.0f;
     int   grounded = 1;
-    float camYaw = 0.0f;    // mirada inicial: al norte (-Z), hacia la Gran Catedral
+    float camYaw = 0.7f;    // mirada inicial: a un hueco NE (borde de plataforma + vacio + megaestructura + catedrales de reojo)
     float heroYaw = 0.0f;   // hacia donde encara el modelo (gira al avanzar)
     int   paused = 0, prevStart = 0;
     float walkPhase = 0.0f, idleT = 0.0f;   // animacion del personaje
@@ -1061,7 +1049,7 @@ int main(void) {
             int lookU = (pad.Buttons & PSP_CTRL_UP) ? 1 : 0, lookD = (pad.Buttons & PSP_CTRL_DOWN) ? 1 : 0;
             pitchRate += (((lookU ? PITCH_SPD : 0.0f) - (lookD ? PITCH_SPD : 0.0f)) - pitchRate) * LOOK_SMOOTH;
             camPitch  += pitchRate;
-            if (!lookU && !lookD) camPitch *= 0.90f;
+            if (!lookU && !lookD) camPitch += (-0.12f - camPitch) * 0.10f;   // reposo levemente HACIA ABAJO: se ve el borde del balcon y el abismo (vertigo)
             if (camPitch >  PITCH_CLAMP) camPitch =  PITCH_CLAMP;
             if (camPitch < -PITCH_CLAMP) camPitch = -PITCH_CLAMP;
             // -- avanzar/retroceder (nub Y) + strafe (D-pad izq/der), relativo a la MIRADA --
@@ -1081,10 +1069,10 @@ int main(void) {
             // -- colision por ejes separados (desliza por muros) --
             float nx = playerX + velX; if (!blocked(nx, playerZ, playerY)) playerX = nx; else velX = 0.0f;
             float nz = playerZ + velZ; if (!blocked(playerX, nz, playerY)) playerZ = nz; else velZ = 0.0f;
-            // -- BORDE de la PLAZA: clamp CIRCULAR (r=COURT). Los muros de las catedrales
-            //    frenan antes al acercarse; en los HUECOS entre ellas ves el vacio (no caes). --
-            { float pr2 = playerX * playerX + playerZ * playerZ;
-              if (pr2 > COURT * COURT) { float sc = COURT / sqrtf(pr2); playerX *= sc; playerZ *= sc; } }
+            // -- EL BALCON: clamp al rectangulo caminable (dentro de la baranda). No se cae al pozo. --
+            if (playerX >  20.5f) playerX =  20.5f; else if (playerX < -20.5f) playerX = -20.5f;
+            if (playerZ > 138.5f) playerZ = 138.5f; else if (playerZ <  99.5f) playerZ =  99.5f;
+            (void)COURT;
             heroYaw = camYaw;   // disparo/melee usan heroYaw = hacia donde miras
             // -- head-bob por velocidad --
             float spd = sqrtf(velX * velX + velZ * velZ);
@@ -1233,8 +1221,8 @@ int main(void) {
             // ===== RED DE SEGURIDAD: si el jugador se fue al VACIO, reset al spawn =====
             // (evita "caer al vacio por siempre" al cambiar de gravedad sin superficie)
             if (playerY < -30.0f || playerY > 400.0f ||
-                playerX * playerX + playerZ * playerZ > 130.0f * 130.0f) {
-                playerX = 0.0f; playerY = 0.0f; playerZ = 0.0f;
+                playerX * playerX + playerZ * playerZ > 200.0f * 200.0f) {
+                playerX = 0.0f; playerY = 0.0f; playerZ = 118.0f;   // vuelve al BALCON
                 velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f;
                 gravG = 0; grounded = 1;
             }
@@ -1341,20 +1329,15 @@ int main(void) {
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);   // 1 texel/pixel: gran ahorro de fill en PSP real
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
         // --- MUNDO SOLIDO con CULLING por estructura + LOD (solo lo cercano/al frente) ---
-        sceGuDisable(GU_CULL_FACE);  // PISO: quads de UNA cara -> el culling no ahorra fill y su winding es opuesto al de las cajas -> OFF garantiza que el piso SIEMPRE se ve.
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_floorCount, 0, g_solidWorld);   // piso teselado GRUESO: SIEMPRE visible (REPLACE = brillo de la textura)
-        // APRON: piso cercano FINO que sigue al jugador (celdas 2.5u -> sin hueco bajo la
-        // camara). snap a 12u para que la textura calce con el piso grueso; y=0.03 gana el z-fight.
-        {
-            ScePspFVector3 ap = { floorf(playerX / 12.0f + 0.5f) * 12.0f, 0.03f,
-                                  floorf(playerZ / 12.0f + 0.5f) * 12.0f };
-            sceGumTranslate(&ap);
-            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_apronCount, 0, g_apron);
-            sceGumLoadIdentity();
-        }
-        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);   // el resto del mundo vuelve a MODULATE (textura*color para tinte/niebla)
-        sceGuTexImage(0, STEX, STEX, STEX, g_facadeTexS);   // EDIFICIOS: textura de FACHADA gotica (ventanas en la imagen)
-        sceGuEnable(GU_CULL_FACE);   // CATEDRALES: cajas/quads CERRADOS con winding consistente (auditoria) -> cull quita ~mitad del fill. Exterior=GU_CCW. Si se ve POR DENTRO, invertir NOCTIS_FRONTFACE (linea 41).
+        // ===== EL POZO: BALCON + MUROS colosales (textura INDUSTRIAL, MODULATE = niebla por vertice) =====
+        sceGuDisable(GU_CULL_FACE);  // balcon+muros: winding no verificado en HW todavia -> OFF (seguro); activar tras verificar
+        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
+        sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);   // BALCON: losa de piedra (la textura de muro ponia ventanas azules en el piso)
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_ledgeEnd - g_ledgeStart, 0, g_solidWorld + g_ledgeStart);   // balcon del jugador
+        sceGuTexImage(0, STEX, STEX, STEX, g_indTexS);      // MUROS: industrial-gotico frio
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_wallEnd  - g_wallStart,  0, g_solidWorld + g_wallStart);    // muros del pozo
+        sceGuTexImage(0, STEX, STEX, STEX, g_facadeTexS);   // CATEDRALES: fachada gotica (hitos al otro lado del vacio)
+        sceGuEnable(GU_CULL_FACE);   // catedrales: cajas cerradas, winding consistente -> cull (mitad del fill)
         // 4 catedrales-landmark: dibujar SIEMPRE (nunca desaparecen al caminar), pero con
         // LOD -> lejos solo la MASA nucleo [sStart,sDetail); cerca (centro<LOD_DIST) completa
         // con su ornamento fino (aguja/arbotantes/pinaculos). sDetail lo fija cada catedral.
@@ -1391,7 +1374,9 @@ int main(void) {
         // atmosfera de fondo: siluetas colosales lejanas + ruinas suspendidas del abismo
         sceGuDisable(GU_CULL_FACE);  // sin back-face culling (winding mixto): agujas/props solidas, sin ver-por-dentro
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_farSilVerts, 0, g_farSil);   // MEGAESTRUCTURA colosal del horizonte (360, en bruma)
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidVerts,   0, g_void);     // VACIO/ABISMO: ruinas suspendidas + luces lejanas
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidVerts,   0, g_void);     // (plaza vieja, apagado)
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_bridgesVerts,   0, g_bridges);   // EL POZO: puentes/megavigas cruzando el abismo
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidShaftVerts, 0, g_voidShaft); // EL POZO: abismo sin fondo (arriba y abajo)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_spireVerts, 0, g_spire);     // MAR DENSO de agujas (el look de la referencia)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);   // props del pueblo
         // cables + robots + ambiente (braseros) sin textura
