@@ -563,7 +563,7 @@ static float groundHeight(float px, float pz, float py) {
 // de una estructura y por DEBAJO de su techo (no bloquea al estar encima).
 static bool blocked(float px, float pz, float py) {
     const float r = 1.1f;
-    if (px * px + pz * pz > 82.0f * 82.0f) return true;   // borde del pueblo/balcon: no se sale hacia el mar de agujas
+    if (px * px + pz * pz > 200.0f * 200.0f) return true; // (era 82 = radio de la PLAZA vieja; el balcon esta en r~118 -> bloqueaba TODO movimiento)
     for (int s = 0; s < g_cityCount; ++s) {
         const CityBldg &b = g_city[s];
         if (py < b.h - 0.8f) {
@@ -1330,10 +1330,11 @@ int main(void) {
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
         // --- MUNDO SOLIDO con CULLING por estructura + LOD (solo lo cercano/al frente) ---
         // ===== EL POZO: BALCON + MUROS colosales (textura INDUSTRIAL, MODULATE = niebla por vertice) =====
-        sceGuDisable(GU_CULL_FACE);  // balcon+muros: winding no verificado en HW todavia -> OFF (seguro); activar tras verificar
+        sceGuDisable(GU_CULL_FACE);  // BALCON: su piso son quads de UNA cara con el winding del piso viejo (opuesto a las cajas) -> con cull ON desaparecia. OFF aqui no cuesta fill extra.
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
-        sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);   // BALCON: losa de piedra (la textura de muro ponia ventanas azules en el piso)
+        sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);   // BALCON: losa de piedra
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_ledgeEnd - g_ledgeStart, 0, g_solidWorld + g_ledgeStart);   // balcon del jugador
+        sceGuEnable(GU_CULL_FACE);   // MUROS: winding = convencion addSolidBoxT (verificado) -> cull ON, mitad del fill de costillas/tuberias/cajas (PSP iba a 1 FPS)
         sceGuTexImage(0, STEX, STEX, STEX, g_indTexS);      // MUROS: industrial-gotico frio
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_wallEnd  - g_wallStart,  0, g_solidWorld + g_wallStart);    // muros del pozo
         sceGuTexImage(0, STEX, STEX, STEX, g_facadeTexS);   // CATEDRALES: fachada gotica (hitos al otro lado del vacio)
@@ -1372,7 +1373,7 @@ int main(void) {
         sceGuDisable(GU_TEXTURE_2D);
 
         // atmosfera de fondo: siluetas colosales lejanas + ruinas suspendidas del abismo
-        sceGuDisable(GU_CULL_FACE);  // sin back-face culling (winding mixto): agujas/props solidas, sin ver-por-dentro
+        sceGuEnable(GU_CULL_FACE);   // puentes + abismo = cajas/piramides addSolidBox (winding consistente) -> cull ON (fill)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_farSilVerts, 0, g_farSil);   // MEGAESTRUCTURA colosal del horizonte (360, en bruma)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidVerts,   0, g_void);     // (plaza vieja, apagado)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_bridgesVerts,   0, g_bridges);   // EL POZO: puentes/megavigas cruzando el abismo
