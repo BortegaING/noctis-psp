@@ -1091,7 +1091,7 @@ int main(void) {
             // Triangulo cicla la DIRECCION de gravedad (0=abajo .. 5=-Z)
             // GRAVEDAD (Triangulo) DESHABILITADA en 1ra persona por ahora: se reintroduce
             // con camara gravedad-consciente en una tanda dedicada. gravG queda en 0.
-            { int tri = (pad.Buttons & PSP_CTRL_TRIANGLE) ? 1 : 0; (void)tri; prevTri = tri; }
+            { int tri = (pad.Buttons & PSP_CTRL_TRIANGLE) ? 1 : 0; if (tri && !prevTri) { gravG = (gravG + 1) % 6; velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f; } prevTri = tri; }   // GRAVEDAD: Triangulo cicla 6 direcciones
 
             aiming = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
             if (aiming) {   // al apuntar, el personaje encara al frente (-Z)
@@ -1297,12 +1297,18 @@ int main(void) {
             // PRIMERA PERSONA (lookAt): el "adelante" del movimiento y de la camara son
             // el MISMO vector por construccion -> sin bugs de signo al girar. Ojo a la
             // altura de la cabeza + head-bob; pivota en el ojo (pitch natural).
-            // 3RA PERSONA: camara detras y arriba del personaje, mirando hacia donde encara
-            float sy = sinf(camYaw), cy = cosf(camYaw);
+            // 3RA PERSONA con GRAVEDAD: "arriba" = -gravedad; adelante en el plano de la gravedad.
+            // Con gravedad normal el nub gira la vista (camYaw); con gravedad cambiada la vista
+            // queda fija al plano (el nub mueve en el plano) -> siempre consistente con el movimiento.
             (void)camPitch; (void)bobX; (void)bobY; (void)EYE_H;
-            ScePspFVector3 eye = { playerX - sy * 9.0f, playerY + 4.5f, playerZ + cy * 9.0f };
-            ScePspFVector3 ctr = { playerX + sy * 4.0f, playerY + 1.8f, playerZ - cy * 4.0f };
-            ScePspFVector3 up  = { 0.0f, 1.0f, 0.0f };
+            float gx, gy, gz, rx, ry, rz, fx, fy, fz;
+            gravDirVec(gravG, &gx, &gy, &gz); gravBasis(gravG, &rx, &ry, &rz, &fx, &fy, &fz);
+            float s = (gravG == 0) ? sinf(camYaw) : 0.0f, c = (gravG == 0) ? cosf(camYaw) : 1.0f;
+            float fX = fx * c + rx * s, fY = fy * c + ry * s, fZ = fz * c + rz * s;
+            float uX = -gx, uY = -gy, uZ = -gz;
+            ScePspFVector3 eye = { playerX - fX * 9.0f + uX * 4.5f, playerY - fY * 9.0f + uY * 4.5f, playerZ - fZ * 9.0f + uZ * 4.5f };
+            ScePspFVector3 ctr = { playerX + fX * 4.0f + uX * 1.8f, playerY + fY * 4.0f + uY * 1.8f, playerZ + fZ * 4.0f + uZ * 1.8f };
+            ScePspFVector3 up  = { uX, uY, uZ };
             sceGumLookAt(&eye, &ctr, &up);
 #endif
         }
@@ -1392,6 +1398,10 @@ int main(void) {
             sceGumLoadIdentity();
             ScePspFVector3 pp = { playerX, playerY + hb, playerZ };
             sceGumTranslate(&pp);
+            ScePspFVector3 gm = { 0.0f, 0.0f, 0.0f };   // pies hacia la gravedad
+            if (gravG == 1) gm.z = 3.14159f; else if (gravG == 2) gm.z = -1.5708f; else if (gravG == 3) gm.z = 1.5708f;
+            else if (gravG == 4) gm.x = 1.5708f; else if (gravG == 5) gm.x = -1.5708f;
+            sceGumRotateXYZ(&gm);
             ScePspFVector3 fr = { (moving ? 0.045f : 0.0f), heroYaw, moving ? sinf(walkPhase * 0.5f) * 0.03f : 0.0f };
             sceGumRotateXYZ(&fr);
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_heroV, 0, g_hero);
