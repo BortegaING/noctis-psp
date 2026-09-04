@@ -504,42 +504,37 @@ static void buildApron() {
 static void buildSolidWorld() {
     int i = 0;
     g_winVerts = 0;
-    // ===== EL POZO (directiva §2-7: "dentro de una megaestructura de BLAME") =====
-    // NO hay piso de plaza: abajo esta el ABISMO. El jugador vive en un BALCON que
-    // sobresale del muro +Z hacia un pozo vertical colosal.
+    // ===== BLAME BRUTALISTA (simple, barato): piso grande + monolitos enormes lejos =====
     g_floorCount = 0;
-    // BALCON del jugador (top = grilla FINA: la camara nunca cruza un triangulo grande)
+    // PISO teselado (25u) en el slot del "balcon" (se dibuja con textura de piedra, sin cull)
     g_ledgeStart = i;
-    buildLedge(g_solidWorld, i);
-    g_ledgeEnd = i;
-    // MUROS colosales del pozo (octagono r~160, y -700..+500) con relieve industrial-gotico
-    g_wallStart = i;
-    buildShaftWalls(g_solidWorld, i);
-    g_wallEnd = i;
-    // CATEDRALES como HITOS contra los muros lejanos, cada una sobre su propia plataforma
-    g_srangeCount = 0;
-    for (int s = 0; s < g_cityCount && g_srangeCount < 256; ++s) {
-        if (i > 33500) break;
-        const CityBldg &b = g_city[s];
-        float dd = sqrtf(b.x * b.x + (b.z - 118.0f) * (b.z - 118.0f));   // distancia al BALCON (niebla)
-        StructRange &r = g_srange[g_srangeCount];
-        r.sStart = i; r.wStart = g_winVerts; r.cx = b.x; r.cz = b.z; r.sDetail = i;
-        r.rad = 0.5f * sqrtf(b.w * b.w + b.d * b.d);
-        // plataforma bajo la catedral (losa gruesa, top en y=0) para que no flote en el vacio
-        addSolidBoxT(g_solidWorld, i, b.x, -8.0f, b.z, b.w + 14.0f, b.d + 14.0f, 8.0f,
-                     fadeToVoid(brighten(RGBA(64, 70, 80, 255), 1.6f), dd));
-        switch (s) {   // POCAS catedrales, cada una UNICA (despacho por indice; ver city.h)
-            case 0:  buildCathedralGrand   (g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail); break;
-            case 1:  buildCathedralTwin    (g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail); break;
-            case 2:  buildCathedralBasilica(g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail); break;
-            default: buildCathedralBell    (g_solidWorld, i, b.x, b.z, b.w, b.d, b.h, b.color, dd, &r.sDetail); break;
+    {
+        const float HALF = 300.0f; const int N = 24; const float CELL = 2.0f * HALF / (float)N;
+        const float invUV = 1.0f / 12.0f; const unsigned int fcol = RGBA(240, 230, 214, 255);
+        for (int gz = 0; gz < N; ++gz) {
+            float z0 = -HALF + CELL * gz, z1 = z0 + CELL;
+            for (int gx = 0; gx < N; ++gx) {
+                float x0 = -HALF + CELL * gx, x1 = x0 + CELL;
+                addQuadT(g_solidWorld, i, x0,0,z0, x1,0,z0, x1,0,z1, x0,0,z1, x0*invUV,z0*invUV, x1*invUV,z1*invUV, fcol);
+            }
         }
-        r.sCount = i - r.sStart; r.wCount = g_winVerts - r.wStart;
-        g_srangeCount++;
     }
+    g_ledgeEnd = i;
+    // MONOLITOS (slot de "muros": textura industrial, cull ON): 3 cajas cada uno, muy separados
+    g_wallStart = i;
+    for (int s = 0; s < g_cityCount; ++s) {
+        const CityBldg &b = g_city[s];
+        float dd = sqrtf(b.x * b.x + b.z * b.z);
+        unsigned int col = fadeToVoid(brighten(b.color, 2.6f), dd);
+        addSolidBoxT(g_solidWorld, i, b.x, 0.0f,       b.z, b.w,         b.d,         b.h,        col);           // cuerpo
+        addSolidBoxT(g_solidWorld, i, b.x, b.h,        b.z, b.w * 1.18f, b.d * 1.18f, 9.0f,       brighten(col, 0.9f)); // cornisa
+        addSolidBoxT(g_solidWorld, i, b.x, b.h + 9.0f, b.z, b.w * 0.55f, b.d * 0.55f, b.h * 0.45f, col);          // torre superior
+    }
+    g_wallEnd = i;
+    g_srangeCount = 0;                  // sin catedrales (se descarto lo gotico)
     g_winTailStart = g_winVerts;
-    g_spireStart = i; g_spireEnd = i;   // sin mar de agujas: los muros del pozo lo reemplazan
-    g_tailStart = i;                    // sin cola del patio viejo (arcos/puente/torre)
+    g_spireStart = i; g_spireEnd = i;
+    g_tailStart = i;
     g_metalVerts = 0;
     g_solidVerts = i;
 }
@@ -960,8 +955,8 @@ int main(void) {
     g_farSilVerts = buildFarSilhouettes(g_farSil);
     g_voidVerts   = buildVoidLayer(g_void);
     // EL POZO: puentes + abismo del pozo
-    g_bridgesVerts   = buildBridges(g_bridges);
-    g_voidShaftVerts = buildVoidShaft(g_voidShaft);
+    g_bridgesVerts   = 0;   // (pozo apagado: fill)
+    g_voidShaftVerts = 0;
     // El fondo de la PLAZA vieja (agujas r90+, ruinas/siluetas exteriores, props y robots
     // de plaza) quedaria FLOTANDO dentro del pozo o detras de sus muros -> apagado.
     g_spireVerts = 0; g_vpropsVerts = 0; g_voidVerts = 0; g_farSilVerts = 0; g_npcVerts = 0; g_chainVerts = 0;
@@ -971,7 +966,7 @@ int main(void) {
     initGu();
 
     SceCtrlData pad;
-    float playerX = 0.0f, playerY = 0.0f, playerZ = 118.0f;   // EL POZO: spawn en el BALCON (muro +Z), mirando -Z al abismo
+    float playerX = 0.0f, playerY = 0.0f, playerZ = 0.0f;   // BLAME: spawn al centro, monolitos lejos
     float velY = 0.0f, velX = 0.0f, velZ = 0.0f;
     int   coyote = 0, prevJump = 0, jumpBuf = 0;
     float en = 780.0f;
@@ -993,7 +988,7 @@ int main(void) {
     float bobPhase = 0.0f, bobX = 0.0f, bobY = 0.0f;// head-bob segun velocidad
     float vmSway = 0.0f, vmBob = 0.0f;              // offsets suavizados del arma en pantalla
     const float TURN_MAX = 0.045f, LOOK_SMOOTH = 0.25f, PITCH_SPD = 0.030f, PITCH_CLAMP = 1.30f;
-    const float FP_SPEED = 0.11f, FP_ACCEL = 0.16f, FP_STOP = 0.20f, EYE_H = 1.7f, COURT = 46.0f, STRAFE_SIGN = 1.0f;
+    const float FP_SPEED = 0.11f, FP_ACCEL = 0.16f, FP_STOP = 0.20f, EYE_H = 1.7f, COURT = 150.0f, STRAFE_SIGN = 1.0f;
 
     int fps = 0, frameAccum = 0;
     long long lastTick = sceKernelGetSystemTimeWide();
@@ -1069,10 +1064,9 @@ int main(void) {
             // -- colision por ejes separados (desliza por muros) --
             float nx = playerX + velX; if (!blocked(nx, playerZ, playerY)) playerX = nx; else velX = 0.0f;
             float nz = playerZ + velZ; if (!blocked(playerX, nz, playerY)) playerZ = nz; else velZ = 0.0f;
-            // -- EL BALCON: clamp al rectangulo caminable (dentro de la baranda). No se cae al pozo. --
-            if (playerX >  20.5f) playerX =  20.5f; else if (playerX < -20.5f) playerX = -20.5f;
-            if (playerZ > 138.5f) playerZ = 138.5f; else if (playerZ <  99.5f) playerZ =  99.5f;
-            (void)COURT;
+            // -- BLAME: clamp circular (r=COURT) sobre el piso grande --
+            { float pr2 = playerX * playerX + playerZ * playerZ;
+              if (pr2 > COURT * COURT) { float sc = COURT / sqrtf(pr2); playerX *= sc; playerZ *= sc; } }
             heroYaw = camYaw;   // disparo/melee usan heroYaw = hacia donde miras
             // -- head-bob por velocidad --
             float spd = sqrtf(velX * velX + velZ * velZ);
@@ -1303,11 +1297,11 @@ int main(void) {
             // PRIMERA PERSONA (lookAt): el "adelante" del movimiento y de la camara son
             // el MISMO vector por construccion -> sin bugs de signo al girar. Ojo a la
             // altura de la cabeza + head-bob; pivota en el ojo (pitch natural).
-            float cp = cosf(camPitch), sp = sinf(camPitch);
-            float sy = sinf(camYaw),   cy = cosf(camYaw);
-            ScePspFVector3 eye = { playerX + bobX * 0.5f, playerY + EYE_H + bobY, playerZ };
-            ScePspFVector3 fwd = { cp * sy, sp, -cp * cy };
-            ScePspFVector3 ctr = { eye.x + fwd.x, eye.y + fwd.y, eye.z + fwd.z };
+            // 3RA PERSONA: camara detras y arriba del personaje, mirando hacia donde encara
+            float sy = sinf(camYaw), cy = cosf(camYaw);
+            (void)camPitch; (void)bobX; (void)bobY; (void)EYE_H;
+            ScePspFVector3 eye = { playerX - sy * 9.0f, playerY + 4.5f, playerZ + cy * 9.0f };
+            ScePspFVector3 ctr = { playerX + sy * 4.0f, playerY + 1.8f, playerZ - cy * 4.0f };
             ScePspFVector3 up  = { 0.0f, 1.0f, 0.0f };
             sceGumLookAt(&eye, &ctr, &up);
 #endif
@@ -1333,7 +1327,13 @@ int main(void) {
         sceGuDisable(GU_CULL_FACE);  // BALCON: su piso son quads de UNA cara con el winding del piso viejo (opuesto a las cajas) -> con cull ON desaparecia. OFF aqui no cuesta fill extra.
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
         sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);   // BALCON: losa de piedra
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_ledgeEnd - g_ledgeStart, 0, g_solidWorld + g_ledgeStart);   // balcon del jugador
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_ledgeEnd - g_ledgeStart, 0, g_solidWorld + g_ledgeStart);   // PISO grande
+        {   // APRON fino que sigue al jugador (tapa el hueco de la celda bajo la camara)
+            ScePspFVector3 ap = { floorf(playerX / 12.0f + 0.5f) * 12.0f, 0.03f, floorf(playerZ / 12.0f + 0.5f) * 12.0f };
+            sceGumTranslate(&ap);
+            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_apronCount, 0, g_apron);
+            sceGumLoadIdentity();
+        }
         sceGuEnable(GU_CULL_FACE);   // MUROS: winding = convencion addSolidBoxT (verificado) -> cull ON, mitad del fill de costillas/tuberias/cajas (PSP iba a 1 FPS)
         sceGuTexImage(0, STEX, STEX, STEX, g_indTexS);      // MUROS: industrial-gotico frio
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_wallEnd  - g_wallStart,  0, g_solidWorld + g_wallStart);    // muros del pozo
@@ -1386,8 +1386,16 @@ int main(void) {
         sceGuDisable(GU_CULL_FACE);  // braseros (g_env) + HUNTER + balas: winding NO verificado -> culling OFF (seguro)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_envVerts, 0, g_env);
 
-        // ---- PRIMERA PERSONA: el personaje NO se dibuja (la camara esta en su cabeza).
-        //      El arma se dibuja como viewmodel en un pase propio, justo antes del HUD.
+        // ---- 3RA PERSONA: el HUNTER encara heroYaw (=camYaw), leve balanceo al caminar ----
+        {
+            float hb = moving ? (sinf(walkPhase) * 0.045f) : (sinf(idleT) * 0.03f);
+            sceGumLoadIdentity();
+            ScePspFVector3 pp = { playerX, playerY + hb, playerZ };
+            sceGumTranslate(&pp);
+            ScePspFVector3 fr = { (moving ? 0.045f : 0.0f), heroYaw, moving ? sinf(walkPhase * 0.5f) * 0.03f : 0.0f };
+            sceGumRotateXYZ(&fr);
+            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_heroV, 0, g_hero);
+        }
 
         // recursos: brillan al acercarse (seccion 12)
         for (int r = 0; r < kResourceCount && r < 64; ++r) {
@@ -1468,7 +1476,7 @@ int main(void) {
         {
             int vmV = buildViewmodel(g_vm, vmSway, vmBob);
             sceGuDisable(GU_CULL_FACE);
-            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vmV, 0, g_vm);
+            if (0) sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vmV, 0, g_vm);   // 3ra persona: sin viewmodel
         }
 
         // ---------- HUD (2D) ----------
