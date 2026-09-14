@@ -116,7 +116,7 @@ static unsigned int warmTint(unsigned int c) {
 // desvanece un color hacia el fondo (vacio) segun la distancia al centro del
 // distrito. Niebla "horneada" fiable (no depende del fog por hardware).
 static unsigned int fadeToVoid(unsigned int base, float dist) {
-    const float a = 50.0f, b = 330.0f; // EL POZO mide ~320u: el muro lejano (278u) y la Gran Catedral (236u) quedan como SILUETAS (~70-80% niebla), no desaparecen. (Antes b=98: todo lo que estaba a >98u era niebla pura.)
+    const float a = 20.0f, b = 140.0f;  // niebla calibrada al SECTOR chico (antes 50..330, era del mundo grande)
     float t = (dist - a) / (b - a);
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
@@ -455,6 +455,7 @@ static int g_cityCount = 0;
 #include "cathedral_bell.h"      // buildCathedralBell():     landmark 3 (sur)   - campanario/reloj
 #include "shaft_walls.h"         // EL POZO: buildShaftWalls() muros colosales industrial-goticos (octagono r~160, y -700..+500)
 #include "ledge.h"               // EL POZO: buildLedge() balcon del jugador (top teselado fino + baranda + soportes)
+#include "sector.h"              // SECTOR CERRADO de pasillos (planta de cruz gotica): el mundo actual
 
 // edificio SIMPLE de ciudad (pocos verts -> muchos edificios + culling = rinde)
 static void buildCityBldg(TexVertex *buf, int &i, float cx, float cz,
@@ -506,34 +507,18 @@ static void buildApron() {
 static void buildSolidWorld() {
     int i = 0;
     g_winVerts = 0;
-    // ===== BLAME BRUTALISTA (simple, barato): piso grande + monolitos enormes lejos =====
+    // ===== SECTOR CERRADO DE PASILLOS (ver sector.h) =====
+    // Recinto chico con suelo, TECHO y muros; 4 masas separadas forman pasillos en cruz.
+    // Las paredes OCLUYEN -> en un pasillo solo se pinta ese pasillo (el fill es el cuello).
+    buildSectorCollision();             // llena g_city con los volumenes solidos (colision)
     g_floorCount = 0;
-    // PISO teselado (25u) en el slot del "balcon" (se dibuja con textura de piedra, sin cull)
     g_ledgeStart = i;
-    {
-        const float HALF = 300.0f; const int N = 24; const float CELL = 2.0f * HALF / (float)N;
-        const float invUV = 1.0f / 12.0f; const unsigned int fcol = RGBA(240, 230, 214, 255);
-        for (int gz = 0; gz < N; ++gz) {
-            float z0 = -HALF + CELL * gz, z1 = z0 + CELL;
-            for (int gx = 0; gx < N; ++gx) {
-                float x0 = -HALF + CELL * gx, x1 = x0 + CELL;
-                addQuadT(g_solidWorld, i, x0,0,z0, x1,0,z0, x1,0,z1, x0,0,z1, x0*invUV,z0*invUV, x1*invUV,z1*invUV, fcol);
-            }
-        }
-    }
+    buildSectorFloorCeil(g_solidWorld, i);   // suelo + techo (textura de piedra, sin cull)
     g_ledgeEnd = i;
-    // MONOLITOS (slot de "muros": textura industrial, cull ON): 3 cajas cada uno, muy separados
     g_wallStart = i;
-    for (int s = 0; s < g_cityCount; ++s) {
-        const CityBldg &b = g_city[s];
-        float dd = sqrtf(b.x * b.x + b.z * b.z);
-        unsigned int col = fadeToVoid(brighten(b.color, 2.6f), dd);
-        addSolidBoxT(g_solidWorld, i, b.x, 0.0f,       b.z, b.w,         b.d,         b.h,        col);           // cuerpo
-        addSolidBoxT(g_solidWorld, i, b.x, b.h,        b.z, b.w * 1.18f, b.d * 1.18f, 9.0f,       brighten(col, 0.9f)); // cornisa
-        addSolidBoxT(g_solidWorld, i, b.x, b.h + 9.0f, b.z, b.w * 0.55f, b.d * 0.55f, b.h * 0.45f, col);          // torre superior
-    }
+    buildSectorWalls(g_solidWorld, i);       // masas + muros + arcada gotica (industrial, cull ON)
     g_wallEnd = i;
-    g_srangeCount = 0;                  // sin catedrales (se descarto lo gotico)
+    g_srangeCount = 0;
     g_winTailStart = g_winVerts;
     g_spireStart = i; g_spireEnd = i;
     g_tailStart = i;
@@ -991,7 +976,7 @@ int main(void) {
     float bobPhase = 0.0f, bobX = 0.0f, bobY = 0.0f;// head-bob segun velocidad
     float vmSway = 0.0f, vmBob = 0.0f;              // offsets suavizados del arma en pantalla
     const float TURN_MAX = 0.045f, LOOK_SMOOTH = 0.25f, PITCH_SPD = 0.030f, PITCH_CLAMP = 1.30f;
-    const float FP_SPEED = 0.11f, FP_ACCEL = 0.16f, FP_STOP = 0.20f, EYE_H = 1.7f, COURT = 150.0f, STRAFE_SIGN = 1.0f;
+    const float FP_SPEED = 0.11f, FP_ACCEL = 0.16f, FP_STOP = 0.20f, EYE_H = 1.7f, COURT = 54.0f, STRAFE_SIGN = 1.0f;
 
     int fps = 0, frameAccum = 0;
     long long lastTick = sceKernelGetSystemTimeWide();
@@ -1284,7 +1269,7 @@ int main(void) {
 #else
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
-        sceGumPerspective(66.0f, 16.0f / 9.0f, 1.0f, 520.0f); // far 520: admite el anillo lejano (r 320..469) + ruinas del abismo (el 280 los recortaba); near 0.5->1.0 recupera precision del z-buffer 16-bit
+        sceGumPerspective(66.0f, 16.0f / 9.0f, 1.0f, 200.0f); // sector cerrado: nada esta mas lejos -> menos fill y mejor precision de Z
 
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
