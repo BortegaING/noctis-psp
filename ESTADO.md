@@ -95,3 +95,50 @@ Como arreglarlo **sin ver el resultado**:
 - Empunadura: `addLimb` con `r0>r1` + `addBall` de pomo.
 - Mantenerse dentro de ~400 verts y en el mismo sitio/orientacion (mano derecha, apunta abajo).
 - No tocar `main.cpp`: el archivo se compila solo al reconstruir.
+
+---
+
+# EL JUEGO: "ASCENSO" (planteamiento acordado 2026-09-14)
+
+**Accion central:** escalar la megaestructura **cambiando la direccion de la gravedad**.
+Una pared se vuelve tu suelo, corres por ella, volves a cambiar, caes a una repisa mas alta.
+Objetivo: llegar arriba. Peligro: el vacio.
+
+Elegido por Benjamin entre 4 opciones. Razon: reutiliza lo que YA funciona (gravedad +
+monolitos), **no agrega geometria** (por lo tanto no rompe el FPS) y la verticalidad hace
+mirar pocos objetos grandes en vez de panoramicas anchas, que es justo lo barato en PSP.
+
+## Por que esto es un JUEGO y no un paseo
+- **Energia (EN, ya esta en el HUD):** cada cambio de gravedad **cuesta EN**. La EN **solo se
+  recarga estando parado sobre una superficie**. Asi no se puede cambiar a lo loco: hay que
+  **planificar la ruta** y buscar donde apoyarse.
+- **Caer:** si caes al vacio, volves al ultimo **ancla** (checkpoint). Sin animacion de muerte,
+  sin penalizacion dura: la tension la da perder el avance, no un game over.
+- **Ruta:** los monolitos tienen repisas y huecos. Subir es **encontrar el camino**, no apretar
+  un boton. Ahi esta el juego.
+- **Materiales:** en repisas dificiles. Recompensan la buena ruta y **suben la EN maxima**,
+  que es lo mismo que decir "llegas mas alto". Progresion sin numeros de RPG.
+- **Meta:** una **luz/faro en la cima** del monolito mas alto. Se ve desde el suelo: el jugador
+  siempre sabe adonde va sin un solo icono en pantalla.
+
+## Piezas a construir (en orden; la 2 es la critica)
+1. **Cambio de gravedad DIRIGIDO.** Hoy Triangulo cicla 6 direcciones a ciegas. Para escalar
+   hay que cambiar **hacia la superficie que estas mirando** (la pared mas cercana en la
+   direccion de la camara). Es lo que convierte la mecanica en navegacion.
+2. **Caminar por paredes (LO CRITICO).** `groundHeight()` y `blocked()` hoy asumen gravedad
+   hacia abajo: el "suelo" es y=0 y los techos de las cajas. Hay que generalizarlos para que
+   el suelo sea **la cara de la caja perpendicular a la gravedad**.
+   **Clave tecnica:** como los monolitos son cajas **alineadas a los ejes** y la gravedad es
+   una de 6 direcciones **tambien alineada a los ejes**, esto NO es colision generica: es el
+   mismo test de caja con los ejes intercambiados. Es tratable.
+3. **Coste y recarga de EN** en cada cambio (arrancar con ~20% del maximo por cambio; recarga
+   solo con los pies apoyados).
+4. **Anclas (checkpoints) + respawn** al caer bajo cierta altura. Reusar la red de seguridad
+   que ya existe en `main.cpp`.
+5. **Materiales en repisas** (el brillo por proximidad ya esta hecho) que suben la EN maxima.
+6. **Faro en la cima** del monolito mas alto.
+
+## Pendiente de ajuste (tuning, cuando 1 y 2 funcionen)
+- Velocidad al correr por pared: a la velocidad actual, subir un monolito de 380 tarda ~1 min.
+  Probablemente haya que acelerar al ir "cuesta arriba" o hacer los monolitos mas bajos.
+- Que las repisas sean legibles desde lejos (salientes en las cajas, no decoracion fina).
