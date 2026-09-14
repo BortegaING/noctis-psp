@@ -58,3 +58,40 @@ No borrarlos: sirven de referencia.
 Solo hay repo: se puede **escribir codigo, decidir diseno y dejar commits**, pero **no compilar,
 no ver el juego, no copiar a la consola**. El codigo escrito asi va **sin verificar**: se compila
 y se prueba la proxima vez en el PC. Dejar los cambios en commits chicos y claros.
+
+## Convenciones del motor (firmas EXACTAS, verificadas)
+Sin `rand`, sin heap, C++17, solo `<math.h>`. Todo determinista. Los `.h` se incluyen desde
+`main.cpp` y usan sus helpers: **no** son standalone.
+
+Vertices:
+- `struct LineVertex { unsigned int color; float x,y,z; }` — plano, sin textura (`LINE_FLAGS`).
+- `struct TexVertex { float u,v; unsigned int color; float x,y,z; }` — texturizado (`TEX_FLAGS`).
+
+Primitivas (costo en verts):
+- `addSolidBox(LineVertex*, int& i, cx, baseY, cz, w, d, h, col)` — caja, **30v**. `baseY` = base, no centro.
+- `addPyramid(LineVertex*, int& i, cx, baseY, cz, w, d, apexH, col)` — **12v**.
+- Versiones texturizadas: `addSolidBoxT`, `addPyramidT`, y
+  `addQuadT(buf,i, ax,ay,az, bx,by,bz, cx,cy,cz, dx,dy,dz, u0,v0,u1,v1, col)` — **6v**.
+- Organicas (`src/char_prims.h`), las buenas para personajes y armas:
+  - `addLimb(buf,i, x0,y0,z0, x1,y1,z1, r0,r1, sides, colB, colT)` — cilindro **que se afina**
+    entre dos puntos cualesquiera (cualquier angulo). Costo `sides*12`.
+  - `addBall(buf,i, cx,cy,cz, rx,ry,rz, stacks,slices, col)` — elipsoide. Costo `stacks*slices*6`.
+  - `addLoft(buf,i, cx,cz, const float* ys, const float* rs, int n, sides, colBot, colTop)` —
+    anillos apilados (torso, faldon).
+
+Color: `RGBA(r,g,b,a)` 0..255; `brighten(col,f)`, `warmTint(col)`,
+`fadeToVoid(col,dist)` (niebla por distancia), `heightHaze(col,y)` (niebla por altura).
+
+Personaje: `src/cand/hunter.h` -> `static int build_hunter(LineVertex* buf)` devuelve el n de
+verts; se vuelca en `g_hero[3200]` (`main.cpp:602`). Hay margen de sobra en ese buffer.
+
+## Tarea pendiente #1 para sesiones sin PC: EL SABLE
+Ahora mismo (`hunter.h`, bloque "CLEAVER") la hoja son **4 `addSolidBox` apilados** que se van
+angostando: por eso se lee como "cuadrados grises". La guarda es otra caja.
+Como arreglarlo **sin ver el resultado**:
+- Rehacer la hoja con `addLimb` (2-3 tramos) para que se afine de verdad y termine en **punta**,
+  con `sides` 4-6 (perfil de hoja, no tubo). Filo mas claro que el lomo usando `colB`/`colT`.
+- Guarda: dos `addLimb` cortos cruzados o una caja fina + dos remates, no un ladrillo.
+- Empunadura: `addLimb` con `r0>r1` + `addBall` de pomo.
+- Mantenerse dentro de ~400 verts y en el mismo sitio/orientacion (mano derecha, apunta abajo).
+- No tocar `main.cpp`: el archivo se compila solo al reconstruir.
