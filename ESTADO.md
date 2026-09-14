@@ -164,3 +164,21 @@ Pasos pendientes para integrarlo:
 2. `buildCity()` -> llamar a `buildSectorCollision()` (colision y techos pisables salen gratis).
 3. Acotar al jugador a +-54 y bajar el **plano lejano de 520 a ~200** (nada esta mas lejos).
 4. Reajustar la niebla: hoy `fadeToVoid` usa a=50,b=330, calibrado para el mundo grande.
+
+## LA REFERENCIA VISUAL (la imagen que Benjamin manda una y otra vez)
+Mockup en una PSP. **Es el objetivo de look, no negociable.** Contiene:
+- **3ra persona**: el cazador visto de espaldas, de pie en una **terraza/balcon con baranda de
+  hierro**, espada larga en la mano derecha, abrigo oscuro con detalles rojos.
+- Al frente, un **bosque DENSO de agujas y campanarios goticos** que se pierde en **niebla
+  gris-parda calida**. Cientos de siluetas casi negras, superpuestas, cada vez mas tenues.
+- Detalles de primer plano: farol, **cables/cadenas colgando** entre estructuras, piedra gastada.
+- Paleta: gris-pardo CALIDO en la niebla, siluetas casi negras, y **puntitos ambar** de ventanas
+  encendidas como unico acento. Nada saturado.
+- HUD: HP/EN/GRV arriba-izquierda, minimapa arriba-derecha con "DISTRITO: Campanario",
+  aviso de objeto abajo-izquierda, arma abajo-derecha.
+
+**Como se concilia con el sector de pasillos:** la referencia es el **LOOK**; los pasillos son
+el **ESPACIO JUGABLE**. Se junta asi: el recinto tiene **aberturas/ventanales** y por ellas se ve
+un **telon de agujas fogueadas** (impostores baratos, casi color niebla). El jugador camina por
+pasillos (barato, ocluido) pero **cada abertura enmarca la vista de la referencia**. Al subir
+arriba de una masa, se abre la panoramica completa: ese es el momento "postal".
