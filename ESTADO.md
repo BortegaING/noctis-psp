@@ -98,7 +98,9 @@ Como arreglarlo **sin ver el resultado**:
 
 ---
 
-# EL JUEGO: "ASCENSO" (planteamiento acordado 2026-09-14)
+# PROJECT NOCTIS — planteamiento del juego (acordado 2026-09-14)
+
+El juego se llama **PROJECT NOCTIS**. Lo de abajo es su bucle de juego, no otro proyecto.
 
 **Accion central:** escalar la megaestructura **cambiando la direccion de la gravedad**.
 Una pared se vuelve tu suelo, corres por ella, volves a cambiar, caes a una repisa mas alta.
