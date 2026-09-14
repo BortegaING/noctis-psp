@@ -144,3 +144,23 @@ mirar pocos objetos grandes en vez de panoramicas anchas, que es justo lo barato
 - Velocidad al correr por pared: a la velocidad actual, subir un monolito de 380 tarda ~1 min.
   Probablemente haya que acelerar al ir "cuesta arriba" o hacer los monolitos mas bajos.
 - Que las repisas sean legibles desde lejos (salientes en las cajas, no decoracion fina).
+
+## DISENO A SEGUIR (decidido 2026-09-14) — SECTOR CERRADO DE PASILLOS
+Se abandona la plataforma gigante con monolitos lejanos (mucho fill). El mundo pasa a ser un
+**recinto chico y cerrado**, porque **las paredes ocluyen y lo que no se ve no se pinta**:
+- Recinto 112x112 con **suelo, TECHO a y=60** (el doble de la masa de 30) y **muros exteriores**.
+  Limite arriba y abajo: **no hay vacio infinito**.
+- Adentro **4 masas SEPARADAS** de 36x36 (nunca pegadas entre si) que dejan un **pasillo en cruz**
+  de 18 de ancho y un **pasillo perimetral** de 9.
+- **Gotico de verdad**: columnas separadas cada 16 con **arcos ojivales** entre ellas,
+  contrafuertes en las caras que dan al pasillo, cornisa y remate escalonado por masa.
+- A ras de suelo: pasillos tapados y baratos. Arriba de una masa: se ve el sector entero.
+  Ese contraste alimenta la mecanica de escalar con gravedad.
+
+Ya escrito: **`src/sector.h`** (colision + suelo/techo + masas/muros/arcada). **NO integrado aun.**
+Pasos pendientes para integrarlo:
+1. Incluir `sector.h` en `main.cpp` y reemplazar el cuerpo de `buildSolidWorld`:
+   suelo+techo en la ranura del piso (sin cull), estructura en la de muros (con cull).
+2. `buildCity()` -> llamar a `buildSectorCollision()` (colision y techos pisables salen gratis).
+3. Acotar al jugador a +-54 y bajar el **plano lejano de 520 a ~200** (nada esta mas lejos).
+4. Reajustar la niebla: hoy `fadeToVoid` usa a=50,b=330, calibrado para el mundo grande.
