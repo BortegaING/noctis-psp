@@ -6,6 +6,7 @@
 #include <pspkernel.h>
 #include <pspdisplay.h>
 #include <pspctrl.h>
+#include <psppower.h>
 #include <string.h>
 #include <pspgu.h>
 #include <pspgum.h>
@@ -964,6 +965,7 @@ int main(void) {
     g_vpropsVerts = buildVillageProps(g_vprops);
     g_spireVerts  = buildSpirescape(g_spire);
     buildFontAtlas();
+    scePowerSetClockFrequency(333, 333, 166);   // MAXIMO de la PSP (por defecto corre a 222/111): +50% CPU y bus
     initGu();
 
     SceCtrlData pad; memset(&pad, 0, sizeof(pad));   // sin basura en el 1er frame (registraba un Triangulo fantasma -> gravedad arrancaba en -Z)
