@@ -6,6 +6,7 @@
 #include <pspkernel.h>
 #include <pspdisplay.h>
 #include <pspctrl.h>
+#include <string.h>
 #include <pspgu.h>
 #include <pspgum.h>
 #include <cmath>
@@ -965,7 +966,7 @@ int main(void) {
     buildFontAtlas();
     initGu();
 
-    SceCtrlData pad;
+    SceCtrlData pad; memset(&pad, 0, sizeof(pad));   // sin basura en el 1er frame (registraba un Triangulo fantasma -> gravedad arrancaba en -Z)
     float playerX = 0.0f, playerY = 0.0f, playerZ = 0.0f;   // BLAME: spawn al centro, monolitos lejos
     float velY = 0.0f, velX = 0.0f, velZ = 0.0f;
     int   coyote = 0, prevJump = 0, jumpBuf = 0;
