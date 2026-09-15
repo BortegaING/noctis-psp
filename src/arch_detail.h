@@ -39,7 +39,11 @@
 //   * los paneles de arcada ciega van a o = +-6.5, entre el portal y el
 //     contrafuerte viejo;
 //   * el contrafuerte viejo del centro de la cara queda DENTRO del vano del
-//     portal y se lee como TRUMEAU (el pilar central de un portal gotico).
+//     portal y se lee como TRUMEAU (el pilar central de un portal gotico);
+//     OJO: vuela 2.40, MAS que el portal (2.20), asi que tapa entera la franja
+//     o = [-1.5, +1.5] hasta y=24.6. Por eso el remate del portal es un GABLETE
+//     DOBLE con los apices a o = +-2.40: un gablete unico con el apice en o=0
+//     quedaba escondido detras de ese bloque y no se veia nunca.
 // Si algun dia se borran esos 3 bloques lisos de sector.h, la composicion de
 // aqui queda aun mas limpia: no hay que cambiar nada de este archivo.
 //
@@ -58,8 +62,11 @@
 //   * El motor NO recorta en el plano de camara: ninguna pieza QUE VUELE del
 //     muro pasa de 6.0 de largo. Los contrafuertes van en 5 tramos, las jambas
 //     del portal en 2, la balaustrada en 6 y la escalinata en 6 peldanos.
-//     Los panos PEGADOS al muro (timpano, arquitos ciegos) no se parten: estan
-//     al ras de una cara de masa que ya es un quad de 30, no empeoran nada.
+//     Los panos PEGADOS al muro se parten IGUAL si se pasan de 6: la puerta
+//     ciega (9.30 de alto) y la columnilla de la arcada (6.50) iban de una pieza
+//     y se borraban enteras al mirar hacia arriba desde cerca. Ahora van en dos
+//     tramos (AD_PT_MID, AD_AR_MID). Solo se dejan enteros los panos que YA
+//     miden menos de 6 en las dos direcciones (timpano, arquitos ciegos).
 //   * Vuelo maximo 2.5 (AD_MAX_DP). El pasillo en cruz es |x|<9 / |z|<9, el
 //     jugador tiene radio 1.1 y la camara 0.9: con 2.5 de vuelo queda libre
 //     |x| < 5.4, mas ancho que el paso que ya dejan las columnas de la arcada
@@ -69,14 +76,19 @@
 // PRESUPUESTO DE VERTICES (contado a mano, elemento por elemento)
 // ---------------------------------------------------------------------------
 //   contrafuerte escalonado  102 x 16 = 1632   (2 por cara interior)
-//   portal gotico            111 x  8 =  888   (1 por cara interior)
-//   panel de arcada ciega     36 x 15 =  540   (2 por cara, menos el de la
+//   portal gotico            129 x  8 = 1032   (1 por cara interior)
+//   panel de arcada ciega     42 x 15 =  630   (2 por cara, menos el de la
 //                                               escalinata)
-//   hornacina con estatua     54 x  4 =  216   (solo en las caras de normal X)
+//   hornacina con estatua     66 x  4 =  264   (solo en las caras de normal X)
 //   balaustrada (6 tramos)    72 x  8 =  576   (borde superior de cada cara)
 //   escalinata (6 peldanos)  108 x  1 =  108
 //                                     -------
-//                             TOTAL   = 3960 vertices  (tope pedido: 4000)
+//                             TOTAL   = 4242 vertices
+//
+// Eran 3960 con un tope pedido de 4000. Los 282 de mas NO son adorno, son
+// arreglos de bulto: partir en dos la puerta ciega (+48) y la columnilla (+90)
+// para que no cruzen el plano de camara, TAPAR las 16 jambas (+96) y cerrar la
+// mensula y la estatua por abajo (+48). g_solidWorld[36000] tiene de sobra.
 //
 // PRIORIDAD QUAD > CAJA: casi todo son quads de UNA cara (6 verts) y triangulos
 // sueltos (3 verts). La unica primitiva "cerrada" que se usa es addPyramidT
@@ -86,12 +98,15 @@
 // ============================================================================
 // COLISION: QUE ENTRA Y QUE NO (y por que)
 // ---------------------------------------------------------------------------
-// archCollisionBoxes() devuelve 35 cajas AABB (g_city: x,z,w,d,h desde y=0):
+// archCollisionBoxes() devuelve 38 cajas AABB (g_city: x,z,w,d,h desde y=0):
 //   ENTRAN (son gordas, vuelan al pasillo y hay que chocar con ellas)
 //     16  contrafuertes  -> huella del tramo bajo (3.8 x 2.5), h = 30.4
-//      8  portales       -> el cuerpo que sobresale (7.8 x 2.3), h = 15.0.
-//                           Es un portal CIEGO (la masa es maciza): se cierra
-//                           entero, asi no queda un bolsillo pegajoso de 2.2.
+//      8  portales       -> el cuerpo que sobresale (7.8 x 2.3), h = AD_PT_SPR
+//                           (10.5): justo donde mueren las jambas y donde esta
+//                           su tapa dibujada. Es un portal CIEGO (la masa es
+//                           maciza): se cierra entero, asi no queda un bolsillo
+//                           pegajoso de 2.2. NO subirlo otra vez a 15.0: eso era
+//                           una repisa INVISIBLE a 15 unidades.
 //      8  balaustradas   -> pretil corrido del borde superior. Como CityBldg
 //                           arranca SIEMPRE en y=0, la caja va METIDA en la
 //                           huella de la masa (|coord| 9.0..10.45): abajo no
@@ -99,9 +114,10 @@
 //                           hasta y=32.8, o sea 2.8 sobre el techo pisable
 //                           (y=30) -> pretil real, no se cae ni se atraviesa.
 //                           Saltable (JUMP_VEL 0.55 da ~7.5 de altura).
-//      3  escalinata     -> rampa aproximada por 3 escalones de 0.6; cada uno
-//                           sube menos de 1.0, que es el step-up de
-//                           groundHeight() -> se sube caminando.
+//      6  escalinata     -> UNA caja por peldano (contrahuella 0.30, muy por
+//                           debajo del step-up 1.0 de groundHeight() -> se sube
+//                           caminando). Con 3 cajas envolventes se flotaba 0.30
+//                           en la mitad baja de cada par.
 //   NO ENTRAN (a proposito)
 //     - arcada ciega, arquivoltas, cornisas, timpano, columnillas: vuelan 0.15
 //       a 0.55. Meterlas solo haria el pasillo PEGAJOSO (blocked() infla cada
@@ -125,7 +141,12 @@
 // ============================================================================
 // 0) MEDIDAS DE ESTE ARCHIVO
 // ============================================================================
-static constexpr float AD_EPS     = 0.06f;   // despegue del plano de la masa (anti z-fight)
+static constexpr float AD_EPS     = 0.15f;   // despegue del plano de la masa (anti z-fight).
+        // 0.06 NO alcanzaba: con z-buffer de 16 bits, near=1.0 y far=420 el paso
+        // de profundidad ya vale 0.06 a z=62.8, y el pasillo mide 108 de largo ->
+        // los arquitos y los nichos parpadeaban contra la pared desde el extremo
+        // opuesto. 0.15 aguanta hasta z~99 y sigue MUY por debajo del vuelo de la
+        // columnilla (0.42) y de la cornisa (0.50): el rehundido se mantiene.
 static constexpr float AD_MAX_DP  = 2.50f;   // vuelo maximo hacia el pasillo
 static constexpr float AD_TOP     = WD_MASS_H + 0.40f;          // 30.4: bajo la cornisa
 static constexpr float AD_CORN    = WD_MASS_TOP_VIS;            // 31.6: alto de la cornisa
@@ -135,6 +156,10 @@ static constexpr float AD_PT_HALF  =  3.90f;  // medio ancho del cuerpo que sobr
 static constexpr float AD_PT_VANO  =  2.40f;  // medio ancho del vano
 static constexpr float AD_PT_DP    =  2.20f;  // vuelo de jambas y hastial
 static constexpr float AD_PT_PLY   =  1.20f;  // alto del zocalo / umbral
+static constexpr float AD_PT_MID   =  5.85f;  // imposta BAJA: parte la puerta ciega en dos.
+                                              // De una pieza median 9.30 de alto (55% sobre
+                                              // el limite de 6.0) y desaparecia entera al
+                                              // levantar la vista cerca del portal
 static constexpr float AD_PT_SPR   = 10.50f;  // imposta: arranque del ojival
 static constexpr float AD_PT_APEX  = 14.50f;  // clave
 static constexpr float AD_PT_GBL   = 17.60f;  // cumbre del hastial
@@ -148,6 +173,9 @@ static constexpr float AD_AR_Y0    =  3.40f;  // basa de la arcada
 static constexpr float AD_AR_SPR   =  9.40f;  // imposta
 static constexpr float AD_AR_APEX  = 11.40f;  // clave
 static constexpr float AD_AR_CORN  = 12.50f;  // cara alta de la cornisa que la remata
+static constexpr float AD_AR_CTOP  = AD_AR_SPR + 0.50f;  // 9.90: remate de la columnilla
+static constexpr float AD_AR_MID   =  6.65f;  // parte la columnilla en dos: de una pieza
+                                              // media 6.50 y cruzaba el plano de camara
 
 // --- contrafuertes (esquinas de la cara) ---
 static constexpr float AD_BT_O     = 15.80f;  // posicion (+-)
@@ -205,6 +233,14 @@ static_assert(AD_BT_Y[1] - AD_BT_Y[0] <= 6.0f && AD_BT_Y[2] - AD_BT_Y[1] <= 6.0f
 static_assert(WD_MASS_SIDE / (float)AD_BL_SEG <= 6.0f,
               "los tramos de balaustrada pasan de 6");
 static_assert(AD_PT_SPR * 0.5f <= 6.0f, "los tramos de jamba del portal pasan de 6");
+// las dos que SI se pasaban y nadie vigilaba: la puerta ciega y la columnilla
+static_assert(AD_PT_MID - AD_PT_PLY <= 6.0f && AD_PT_SPR - AD_PT_MID <= 6.0f,
+              "un tramo de la puerta ciega pasa de 6: cruzara el plano de camara y se borrara");
+static_assert(AD_AR_MID - AD_AR_Y0 <= 6.0f && AD_AR_CTOP - AD_AR_MID <= 6.0f,
+              "un tramo de la columnilla de la arcada pasa de 6");
+static_assert(AD_PT_GBL - (AD_PT_APEX - 0.30f) <= 6.0f &&
+              AD_PT_HALF - 1.50f <= 6.0f,
+              "una mitad del gablete pasa de 6");
 
 // ============================================================================
 // 1) EL MARCO DE UNA CARA  (o, dp) -> (x, z)
@@ -321,7 +357,7 @@ static void adStack(TexVertex *b, int &i, const AdFace &f, float oC, float half,
 // ============================================================================
 
 // --- 3.1 ARCADA CIEGA: 2 arquitos ojivales rehundidos + columnilla + cornisa.
-//     36 verts. El relieve real lo dan la columnilla (vuela 0.42) y la cornisa
+//     42 verts. El relieve real lo dan la columnilla (vuela 0.42) y la cornisa
 //     con su sofito (vuela 0.50): el resto es pano oscuro al ras, que es lo que
 //     convierte la plancha en un muro con ritmo sin gastar caja ---
 static void adBlindArcade(TexVertex *b, int &i, const AdFace &f, float oC,
@@ -333,8 +369,11 @@ static void adBlindArcade(TexVertex *b, int &i, const AdFace &f, float oC,
         adTriV (b, i, f, o - AD_AR_HALF, o + AD_AR_HALF, AD_AR_SPR, o, AD_AR_APEX, AD_EPS,
                 brighten(hueco, 0.88f));                                                        // 3
     }
-    // columnilla central (la que separa los dos arquitos)
-    adQuadV(b, i, f, oC - 0.26f, oC + 0.26f, AD_AR_Y0, AD_AR_SPR + 0.5f, 0.42f, stone);         // 6
+    // columnilla central (la que separa los dos arquitos), EN DOS TRAMOS: de una
+    // pieza media 6.50 y el motor no recorta en el plano de camara -> pasando por
+    // delante se borraba entera. Mismo color en los dos: la junta no se ve.
+    adQuadV(b, i, f, oC - 0.26f, oC + 0.26f, AD_AR_Y0,  AD_AR_MID,  0.42f, stone);              // 6
+    adQuadV(b, i, f, oC - 0.26f, oC + 0.26f, AD_AR_MID, AD_AR_CTOP, 0.42f, stone);              // 6
     // cornisa que remata la arcada: frente + SOFITO (se mira desde abajo)
     const float o0 = oC - AD_AR_PAN, o1 = oC + AD_AR_PAN;
     adQuadV (b, i, f, o0, o1, AD_AR_APEX + 0.20f, AD_AR_CORN, 0.50f, brighten(stone, 1.06f));   // 6
@@ -364,8 +403,9 @@ static void adButtress(TexVertex *b, int &i, const AdFace &f, float oC,
 }
 
 // --- 3.3 PORTAL GOTICO: umbral, dos jambas (partidas en 2 por el recorte de
-//     camara), puerta y timpano al ras, arquivolta y hastial en dos mitades.
-//     111 verts. Las ARQUIVOLTAS quedan ESCALONADAS en profundidad:
+//     camara y TAPADAS arriba), puerta ciega en 2 tramos y timpano al ras,
+//     arquivolta y GABLETE DOBLE.
+//     129 verts. Las ARQUIVOLTAS quedan ESCALONADAS en profundidad:
 //       timpano dp=0.15  ->  arquivolta dp=1.40  ->  jamba/hastial dp=2.20 ---
 static void adPortal(TexVertex *b, int &i, const AdFace &f,
                      unsigned int stone, unsigned int dark) {
@@ -382,9 +422,20 @@ static void adPortal(TexVertex *b, int &i, const AdFace &f,
     for (int s = -1; s <= 1; s += 2) {
         adStack(b, i, f, (float)s * jc, jh, 0.0f, jm, AD_PT_DP, stone);                   // 18
         adStack(b, i, f, (float)s * jc, jh, jm, AD_PT_SPR, AD_PT_DP, brighten(stone, 0.94f)); // 18
+        // TAPA: adStack no la emite. En el contrafuerte da igual (la pone el talud
+        // del escalon siguiente), pero aqui encima de la jamba no hay nada: sin
+        // esto queda un agujero de 1.5 x 2.2 a y=10.50 por el que se ve el hueco
+        // de la pieza. Y ademas es donde se para el jugador (ver la colision).
+        adQuadH(b, i, f, (float)s * jc - jh, (float)s * jc + jh, 0.0f, AD_PT_DP,
+                AD_PT_SPR, AD_PT_SPR, brighten(stone, 1.12f));                            //  6
     }
-    // puerta ciega + timpano, al ras (la masa es maciza: no se entra)
-    adQuadV(b, i, f, -AD_PT_VANO, AD_PT_VANO, AD_PT_PLY, AD_PT_SPR, 0.15f, hueco);        // 6
+    // puerta ciega + timpano, al ras (la masa es maciza: no se entra). La HOJA va
+    // partida por una imposta a AD_PT_MID: 4.80 x 9.30 de una pieza se pasaba un
+    // 55% del limite de 6.0 y desaparecia entera al mirar arriba desde el portal.
+    // Estar "al ras del muro" NO salva de la regla de los 6.
+    adQuadV(b, i, f, -AD_PT_VANO, AD_PT_VANO, AD_PT_PLY, AD_PT_MID, 0.15f, hueco);        // 6
+    adQuadV(b, i, f, -AD_PT_VANO, AD_PT_VANO, AD_PT_MID, AD_PT_SPR, 0.15f,
+            brighten(hueco, 0.92f));                                                      // 6
     adTriV (b, i, f, -AD_PT_VANO, AD_PT_VANO, AD_PT_SPR, 0.0f, AD_PT_APEX, 0.15f,
             brighten(hueco, 1.25f));                                                      // 3
     // ARQUIVOLTA: dos rampantes con canto, a media profundidad.
@@ -398,16 +449,20 @@ static void adPortal(TexVertex *b, int &i, const AdFace &f,
             at, ay, 0.0f, AD_PT_APEX, 1.40f, brighten(stone, 1.14f));                     // 6
     adQuadF(b, i, f, -AD_PT_VANO, AD_PT_SPR, -ai, AD_PT_SPR,
             0.0f, AD_PT_APEX, -at, ay, 1.40f, brighten(stone, 1.14f));                    // 6
-    // HASTIAL sobre el arco (mismo plano que las jambas). Va en DOS mitades de
-    // 3.9: entero seria una pieza volada de 7.8 de base.
-    adTriV(b, i, f, -AD_PT_HALF, 0.0f, AD_PT_APEX - 0.30f, 0.0f, AD_PT_GBL,
+    // HASTIAL = GABLETE DOBLE, con los apices a o = +-2.40. Va en dos piezas de
+    // 2.40 de base (nunca una de 7.8 volada), pero ademas FUERA DE LA SOMBRA del
+    // contrafuerte liso de sector.h: ese bloque esta en o = [-1.5, +1.5] y vuela
+    // 2.40, o sea mas que el portal (2.20), asi que tapa esa franja hasta y=24.6.
+    // Con un gablete unico de apice en o=0 el remate del portal era INVISIBLE.
+    // Winding comprobado: area (o,y) positiva = (o1-o0)*(yApex-yBase) > 0.
+    adTriV(b, i, f, -AD_PT_HALF, -1.50f, AD_PT_APEX - 0.30f, -2.40f, AD_PT_GBL,
            AD_PT_DP, brighten(stone, 1.18f));                                             // 3
-    adTriV(b, i, f, 0.0f, AD_PT_HALF, AD_PT_APEX - 0.30f, 0.0f, AD_PT_GBL,
+    adTriV(b, i, f,  1.50f,  AD_PT_HALF, AD_PT_APEX - 0.30f,  2.40f, AD_PT_GBL,
            AD_PT_DP, brighten(stone, 1.10f));                                             // 3
 }
 
 // --- 3.4 HORNACINA CON FIGURA: nicho rehundido, mensula, estatua encapuchada y
-//     guardapolvo. 54 verts. Va SOLO en las caras de normal X -> 4 en todo el
+//     guardapolvo. 66 verts. Va SOLO en las caras de normal X -> 4 en todo el
 //     sector, que es el "ritmo" pedido (no en todas) ---
 static void adNiche(TexVertex *b, int &i, const AdFace &f, float oC,
                     unsigned int stone, unsigned int dark) {
@@ -420,6 +475,10 @@ static void adNiche(TexVertex *b, int &i, const AdFace &f, float oC,
     adQuadV(b, i, f, oC - 1.50f, oC + 1.50f, AD_HN_Y0, AD_HN_PLI, 0.75f, dark);               // 6
     adQuadH(b, i, f, oC - 1.50f, oC + 1.50f, 0.0f, 0.75f, AD_HN_PLI, AD_HN_PLI,
             brighten(stone, 1.10f));                                                          // 6
+    // SOFITO de la mensula: nace a y=15.50, o sea que SIEMPRE se mira desde abajo
+    // y por abajo no tenia nada (su adQuadH mira arriba y queda back-face).
+    adQuadHD(b, i, f, oC - 1.50f, oC + 1.50f, 0.0f, 0.75f, AD_HN_Y0,
+             brighten(dark, 0.80f));                                                          // 6
     // ESTATUA: silueta ENCAPUCHADA. Tunica troncoconica (frente trapecial + dos
     // costados) y capucha en piramide; el gesto se lee de lejos, que es lo unico
     // que se puede pedir en PSP.
@@ -432,6 +491,11 @@ static void adNiche(TexVertex *b, int &i, const AdFace &f, float oC,
     adQuadS(b, i, f, oC - hs, 0.12f, 0.58f, yb, ys, -1, brighten(robe, 0.70f));              // 6
     float sx2, sz2; adPt(f, oC, 0.35f, &sx2, &sz2);
     addPyramidT(b, i, sx2, ys, sz2, 0.86f, 0.86f, 0.95f, brighten(robe, 0.86f));              // 12
+    // HOMBROS: tapa que MIRA ABAJO en la junta capucha/tunica. addPyramidT no
+    // emite base y la tunica no lleva tapa -> la figura estaba hueca y, como
+    // siempre se la mira desde abajo, por ese hueco se veia el fondo del nicho.
+    // Cubre la huella de la piramide (dp 0.35 +- 0.43) y el ancho medio del habito.
+    adQuadHD(b, i, f, oC - hs, oC + hs, 0.0f, 0.78f, ys, brighten(robe, 0.60f));              // 6
     // guardapolvo (el gablete que corona el nicho)
     adTriV(b, i, f, oC - 1.70f, oC + 1.70f, AD_HN_APEX - 0.30f, oC, AD_HN_APEX + 1.40f,
            0.80f, brighten(stone, 1.16f));                                                    // 3
@@ -475,7 +539,7 @@ static void adStair(TexVertex *b, int &i, const AdFace &f,
 // 4) EL PASE COMPLETO
 // ============================================================================
 // Se dibuja en el MISMO rango que buildSectorWalls (textura industrial, cull ON).
-// Coste medido: 3960 vertices.
+// Coste medido: 4242 vertices.
 static void buildArchDetail(TexVertex *buf, int &i) {
     const unsigned int stone = WD_COL_STONE;
     const unsigned int dark  = WD_COL_DARK;
@@ -483,20 +547,20 @@ static void buildArchDetail(TexVertex *buf, int &i) {
     for (int fi = 0; fi < AD_FACE_N; ++fi) {
         const AdFace f = adFace(fi);
 
-        // --- portal en el centro de la cara (8 x 111 = 888) ---
+        // --- portal en el centro de la cara (8 x 129 = 1032) ---
         adPortal(buf, i, f, stone, dark);
 
         // --- contrafuertes en las dos esquinas (16 x 102 = 1632) ---
         adButtress(buf, i, f, -AD_BT_O, stone, dark);
         adButtress(buf, i, f,  AD_BT_O, stone, dark);
 
-        // --- arcada ciega a los dos lados del portal (15 x 36 = 540).
+        // --- arcada ciega a los dos lados del portal (15 x 42 = 630).
         //     En la cara de la escalinata se omite el pano de ese lado: lo
         //     taparia el perron y seria relleno pagado que no se ve.
         adBlindArcade(buf, i, f,  AD_AR_O, stone, dark);
         if (fi != AD_STAIR_FACE) adBlindArcade(buf, i, f, -AD_AR_O, stone, dark);
 
-        // --- hornacina con estatua solo en las caras de normal X (4 x 54 = 216) ---
+        // --- hornacina con estatua solo en las caras de normal X (4 x 66 = 264) ---
         if ((fi & 1) == 0) adNiche(buf, i, f, AD_HN_O, stone, dark);
 
         // --- balaustrada del borde superior (8 x 72 = 576) ---
@@ -511,8 +575,8 @@ static void buildArchDetail(TexVertex *buf, int &i) {
 // 5) COLISION
 // ============================================================================
 // Devuelve cuantas cajas escribio. Ver la nota de cabecera para el criterio de
-// que entra y que no. Total: 16 + 8 + 8 + 3 = 35 cajas.
-static constexpr int ARCH_COLLISION_BOXES = 35;
+// que entra y que no. Total: 16 + 8 + 8 + 6 = 38 cajas.
+static constexpr int ARCH_COLLISION_BOXES = 38;
 
 // caja AABB a partir de un rectangulo (o0..o1, dp0..dp1) de una cara
 static inline CityBldg adBox(const AdFace &f, float o0, float o1,
@@ -546,8 +610,14 @@ static int archCollisionBoxes(CityBldg *out, int maxOut) {
         // 2) PORTAL: el cuerpo entero que sobresale. Se cierra macizo (es un
         //    portal ciego) para no dejar un bolsillo de 2.2 donde el jugador se
         //    quede enganchado. 1 por cara = 8.
+        //    ALTURA = AD_PT_SPR, que es DONDE MUEREN LAS JAMBAS y donde esta su
+        //    tapa dibujada: el que cae ahi se para sobre piedra que se ve. Antes
+        //    iba a 15.0 y eso era una REPISA INVISIBLE: el que venia de un capitel
+        //    (y=18.6) se quedaba de pie en el aire con el hastial atravesandole.
+        //    Por encima de 10.50 solo hay arquivolta y gablete, relieve fino que
+        //    a proposito no colisiona.
         if (n >= maxOut) return n;
-        out[n++] = adBox(f, -AD_PT_HALF, AD_PT_HALF, 0.0f, AD_PT_DP + 0.10f, 15.0f, col);
+        out[n++] = adBox(f, -AD_PT_HALF, AD_PT_HALF, 0.0f, AD_PT_DP + 0.10f, AD_PT_SPR, col);
 
         // 3) BALAUSTRADA: pretil corrido. Va METIDO en la huella de la masa
         //    (dp de AD_BL_BACK a 0) porque CityBldg arranca SIEMPRE en y=0:
@@ -563,13 +633,17 @@ static int archCollisionBoxes(CityBldg *out, int maxOut) {
         out[n++] = adBox(f, -WD_MASS_HALF, WD_MASS_HALF,
                          AD_BL_BACK, 0.0f, AD_BL_TOP, col);
 
-        // 4) ESCALINATA: 3 escalones de colision (0.6 cada uno < step-up 1.0).
+        // 4) ESCALINATA: UNA CAJA POR PELDANO (6), calcada de lo que se dibuja.
+        //    Con 3 cajas envolventes de 0.6 se flotaba 0.30 en la mitad baja de
+        //    cada par. Cada contrahuella (AD_ST_RISE = 0.30) sigue muy por debajo
+        //    del step-up 1.0 de groundHeight(), o sea que se sube caminando igual.
         if (fi == AD_STAIR_FACE) {
-            const float w = (AD_ST_O1 - AD_ST_O0) / 3.0f;
-            for (int k = 0; k < 3; ++k) {
+            const float w = (AD_ST_O1 - AD_ST_O0) / (float)AD_ST_N;
+            for (int k = 0; k < AD_ST_N; ++k) {
                 if (n >= maxOut) return n;
                 const float o0 = AD_ST_O0 + w * (float)k;
-                out[n++] = adBox(f, o0, o0 + w, 0.0f, AD_ST_DP, 0.6f * (float)(k + 1), col);
+                out[n++] = adBox(f, o0, o0 + w, 0.0f, AD_ST_DP,
+                                 AD_ST_RISE * (float)(k + 1), col);
             }
         }
     }
@@ -585,9 +659,9 @@ static int archCollisionBoxes(CityBldg *out, int maxOut) {
 //   a la cornisa), 2 panos de ARCADA CIEGA ojival con columnilla y cornisa,
 //   BALAUSTRADA corrida en el borde superior; ademas 4 HORNACINAS con estatua
 //   encapuchada (solo caras de normal X) y 1 ESCALINATA de 6 peldanos.
-// VERTICES: 3960 exactos (1632 contrafuertes + 888 portales + 540 arcada +
-//   216 hornacinas + 576 balaustradas + 108 escalinata). Tope pedido: 4000.
-// COLISION: 35 cajas (16 contrafuertes + 8 portales + 8 pretiles + 3 escalones).
+// VERTICES: 4242 exactos (1632 contrafuertes + 1032 portales + 630 arcada +
+//   264 hornacinas + 576 balaustradas + 108 escalinata).
+// COLISION: 38 cajas (16 contrafuertes + 8 portales + 8 pretiles + 6 escalones).
 //   FUERA a proposito: arcada ciega, arquivoltas, cornisas, timpanos,
 //   columnillas, hornacinas y estatuas -> vuelan 0.15-0.80 y solo harian el
 //   pasillo pegajoso (blocked() infla cada caja con el radio 1.1 del jugador).
