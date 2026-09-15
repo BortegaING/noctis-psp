@@ -503,8 +503,12 @@ static void buildApron() {
     const float HALF = 20.0f;                       // ±20: al borde de la plataforma (r72) el apron no se sale al vacio
     const int   N    = 14;                          // 14x14 celdas de 2.86u (3ra persona: el ojo va a 4.5, el primer piso visible a ~4.5u -> sigue sin cruzar la camara) (<2.6u -> el hueco cae fuera de pantalla)
     const float CELL = (2.0f * HALF) / (float)N;    // 2.5u
-    const float invUV = 1.0f / 12.0f;
-    const unsigned int fcol = RGBA(240, 230, 214, 255);   // REPLACE ignora el color
+    const float invUV = 1.0f / 10.0f;                     // MISMA escala que buildSectorFloorCeil
+    // MISMO color que el suelo de sector.h. Antes era (240,230,214) con la excusa de
+    // que "REPLACE ignora el color", pero desde el reorden del pase el apron se dibuja
+    // con MODULATE igual que el suelo: el color SI se aplicaba, y se veia un parche
+    // cuadrado mas claro de 40x40 siguiendo al jugador, con borde duro y saltos de 12.
+    const unsigned int fcol = RGBA(212, 194, 172, 255);
     for (int gz = 0; gz < N; ++gz) {
         float z0 = -HALF + CELL * (float)gz, z1 = z0 + CELL;
         float v0 = z0 * invUV, v1 = z1 * invUV;
@@ -535,13 +539,16 @@ static void buildSolidWorld() {
     buildVault(g_solidWorld, i);             // boveda del techo (mismo winding: va con cull ON)
     buildTracery(g_solidWorld, i);           // marco gotico de los 24 ventanales
     buildArchDetail(g_solidWorld, i);        // relieve gotico sobre las caras de las masas
+    // El guardarrail va AQUI, no al final. Antes se clampeaba i despues de fijar
+    // g_wallEnd: en caso de desborde g_solidVerts quedaba en 36000 pero g_wallEnd
+    // conservaba el valor grande, y el draw de los muros leia fuera del array.
+    if (i > 36000) i = 36000;     // red de seguridad: g_solidWorld[36000]
     g_wallEnd = i;
     g_srangeCount = 0;
     g_winTailStart = g_winVerts;
     g_spireStart = i; g_spireEnd = i;
     g_tailStart = i;
     g_metalVerts = 0;
-    if (i > 36000) i = 36000;     // red de seguridad: g_solidWorld[36000]
     g_solidVerts = i;
 }
 
@@ -942,6 +949,12 @@ static void initGu() {
     sceGuScissor(0, 0, SCR_WIDTH, SCR_HEIGHT);
     sceGuEnable(GU_SCISSOR_TEST);
     sceGuDepthFunc(GU_GEQUAL);
+    // RECORTE POR PLANO CERCANO. Sin esto el GE no recorta: DESCARTA el triangulo
+    // ENTERO en cuanto un vertice queda detras de la camara. Eso es lo que hacia
+    // desaparecer paredes y suelo al caminar: las caras de las masas miden 36 y los
+    // muros 116 unidades, y es la razon por la que medio motor esta teselado a
+    // trozos de 6. Con esto encendido el hardware recorta de verdad.
+    sceGuEnable(GU_CLIP_PLANES);
     sceGuEnable(GU_DEPTH_TEST);
     sceGuFrontFace(NOCTIS_FRONTFACE); // cara exterior = NOCTIS_FRONTFACE (winding probado consistente)
     sceGuDisable(GU_CULL_FACE);  // default OFF; el culling se ACTIVA por-pase en el lazo de render
@@ -1121,9 +1134,16 @@ int main(void) {
             // -- colision por ejes separados (desliza por muros) --
             float nx = playerX + velX; if (!blocked(nx, playerZ, playerY)) playerX = nx; else velX = 0.0f;
             float nz = playerZ + velZ; if (!blocked(playerX, nz, playerY)) playerZ = nz; else velZ = 0.0f;
-            // -- BLAME: clamp circular (r=COURT) sobre el piso grande --
-            { float pr2 = playerX * playerX + playerZ * playerZ;
-              if (pr2 > COURT * COURT) { float sc = COURT / sqrtf(pr2); playerX *= sc; playerZ *= sc; } }
+            // RED DE SEGURIDAD, y ahora CUADRADA como la sala. Era circular (r=COURT) dentro
+            // de un recinto CUADRADO de medio lado COURT: el circulo cortaba las cuatro
+            // esquinas del pasillo perimetral con un muro invisible curvo, y al ser un
+            // empujon incondicional aplicado DESPUES de blocked() metia al jugador dentro
+            // de la huella inflada de las masas. Los 4 muros ya frenan en blocked(); esto
+            // solo atrapa el caso de escaparse por un hueco.
+            if (playerX >  COURT) playerX =  COURT;
+            if (playerX < -COURT) playerX = -COURT;
+            if (playerZ >  COURT) playerZ =  COURT;
+            if (playerZ < -COURT) playerZ = -COURT;
             heroYaw = camYaw;   // disparo/melee usan heroYaw = hacia donde miras
             // -- head-bob por velocidad --
             float spd = sqrtf(velX * velX + velZ * velZ);
@@ -1411,7 +1431,12 @@ int main(void) {
                         break;
                     }
                 }
-                if (camBack < 2.2f) camBack = 2.2f;   // nunca dentro del propio personaje
+                // El minimo hay que PROBARLO, no imponerlo. Subir a 2.2 a ciegas era el
+                // caso mas frecuente del juego (de espaldas a un muro del pasillo) y metia
+                // el ojo 1.1 DENTRO de la piedra: se veia a traves del muro hacia el vacio.
+                if (camBack < 2.2f)
+                    camBack = gravBlocked(gravG, ox - fX * 2.2f, oy - fY * 2.2f, oz - fZ * 2.2f, CAM_R)
+                            ? 0.0f : 2.2f;
             }
             ScePspFVector3 eye = { playerX - fX * camBack + uX * CAM_UP, playerY - fY * camBack + uY * CAM_UP, playerZ - fZ * camBack + uZ * CAM_UP };
             ScePspFVector3 ctr = { playerX + fX * 4.0f + uX * 1.8f, playerY + fY * 4.0f + uY * 1.8f, playerZ + fZ * 4.0f + uZ * 1.8f };
@@ -1451,8 +1476,8 @@ int main(void) {
         sceGuDisable(GU_CULL_FACE);
         sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);
         {
-            ScePspFVector3 ap = { floorf(playerX / 12.0f + 0.5f) * 12.0f, 0.03f,
-                                  floorf(playerZ / 12.0f + 0.5f) * 12.0f };
+            ScePspFVector3 ap = { floorf(playerX / 10.0f + 0.5f) * 10.0f, 0.03f,
+                                  floorf(playerZ / 10.0f + 0.5f) * 10.0f };
             sceGumTranslate(&ap);
             sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_apronCount, 0, g_apron);
             sceGumLoadIdentity();

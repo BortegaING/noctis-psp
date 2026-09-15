@@ -128,15 +128,32 @@ static void vpBrokenCol(LineVertex *buf, int &i, int a, float x, float z, unsign
            vpStone(seed + 8u, x, z, 0.90f));                                                // 30 tambor caido
 }
 
+// PIRAMIDE QUE APUNTA HACIA ABAJO. Llamar a addPyramid con apexH NEGATIVO pone el
+// apice al otro lado de la base, y eso invierte el winding de las cuatro caras: con
+// cull ON (que es como se dibuja g_vprops) el contrapeso se transformaba y se
+// descartaba entero, asi que las cadenas colgaban del techo y terminaban en nada.
+// Aqui la base se recorre al reves, que es justo lo que compensa la inversion.
+static void vpPyramidDown(LineVertex *buf, int &i, float cx, float baseY, float cz,
+                          float w, float d, float drop, unsigned int col) {
+    const float x0 = cx - w * 0.5f, x1 = cx + w * 0.5f;
+    const float z0 = cz - d * 0.5f, z1 = cz + d * 0.5f;
+    const float y0 = baseY, ay = baseY - drop;
+    const unsigned int a = brighten(col, 1.10f), b = brighten(col, 0.72f);
+    buf[i++] = { a, x1, y0, z0 }; buf[i++] = { a, x0, y0, z0 }; buf[i++] = { a, cx, ay, cz };
+    buf[i++] = { b, x1, y0, z1 }; buf[i++] = { b, x1, y0, z0 }; buf[i++] = { b, cx, ay, cz };
+    buf[i++] = { a, x0, y0, z1 }; buf[i++] = { a, x1, y0, z1 }; buf[i++] = { a, cx, ay, cz };
+    buf[i++] = { b, x0, y0, z0 }; buf[i++] = { b, x0, y0, z1 }; buf[i++] = { b, cx, ay, cz };
+}
+
 // =================================================================================
 // CADENA DEL TECHO (42 verts): caja fina de y=VP_CEIL hasta yBot + contrapeso en
-// punta (piramide INVERTIDA: apexH negativo). Vende los 60u de altura del sector.
+// punta (piramide que mira ABAJO, con su propio winding). Vende los 60u de altura.
 // =================================================================================
 static void vpChain(LineVertex *buf, int &i, float x, float z, float yBot, unsigned int seed) {
     const unsigned int fe = fadeToVoid(brighten(VP_IRON, 0.92f + 0.16f * vpRnd(seed)),
                                        sqrtf(x * x + z * z));
-    addSolidBox(buf, i, x, yBot, z, 0.30f, 0.30f, VP_CEIL - yBot, fe);          // 30 tramo colgante
-    addPyramid (buf, i, x, yBot, z, 0.60f, 0.60f, -0.95f, brighten(fe, 0.85f)); // 12 contrapeso
+    addSolidBox(buf, i, x, yBot, z, 0.30f, 0.30f, VP_CEIL - yBot, fe);             // 30 tramo colgante
+    vpPyramidDown(buf, i, x, yBot, z, 0.60f, 0.60f, 0.95f, brighten(fe, 0.85f));   // 12 contrapeso
 }
 
 // =================================================================================
