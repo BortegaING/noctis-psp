@@ -456,6 +456,7 @@ static int g_cityCount = 0;
 #include "shaft_walls.h"         // EL POZO: buildShaftWalls() muros colosales industrial-goticos (octagono r~160, y -700..+500)
 #include "ledge.h"               // EL POZO: buildLedge() balcon del jugador (top teselado fino + baranda + soportes)
 #include "sector.h"              // SECTOR CERRADO de pasillos (planta de cruz gotica): el mundo actual
+#include "vault.h"               // boveda gotica del techo (nervios, mensulas, clave)
 
 // edificio SIMPLE de ciudad (pocos verts -> muchos edificios + culling = rinde)
 static void buildCityBldg(TexVertex *buf, int &i, float cx, float cz,
@@ -517,6 +518,7 @@ static void buildSolidWorld() {
     g_ledgeEnd = i;
     g_wallStart = i;
     buildSectorWalls(g_solidWorld, i);       // masas + muros + arcada gotica (industrial, cull ON)
+    buildVault(g_solidWorld, i);             // boveda del techo (mismo winding: va con cull ON)
     g_wallEnd = i;
     g_srangeCount = 0;
     g_winTailStart = g_winVerts;
