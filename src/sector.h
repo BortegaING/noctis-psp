@@ -26,6 +26,22 @@ static const float SEC_COL_H    = 18.6f;  // alto total con capitel
 static const int   SEC_COL_SEG  =  5;     // el fuste va en TRAMOS: un quad de 16u de alto
                                           // cruza el plano de la camara al pasar cerca y el
                                           // hardware lo DESCARTA entero -> la columna "se borra".
+// --- CORONACION de la masa (cuerpo + cornisa + remate): se dibuja Y se choca ---
+// El techo REAL de una masa es la CORNISA (31.6), no el cuerpo (30): el que sube
+// a una masa se para ahi. Las medidas viven aca para que el dibujo (buildSectorWalls)
+// y la colision (buildSectorCollision) no puedan separarse.
+static const float SEC_CORN_H   =  1.6f;                     // alto de la cornisa (30 -> 31.6)
+static const float SEC_CORN_S   =  1.06f;                    // ensanche: vuela 1.08 al pasillo
+static const float SEC_MASS_TOP = SEC_MASS_H + SEC_CORN_H;   // 31.6: superficie PISABLE
+static const float SEC_CAP_S    =  0.55f;                    // lado del remate = 36 * 0.55 = 19.8
+static const float SEC_CAP_H    =  5.0f;                     // alto del remate
+static const float SEC_CAP_TOP  = SEC_MASS_TOP + SEC_CAP_H;  // 36.6: techo del remate
+// --- CONTRAFUERTES de las dos caras interiores (3 por cara, 24 en total) ---
+static const float SEC_BUT_DP   =  1.2f;                     // separacion del centro respecto a la cara
+static const float SEC_BUT_W    =  2.4f;                     // vuelo hacia el pasillo
+static const float SEC_BUT_D    =  3.0f;                     // ancho sobre la cara
+static const float SEC_BUT_O    =  0.30f;                    // paso = 36 * 0.30 = 10.8
+static const float SEC_BUT_H    = SEC_MASS_H * 0.82f;        // 24.6: alto
 
 // --- colision: llena g_city con los volumenes solidos (cajas alineadas a ejes) ---
 // Se reusa el sistema de colision que ya existe; los techos de las masas son pisables.
@@ -36,7 +52,17 @@ static void buildSectorCollision() {
     const float ms = (SEC_M1 - SEC_M0);             // lado = 36
     for (int q = 0; q < 4; ++q) {                   // 4 masas SEPARADAS entre si
         float sx = (q & 1) ? -1.0f : 1.0f, sz = (q & 2) ? -1.0f : 1.0f;
-        g_city[n++] = { mc * sx, mc * sz, ms, ms, SEC_MASS_H, c };
+        // CUERPO + CORNISA en una sola caja: sube hasta 31.6 (antes 30), que es donde
+        // esta el techo que se ve. Con 30 el jugador se paraba con los pies metidos
+        // 1.6 dentro de la cornisa. Se mantiene el lado del CUERPO (36): darle el lado
+        // de la cornisa (38.16) cobraria su vuelo de 1.08 en TODA la altura y estrecharia
+        // el pasillo perimetral de 9 a 7.92; el alero queda sin caja a proposito.
+        g_city[n++] = { mc * sx, mc * sz, ms, ms, SEC_MASS_TOP, c };
+        // REMATE (19.8 x 19.8, de 31.6 a 36.6): sin el, el bloque del centro del techo
+        // es un fantasma que se cruza caminando. CityBldg siempre arranca en y=0, pero
+        // su huella esta METIDA dentro de la masa -> abajo no roba ni un milimetro de
+        // pasillo, y arriba deja un anillo pisable de 7u alrededor.
+        g_city[n++] = { mc * sx, mc * sz, ms * SEC_CAP_S, ms * SEC_CAP_S, SEC_CAP_TOP, c };
     }
     const float wt = 4.0f, wc = SEC_HALF + wt * 0.5f;
     g_city[n++] = {  0.0f,  wc, 2.0f * (SEC_HALF + wt), wt, SEC_CEIL, c };  // muro +Z
@@ -53,7 +79,26 @@ static void buildSectorCollision() {
                 float z = (a == 0) ? t : (SEC_COL_OFF * s);
                 g_city[n++] = { x, z, SEC_COL_W, SEC_COL_W, SEC_COL_H, c };
             }
-    g_cityCount = n;                                   // 4 masas + 4 muros + 20 columnas = 28
+    // CONTRAFUERTES: pilares de piedra de 24.6 de alto que vuelan 2.4 al pasillo
+    // (ocupan de 6.6 a 9.0 en la coordenada perpendicular). Se dibujaban desde el
+    // principio pero no tenian caja: se atravesaban caminando, y la camara tambien.
+    // Entran los 16 de |o| = 10.8. El del CENTRO de cada cara (o = 0) NO: cae dentro
+    // del portal ciego que ya cierra arch_detail.h (|o| <= 3.9, vuelo 2.3). OJO: esa
+    // caja solo llega a y=15, asi que el contrafuerte central sigue sin colision de
+    // 15 a 24.6; subirla es cosa de arch_detail.h, no de este archivo.
+    for (int q = 0; q < 4; ++q) {
+        float sx = (q & 1) ? -1.0f : 1.0f, sz = (q & 2) ? -1.0f : 1.0f;
+        float x = mc * sx, z = mc * sz;
+        for (int k = -1; k <= 1; k += 2) {          // los dos de fuera; el central lo cubre el portal
+            float o = (float)k * ms * SEC_BUT_O;
+            g_city[n++] = { x - sx * (ms * 0.5f + SEC_BUT_DP), z + o,
+                            SEC_BUT_W, SEC_BUT_D, SEC_BUT_H, c };
+            g_city[n++] = { x + o, z - sz * (ms * 0.5f + SEC_BUT_DP),
+                            SEC_BUT_D, SEC_BUT_W, SEC_BUT_H, c };
+        }
+    }
+    g_cityCount = n;   // 4 masas + 4 remates + 4 muros + 20 columnas + 16 contrafuertes = 48
+                       // (+35 de arch_detail.h = 83 de las 256 de g_city)
 }
 
 // --- SUELO y TECHO (teselados finos: la camara nunca cruza un triangulo grande) ---
@@ -78,6 +123,11 @@ static void buildSectorFloorCeil(TexVertex *buf, int &i) {
 
 // --- arco OJIVAL escalonado (5 cajas): el gesto gotico, barato ---
 // axis 0 = el arco cruza en X (pilares a +-span), axis 1 = cruza en Z.
+// SIN COLISION A PROPOSITO: el arco vuela de y=20.7 a 27.3 SOBRE el hueco entre dos
+// columnas, y por ese hueco se pasa caminando. Como CityBldg no tiene baseY (siempre
+// arranca en y=0), darle caja a un tramo del arco no seria un arco: seria un TAPON
+// macizo del suelo a 27 que cerraria el paso entre columna y columna. Las "jambas"
+// del arco son las propias columnas, que ya tienen su caja (SEC_COL_W x SEC_COL_H).
 static void addArchT(TexVertex *buf, int &i, float cx, float cz, float span,
                      float baseY, float rise, float th, int axis, unsigned int col) {
     const float st = span / 3.0f;                   // 3 tramos por lado
@@ -102,14 +152,21 @@ static void buildSectorWalls(TexVertex *buf, int &i) {
     for (int q = 0; q < 4; ++q) {
         float sx = (q & 1) ? -1.0f : 1.0f, sz = (q & 2) ? -1.0f : 1.0f;
         float x = mc * sx, z = mc * sz;
-        addSolidBoxT(buf, i, x, 0.0f, z, ms, ms, SEC_MASS_H, stone);                       // cuerpo
-        addSolidBoxT(buf, i, x, SEC_MASS_H, z, ms * 1.06f, ms * 1.06f, 1.6f, dark);        // cornisa
-        addSolidBoxT(buf, i, x, SEC_MASS_H + 1.6f, z, ms * 0.55f, ms * 0.55f, 5.0f, stone);// remate
+        // las medidas salen de las constantes SEC_CORN_*/SEC_CAP_*/SEC_BUT_* de arriba:
+        // buildSectorCollision usa LAS MISMAS, asi lo que se ve y lo que se choca no
+        // se pueden separar (era justo el bug: cornisa, remate y contrafuertes sin caja).
+        addSolidBoxT(buf, i, x, 0.0f, z, ms, ms, SEC_MASS_H, stone);                        // cuerpo
+        addSolidBoxT(buf, i, x, SEC_MASS_H, z, ms * SEC_CORN_S, ms * SEC_CORN_S,
+                     SEC_CORN_H, dark);                                                     // cornisa
+        addSolidBoxT(buf, i, x, SEC_MASS_TOP, z, ms * SEC_CAP_S, ms * SEC_CAP_S,
+                     SEC_CAP_H, stone);                                                     // remate
         // CONTRAFUERTES en las dos caras que dan a los pasillos (separados entre si)
         for (int k = -1; k <= 1; ++k) {
-            float o = (float)k * ms * 0.30f;
-            addSolidBoxT(buf, i, x - sx * (ms * 0.5f + 1.2f), 0.0f, z + o, 2.4f, 3.0f, SEC_MASS_H * 0.82f, dark);
-            addSolidBoxT(buf, i, x + o, 0.0f, z - sz * (ms * 0.5f + 1.2f), 3.0f, 2.4f, SEC_MASS_H * 0.82f, dark);
+            float o = (float)k * ms * SEC_BUT_O;
+            addSolidBoxT(buf, i, x - sx * (ms * 0.5f + SEC_BUT_DP), 0.0f, z + o,
+                         SEC_BUT_W, SEC_BUT_D, SEC_BUT_H, dark);
+            addSolidBoxT(buf, i, x + o, 0.0f, z - sz * (ms * 0.5f + SEC_BUT_DP),
+                         SEC_BUT_D, SEC_BUT_W, SEC_BUT_H, dark);
         }
     }
 
