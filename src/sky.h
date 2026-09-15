@@ -1,24 +1,47 @@
-// sky.h - CIELO GOTICO dramatico para PROJECT NOCTIS (reemplaza drawBackdrop).
+// sky.h - CIELO DE SOBRECAST (gris-pardo CALIDO) para PROJECT NOCTIS.
 // -----------------------------------------------------------------------------
-// Se dibuja 2D, SIN profundidad, DETRAS de todo el mundo, una vez por frame.
-// El que llama ya dejo GU_DEPTH_TEST desactivado (igual que para drawBackdrop):
+// Se dibuja 2D, SIN profundidad, ANTES del mundo, una vez por frame:
 //     sceGuDisable(GU_DEPTH_TEST);  drawSky();  sceGuEnable(GU_DEPTH_TEST);
-// Estado al entrar: depth OFF, textura OFF, blend OFF. Al salir queda IGUAL
-// (blend/textura OFF) -> no rompe nada del pipeline del que llama.
+// Estado al entrar Y al salir: textura OFF, blend OFF, cull OFF, GU_SMOOTH y
+// GU_DITHER ON (initGu los deja globales). Este archivo NO toca ni un estado:
+// todo lo que pinta es OPACO. Helpers con nombres propios (Sky*) porque sky.h
+// se incluye ANTES de que main.cpp defina GradVertex/gradQuad.
 //
-// Objetivo (directiva 3,49): vender ESCALA y SOLEDAD. Una LUNA palida enorme,
-// baja sobre una megaestructura brumosa infinita. Oscuro y atmosferico
-// (Bloodborne/BLAME!), NO brillante. Tonos gris-calido consistentes con
-// CLEAR_COLOR / HAZE (definidos en main.cpp antes de este include).
+// ============================ QUE SE VE AHORA ============================
+// El mundo (sector.h) es un RECINTO CERRADO: suelo, techo a y=60 y muros
+// exteriores hasta el techo. Del cielo solo se asoma lo que cabe por los
+// VENTANALES (franja abierta y=7..27 con pilares cada 19u) y por los huecos
+// entre las agujas del telon (spirescape.h). NUNCA hay cielo a pantalla
+// completa: es una CINTA, y encima medio tapada por siluetas.
 //
-// Reusa EXACTAMENTE el patron 2D de main.cpp (gradQuad/GradVertex/drawRect):
-//   sceGuGetMemory(...) + vertice { color(8888), x,y,z(16bit) } +
-//   GU_TRIANGLES con (GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D),
-//   coords en espacio de PANTALLA, mismo winding TL,TR,BR / TL,BR,BL.
-// Helpers y struct con nombres PROPIOS (Sky*) para no chocar si este header se
-// incluye antes de que main.cpp defina GradVertex/gradQuad.
+// DONDE CAE ESA CINTA EN PANTALLA (geometria real de la camara de main.cpp):
+//   lookAt: ojo = P - f*9 + arriba*4.5 ; centro = P + f*4 + arriba*1.8
+//     -> la vista cae 2.7u cada 13u de avance = 11.75 grados de PICADA, y es
+//        FIJA (camPitch esta (void)eado en 3ra persona): no depende de nada.
+//   fovy 66 -> semi 33 (cot 1.54) -> y_pantalla = 136 - 209.4*tan(elev+11.75)
+//     * elev 0 (linea del ojo = HORIZONTE) .................. y = 92   <<<<<
+//     * TECHO del recinto (55.5u sobre el ojo): entraria en cuadro a partir de
+//       d > 143u y el sector mide 112 -> el techo NO SE VE JAMAS. Arriba del
+//       todo solo hay muro, aguja o cielo.
+//     * DINTEL del ventanal (22.5u sobre el ojo): se sale por el borde
+//       superior en cuanto d < 58u -> cerca de un muro el cielo llega a y=0.
+//     * ALFEIZAR del ventanal (2.5u sobre el ojo): d=112 -> y=88 ; d=54 ->
+//       y=82 ; d=20 -> y=64. El alfeizar esta POR ENCIMA del ojo, o sea que
+//       por un ventanal es IMPOSIBLE mirar por debajo de la linea y=92.
+//   => el cielo UTIL es la cinta y = 0..92. Todo lo de abajo lo tapan siempre
+//      el antepecho (y=0..7), el suelo del sector y las bases de las agujas
+//      (que arrancan en y=-30 justamente para eso).
 //
-// Barato y determinista: ~64 triangulos, sin rand, sin heap, C++17, <math.h>.
+// ============================ PRESUPUESTO ============================
+// La auditoria midio 239.000 px/frame (2,1 pantallas) en la version con luna +
+// halo + nubes con mezcla alfa + siluetas 2D bajando hasta y=272; casi todo
+// quedaba tapado por el mundo. Ahora:
+//   cinta opaca 480 x 112 ........... 53.760 px  (1 escritura, 0 lecturas)
+//   2 velos de bruma opacos .........  5.088 px
+//   TOTAL ........................... ~58.850 px = 0,45 pantallas  (-75%)
+// Sin GU_BLEND en ningun punto: a 16 bits, mezclar cuesta leer+escribir.
+//
+// Determinista, sin rand, sin heap, C++17. 18 quads = 36 triangulos.
 #ifndef NOCTIS_SKY_H
 #define NOCTIS_SKY_H
 
@@ -29,132 +52,144 @@
 struct SkyVtx { unsigned int color; short x, y, z; };
 #define SKY_FLAGS (GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D)
 
-// cambia SOLO el canal alpha de un color 0xAABBGGRR (para franjas translucidas)
-static inline unsigned int skyWithA(unsigned int c, int a) {
-    return (c & 0x00FFFFFFu) | ((unsigned int)a << 24);
+static const int SKY_HORIZON = 92;   // linea del ojo (ver cuentas de arriba)
+static const int SKY_HEM     = 112;  // dobladillo: 20 px BAJO el horizonte y se
+                                     // corta. Es puro seguro (salto, head-bob,
+                                     // gravedad rara); lo normal es que ni se
+                                     // llegue a ver. Pintar hasta y=272 costaba
+                                     // 76.800 px de mas para nada.
+static const int SKY_STEP    = 8;    // escalones cortos: el framebuffer es 5650
+                                     // (rojo/azul a 5 bits = salto de 8) y un
+                                     // degradado largo de una sola tirada se
+                                     // bandea. Con tramos de 8 px + el dither
+                                     // 4x4 que initGu deja activo, el salto
+                                     // queda repartido en ruido fino.
+
+// ---- Rampa del cielo. SOBRECAST: gris-pardo calido, SIN sol y SIN estrellas.
+// La clave de la referencia es que el HORIZONTE es lo mas luminoso y el cenit
+// lo mas apagado: esa banda clara por detras es la que hace LEER las agujas
+// como siluetas (spirescape.h cuenta con ella: deja las bases oscuras a
+// proposito para recortarlas contra esto). Tono constante r:g:b ~ 1:0,92:0,81
+// -> pardo calido en toda la rampa, nunca gris frio ni azul.
+struct SkyStop { short y; unsigned char r, g, b; };
+static const SkyStop kSkyStops[] = {
+    {   0,  62,  56,  49 },   // cenit: carbon pardo, apagado
+    {  26,  76,  68,  59 },
+    {  48, 100,  90,  78 },   // empieza a levantar
+    {  66, 130, 118, 102 },
+    {  80, 158, 145, 126 },
+    {  92, 182, 168, 148 },   // HORIZONTE: lo mas claro de la escena
+    { 100, 148, 136, 118 },   // bajo el ojo cae rapido (bruma lejana)
+    { 112,  92,  84,  73 },   // fin del dobladillo
+};
+#define SKY_NSTOPS ((int)(sizeof(kSkyStops) / sizeof(kSkyStops[0])))
+
+// color de la rampa en una fila cualquiera (interpolacion lineal por tramos).
+// Lo usan tanto la cinta como los velos: asi el borde de un velo puede tomar
+// EXACTAMENTE el color del fondo y desvanecerse sin necesidad de alfa.
+static unsigned int skyToneAt(int y) {
+    if (y <= kSkyStops[0].y)
+        return RGBA(kSkyStops[0].r, kSkyStops[0].g, kSkyStops[0].b, 255);
+    for (int s = 1; s < SKY_NSTOPS; ++s) {
+        if (y <= kSkyStops[s].y) {
+            const SkyStop &a = kSkyStops[s - 1], &b = kSkyStops[s];
+            const int span = (int)b.y - (int)a.y, t = y - (int)a.y;
+            return RGBA((int)a.r + ((int)b.r - (int)a.r) * t / span,
+                        (int)a.g + ((int)b.g - (int)a.g) * t / span,
+                        (int)a.b + ((int)b.b - (int)a.b) * t / span, 255);
+        }
+    }
+    const SkyStop &e = kSkyStops[SKY_NSTOPS - 1];
+    return RGBA(e.r, e.g, e.b, 255);
 }
 
-// franja horizontal de ANCHO COMPLETO con gradiente vertical (== gradQuad).
-static void skyBand(int y0, int y1, unsigned int cTop, unsigned int cBot) {
-    SkyVtx *v = (SkyVtx *)sceGuGetMemory(sizeof(SkyVtx) * 6);
-    v[0] = { cTop, 0,                  (short)y0, 0 };
-    v[1] = { cTop, (short)SCR_WIDTH,   (short)y0, 0 };
-    v[2] = { cBot, (short)SCR_WIDTH,   (short)y1, 0 };
-    v[3] = { cTop, 0,                  (short)y0, 0 };
-    v[4] = { cBot, (short)SCR_WIDTH,   (short)y1, 0 };
-    v[5] = { cBot, 0,                  (short)y1, 0 };
-    sceGuDrawArray(GU_TRIANGLES, SKY_FLAGS, 6, 0, v);
+// aclara/oscurece un tono MANTENIENDO el sesgo calido (g y b se mueven menos)
+static inline unsigned int skyShift(unsigned int c, int d) {
+    int r = (int)(c & 0xFF) + d;
+    int g = (int)((c >> 8) & 0xFF) + (d * 15) / 16;
+    int b = (int)((c >> 16) & 0xFF) + (d * 13) / 16;
+    if (r < 0)   r = 0;
+    if (r > 255) r = 255;
+    if (g < 0)   g = 0;
+    if (g > 255) g = 255;
+    if (b < 0)   b = 0;
+    if (b > 255) b = 255;
+    return RGBA(r, g, b, 255);
 }
 
-// quad libre con color por-esquina (TL,TR,BR,BL). Mismo winding que gradQuad.
-static void skyQuad(int x0, int y0, int x1, int y1,
-                    unsigned int c00, unsigned int c10,
-                    unsigned int c11, unsigned int c01) {
-    SkyVtx *v = (SkyVtx *)sceGuGetMemory(sizeof(SkyVtx) * 6);
+// escribe 6 vertices (2 triangulos) de un quad con color por esquina.
+// MISMO winding que gradQuad de main.cpp: TL,TR,BR / TL,BR,BL.
+static inline void skyQuadTo(SkyVtx *v, int x0, int y0, int x1, int y1,
+                             unsigned int c00, unsigned int c10,
+                             unsigned int c11, unsigned int c01) {
     v[0] = { c00, (short)x0, (short)y0, 0 };
     v[1] = { c10, (short)x1, (short)y0, 0 };
     v[2] = { c11, (short)x1, (short)y1, 0 };
     v[3] = { c00, (short)x0, (short)y0, 0 };
     v[4] = { c11, (short)x1, (short)y1, 0 };
     v[5] = { c01, (short)x0, (short)y1, 0 };
-    sceGuDrawArray(GU_TRIANGLES, SKY_FLAGS, 6, 0, v);
 }
 
-// disco aproximado por abanico de triangulos (centro->borde). Centro y borde
-// con color distinto -> degrade radial suave (luna palida / halo). CW en
-// pantalla (y hacia abajo): coincide con el winding de gradQuad.
-static void skyFan(float cx, float cy, float r, int segs,
-                   unsigned int cCenter, unsigned int cRim) {
-    const int nv = segs * 3;
-    SkyVtx *v = (SkyVtx *)sceGuGetMemory(sizeof(SkyVtx) * nv);
-    const float step = 6.28318531f / (float)segs;
-    int n = 0;
-    for (int s = 0; s < segs; ++s) {
-        const float a0 = step * (float)s;
-        const float a1 = step * (float)(s + 1);
-        v[n++] = { cCenter, (short)cx, (short)cy, 0 };
-        v[n++] = { cRim, (short)(cx + cosf(a0) * r), (short)(cy + sinf(a0) * r), 0 };
-        v[n++] = { cRim, (short)(cx + cosf(a1) * r), (short)(cy + sinf(a1) * r), 0 };
-    }
-    sceGuDrawArray(GU_TRIANGLES, SKY_FLAGS, nv, 0, v);
-}
-
-// banda de nube/bruma: tira horizontal oscura, densa al centro y disuelta en
-// los extremos (alpha 0). Requiere blend activo. 2 quads = 4 tris.
-static void skyCloud(int cy, int halfH, int cx, int halfW, unsigned int base, int aMax) {
-    const unsigned int c0 = skyWithA(base, 0);
-    const unsigned int cM = skyWithA(base, aMax);
+// ---- VELO DE BRUMA: tira horizontal OPACA, un pelo mas clara (o mas oscura)
+// que el cielo en su eje y que se funde con el fondo en los 4 bordes porque
+// las esquinas usan literalmente skyToneAt(). Da capas de niebla sobre el
+// horizonte sin encender GU_BLEND ni pagar una sola lectura de framebuffer.
+// 4 celdas = 2.688 px con halfW=168, halfH=4.
+static void skyVeil(int cy, int halfH, int cx, int halfW, int lift) {
     const int y0 = cy - halfH, y1 = cy + halfH;
-    skyQuad(cx - halfW, y0, cx,          y1, c0, cM, cM, c0);  // entra (fade in)
-    skyQuad(cx,         y0, cx + halfW,  y1, cM, c0, c0, cM);  // sale  (fade out)
-}
-
-// linea del horizonte escalonada: siluetas colosales OSCURAS de una
-// megaestructura lejana. Alturas pseudo-aleatorias DETERMINISTAS (hash del
-// indice, sin rand). El disco de la luna sube limpio sobre estructuras bajas.
-static void skySilhouette() {
-    const int   N     = 12;
-    const int   yH    = 168;                 // linea base del horizonte
-    const int   stepW = SCR_WIDTH / N;       // 40 px por "torre"
-    const int   moonX = 306, moonGuard = 62; // ventana donde la luna sube limpia
-    const unsigned int cTopSil = RGBA(26, 24, 21, 255);  // silueta: casi negro calido
-    const unsigned int cBotSil = RGBA(15, 14, 12, 255);  // mas oscura hacia el pie (niebla baja)
-    for (int s = 0; s < N; ++s) {
-        const int x0  = s * stepW;
-        const int x1  = (s == N - 1) ? SCR_WIDTH : (x0 + stepW);
-        const int cxs = (x0 + x1) >> 1;
-        unsigned int h = (unsigned int)(s * 2654435761u);   // hash entero barato
-        h ^= h >> 13; h *= 0x9e3779b1u; h ^= h >> 15;
-        int height = 8 + (int)(h % 44u);                    // 8..51 px sobre el horizonte
-        if (cxs > moonX - moonGuard && cxs < moonX + moonGuard && height > 14)
-            height = 6 + (int)(h % 8u);                     // frente a la luna: bajo (6..13)
-        skyQuad(x0, yH - height, x1, SCR_HEIGHT, cTopSil, cTopSil, cBotSil, cBotSil);
-    }
+    const int xL = cx - halfW, xR = cx + halfW;
+    const unsigned int cT = skyToneAt(y0);          // borde superior = fondo
+    const unsigned int cM = skyToneAt(cy);          // bordes laterales = fondo
+    const unsigned int cB = skyToneAt(y1);          // borde inferior = fondo
+    const unsigned int cC = skyShift(cM, lift);     // eje del velo (lo unico nuevo)
+    SkyVtx *v = (SkyVtx *)sceGuGetMemory(sizeof(SkyVtx) * 24);
+    skyQuadTo(v +  0, xL, y0, cx, cy, cT, cT, cC, cM);   // sup-izq
+    skyQuadTo(v +  6, cx, y0, xR, cy, cT, cT, cM, cC);   // sup-der
+    skyQuadTo(v + 12, xL, cy, cx, y1, cM, cC, cB, cB);   // inf-izq
+    skyQuadTo(v + 18, cx, cy, xR, y1, cC, cM, cB, cB);   // inf-der
+    sceGuDrawArray(GU_TRIANGLES, SKY_FLAGS, 24, 0, v);
 }
 
 // ============================ CIELO COMPLETO ============================
 static void drawSky() {
-    // ---- 1) GRADIENTE VERTICAL (fondo). Carbon calido desaturado arriba ->
-    //         se aclara hacia una banda de HAZE luminosa en el horizonte. ----
-    const unsigned int cTop  = RGBA(34, 32, 28, 255);   // carbon calido (cielo alto, oscuro)
-    const unsigned int cHigh = RGBA(56, 52, 46, 255);
-    const unsigned int cGlow = RGBA(126, 118, 104, 255);// CLEAR_COLOR levantado: el horizonte "brilla"
-    const unsigned int cLow  = RGBA(30, 28, 25, 255);   // niebla baja bajo el horizonte
-    skyBand(0,   72,         cTop,  cHigh);
-    skyBand(72,  134,        cHigh, HAZE);               // se funde en la bruma calida (HAZE)
-    skyBand(134, 172,        HAZE,  cGlow);              // el horizonte brilla a traves de la niebla
-    skyBand(172, SCR_HEIGHT, cGlow, cLow);               // piso brumoso (como el floorc de drawBackdrop)
+    // ---- 1) LA CINTA: de y=0 al dobladillo, en escalones de 8 px, todos
+    //         opacos y sin solaparse -> cada pixel se escribe UNA vez. Una
+    //         sola llamada de dibujo (14 quads seguidos en el display list).
+    const int nBand = (SKY_HEM + SKY_STEP - 1) / SKY_STEP;
+    SkyVtx *v = (SkyVtx *)sceGuGetMemory(sizeof(SkyVtx) * 6 * nBand);
+    for (int k = 0; k < nBand; ++k) {
+        int y0 = k * SKY_STEP, y1 = y0 + SKY_STEP;
+        if (y1 > SKY_HEM) y1 = SKY_HEM;
+        const unsigned int cA = skyToneAt(y0), cB = skyToneAt(y1);
+        skyQuadTo(v + k * 6, 0, y0, SCR_WIDTH, y1, cA, cA, cB, cB);
+    }
+    sceGuDrawArray(GU_TRIANGLES, SKY_FLAGS, 6 * nBand, 0, v);
 
-    // ---- translucidos: halo, luna atenuada por nubes ----
-    sceGuEnable(GU_BLEND);
-    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    // ---- 2) DOS VELOS DE BRUMA. Deriva lentisima (periodo ~50 s) para que el
+    //         cielo respire: son lo unico del cielo que no es invariante en
+    //         horizontal, asi que van anchos y flojos de contraste y no
+    //         delatan que el fondo no gira con la camara.
+    static float skyT = 0.0f; skyT += 0.004f;
+    const int d1 = (int)(sinf(skyT) * 42.0f);
+    const int d2 = (int)(sinf(skyT * 0.63f + 2.1f) * 34.0f);
+    skyVeil(SKY_HORIZON - 18, 4, 236 + d1, 168, +16);  // claro: refuerza el brillo del horizonte
+    skyVeil(SKY_HORIZON - 36, 4, 220 + d2, 150, -12);  // oscuro: repisa de niebla mas alta -> capas
 
-    const float moonCx = 306.0f, moonCy = 126.0f;       // baja y descentrada (a la derecha)
-    const float moonR  = 46.0f;
-
-    // ---- 2a) HALO tenue: disco palido grande y translucido detras de la luna.
-    skyFan(moonCx, moonCy, moonR * 2.05f, 12,
-           skyWithA(RGBA(150, 142, 126, 255), 54),      // centro: brillo calido tenue
-           skyWithA(RGBA(150, 142, 126, 255), 0));       // borde: se disuelve en el cielo
-
-    // ---- 2b) LUNA: disco palido gris-blanco enorme, tinte calido leve. Centro
-    //          mas luminoso que el borde -> se lee suave y voluminosa.
-    skyFan(moonCx, moonCy, moonR, 12,
-           RGBA(178, 172, 158, 255),                     // nucleo: palido luminoso (lo mas claro de la escena)
-           RGBA(120, 114, 101, 255));                    // borde: cae hacia el tono del horizonte
-
-    // ---- 3) NUBES/BRUMA: 2 tiras oscuras translucidas que DERIVAN (sin/tiempo,
-    //         determinista) cruzando por delante de la luna -> profundidad.
-    static float skyT = 0.0f; skyT += 0.01f;
-    const int drift1 = (int)(sinf(skyT)          * 90.0f);
-    const int drift2 = (int)(sinf(skyT * 0.7f + 1.7f) * 70.0f);
-    skyCloud(96,  10, 250 + drift1, 185, RGBA(46, 43, 38, 255), 72); // cruza el borde superior de la luna
-    skyCloud(150,  8, 210 + drift2, 150, RGBA(38, 35, 31, 255), 62); // banda baja cerca del horizonte
-
-    sceGuDisable(GU_BLEND);
-
-    // ---- 4) SILUETA DEL HORIZONTE: megaestructura oscura escalonada al frente.
-    skySilhouette();
+    // Nada de luna, halo, nubes con alfa ni siluetas 2D: ver la nota del final.
 }
+
+// ------------------------------- NOTA -------------------------------------
+// Dibuja una cinta de sobrecast pardo-calido de y=0 a y=112 (14 escalones
+// opacos de 8 px, mas claros al acercarse al horizonte y=92) y 2 velos de
+// bruma opacos que se funden con el fondo por color, sin alfa.
+// Coste: ~58.850 px/frame = 0,45 pantallas, contra los ~239.000 (2,1
+// pantallas) de la version con luna. Sin una sola lectura de framebuffer.
+// Lo quitado no se echa de menos porque el recinto es CERRADO: la luna y su
+// halo caian donde hoy hay muro o techo; las nubes alfa se veian en rendijas
+// de 20-40 px y solo enturbiaban la banda que recorta las agujas; y la silueta
+// 2D del horizonte era un duplicado peor del telon REAL de spirescape.h, que
+// ya esta ahi delante en 3D. Lo unico que se asoma por los ventanales es la
+// banda luminosa sobre el horizonte, y ahi es donde fue todo el detalle.
+// --------------------------------------------------------------------------
 
 #endif // NOCTIS_SKY_H
