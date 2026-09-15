@@ -272,7 +272,19 @@ static int objGoalDone() { return g_objGoal; }
 
 // --- restaurar estado desde una partida guardada (savedata.h) ---
 // popcount a mano: no hay builtins garantizados en este toolchain.
+//
+// SANEA lo que entra. El checksum del archivo protege contra bits corruptos, pero no
+// contra una partida escrita por otra build: nada impedia un active fuera de rango
+// (y objRespawn indexa kObjAnchors[g_objActive] SIN comprobar -> lectura fuera del
+// array en el primer respawn), ni un faro dado por conseguido con cero materiales,
+// que deja el bucle de juego sin objetivo posible.
 static void objRestore(int active, int anchorSeen, int matTaken, int goal) {
+    if (active < 0 || active >= OBJ_ANCHOR_N) active = 0;
+    anchorSeen |= 1;                                  // el ancla de salida siempre esta vista
+    anchorSeen |= (1 << active);                      // la activa implica haberla visto
+    anchorSeen &= (1 << OBJ_ANCHOR_N) - 1;
+    matTaken   &= (1 << OBJ_MAT_N) - 1;
+    if (goal && matTaken != (1 << OBJ_MAT_N) - 1) goal = 0;   // faro sin los 10 materiales
     g_objActive     = active;
     g_objAnchorSeen = anchorSeen;
     g_objMatTaken   = matTaken;

@@ -564,7 +564,15 @@ static void gargUpdate(float px, float py, float pz, int gravG) {
         // cuadrados y una comparacion: ni raiz, ni linea de vista, ni maquina de
         // estados. Las que ya estan en juego -- y las que van de vuelta al nido,
         // que si no se quedarian congeladas en el aire -- siguen simulando.
-        if (d2 > GG_FAR_THINK * GG_FAR_THINK && g.state <= GARG_ALERT) {
+        // SOLO posada, no ALERTA. Con "<= GARG_ALERT" una gargola despertada de lejos
+        // por un cambio de gravedad (ese aviso alcanza GG_DET * 1.7, que para la
+        // variante 1 son 74.8, mas que GG_FAR_THINK = 60) entraba aqui al frame
+        // siguiente estando aun en su nido: se saltaba el switch entero, su unica
+        // salida (case GARG_ALERT) no se ejecutaba nunca, y el temporizador SUBIA en
+        // vez de bajar hacia cero. Quedaba atrapada en alerta, y al volver el jugador
+        // tardaba ese contador entero en despegar. G6, la que guarda el faro, es una
+        // de las afectadas.
+        if (d2 > GG_FAR_THINK * GG_FAR_THINK && g.state == GARG_PERCHED) {
             const GargNest &nf = kGargNests[k];
             const float hx = g.x - nf.x, hy = g.y - nf.y, hz = g.z - nf.z;
             // epsilon MINIMO a proposito: el estado POSADA deja la posicion

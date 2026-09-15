@@ -1060,24 +1060,58 @@ int main(void) {
     int   gravG = 0, prevTri = 0;
     // ===== PARTIDA GUARDADA: volcar el estado y continuar donde quedaste =====
     NoctisSave sv; saveClear(&sv);
+    // tiempo jugado: el reloj desde que arranco esta sesion, mas lo que trajera la
+    // partida que se cargo. El campo existia en el struct y nadie lo escribia nunca.
+    const long long bootTick = sceKernelGetSystemTimeWide();
+    uint32_t playBase = 0;
     auto snap = [&]() {
         sv.px = playerX; sv.py = playerY; sv.pz = playerZ;
         sv.camYaw = camYaw; sv.camPitch = camPitch; sv.gravG = gravG;
+        sv.hp = hp; sv.hpMax = HP_MAX;   // la VIDA: el campo estaba y solo guardaba el 100 de fabrica
         sv.en = en; sv.enMax = EN_MAX;
         sv.objActive = objActiveAnchor(); sv.objAnchorSeen = objAnchorSeenMask();
         sv.objMatTaken = objMatTakenMask(); sv.objGoal = objGoalDone();
         sv.curRanged = curRanged; sv.curMelee = curMelee;
         for (int k = 0; k < 16 && k < kRangedCount; ++k) sv.ammoMag[k] = ammoMag[k];
+        // INVENTARIO: las gemas recogidas caben en dos mascaras de 32 bits. Sin esto
+        // reaparecian todas en cada arranque.
+        sv.invResLo = 0; sv.invResHi = 0; sv.invCount = collectedCount;
+        for (int r = 0; r < 64 && r < kResourceCount; ++r)
+            if (collected[r]) { if (r < 32) sv.invResLo |= (1u << r); else sv.invResHi |= (1u << (r - 32)); }
+        // CABECERA. Sin ella saveCounter valia 0 en las cinco ranuras, y saveLatestSlot
+        // compara con >=: devolvia siempre la de indice mas alto, o sea la de
+        // RECUPERACION, que es justo la partida MAS VIEJA.
+        const long long nowUs = sceKernelGetSystemTimeWide();
+        sv.playTimeSec = playBase + (uint32_t)((nowUs - bootTick) / 1000000LL);
+        sv.stampSec    = (uint32_t)(nowUs / 1000000LL);
+        sv.saveCounter++;
     };
     {   // carga: autoguardado y, si esta corrupto, cae solo a la ranura de recuperacion
         NoctisSave ld; saveClear(&ld);
         if (saveLoadAutoOrRecovery(&ld)) {
+            // arrastra la cabecera y CUALQUIER campo que hoy no leemos: sin esto el
+            // siguiente guardado los devolvia a los valores de fabrica.
+            sv = ld;
+            playBase = ld.playTimeSec;
             playerX = ld.px; playerY = ld.py; playerZ = ld.pz;
-            camYaw = ld.camYaw; camPitch = ld.camPitch; gravG = ld.gravG;
-            en = ld.en; EN_MAX = ld.enMax;
+            camYaw = ld.camYaw; camPitch = ld.camPitch;
+            // El checksum protege contra bits corruptos, no contra un archivo escrito
+            // por otra build. Todo lo que luego indexa un array se sanea aqui.
+            gravG = (ld.gravG < 0 || ld.gravG > 5) ? 0 : ld.gravG;          // kGravName[6]
+            hp = (ld.hp > 0.0f && ld.hp <= ld.hpMax) ? ld.hp : HP_MAX;
+            en = ld.en; EN_MAX = (ld.enMax > 0.0f) ? ld.enMax : objEnergyMax();
+            if (en < 0.0f)    en = 0.0f;
+            if (en > EN_MAX)  en = EN_MAX;
             objRestore(ld.objActive, ld.objAnchorSeen, ld.objMatTaken, ld.objGoal);
-            curRanged = ld.curRanged; curMelee = ld.curMelee;
+            curRanged = (ld.curRanged < 0 || ld.curRanged >= kRangedCount) ? 0 : ld.curRanged;
+            curMelee  = (ld.curMelee  < 0 || ld.curMelee  >= kMeleeCount)  ? 0 : ld.curMelee;
             for (int k = 0; k < 16 && k < kRangedCount; ++k) ammoMag[k] = ld.ammoMag[k];
+            collectedCount = 0;
+            for (int r = 0; r < 64 && r < kResourceCount; ++r) {
+                collected[r] = (r < 32) ? (int)((ld.invResLo >> r) & 1u)
+                                        : (int)((ld.invResHi >> (r - 32)) & 1u);
+                if (collected[r]) collectedCount++;
+            }
         }
     }
     float gvr = 0.0f, gvf = 0.0f, gvg = 0.0f;   // vel en el plano (right,fwd) + a lo largo de la gravedad
@@ -1602,11 +1636,35 @@ int main(void) {
         sceGuEnable(GU_BLEND);
         sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
         sceGuDisable(GU_TEXTURE_2D);
+
+        // ---- DESTELLO DE DANO. hurtFlash se ponia a 12 y se decrementaba, pero no lo
+        // dibujaba nadie: una gargola te mordia, la vida bajaba y en pantalla no pasaba
+        // absolutamente nada. Velo rojo que se apaga solo, mas fuerte cuanto menos vida
+        // queda, para que el ultimo mordisco se note de verdad.
+        if (hurtFlash > 0) {
+            const float t  = (float)hurtFlash / 12.0f;
+            const float lo = 1.0f - (hp / HP_MAX);                  // 0 con la vida llena
+            int a = (int)(t * (54.0f + 90.0f * lo));
+            if (a > 160) a = 160;
+            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 6);
+            const unsigned int c = RGBA(150, 18, 22, a);
+            v[0] = { c,   0.0f,   0.0f, 0.0f }; v[1] = { c, 480.0f,   0.0f, 0.0f };
+            v[2] = { c, 480.0f, 272.0f, 0.0f }; v[3] = { c,   0.0f,   0.0f, 0.0f };
+            v[4] = { c, 480.0f, 272.0f, 0.0f }; v[5] = { c,   0.0f, 272.0f, 0.0f };
+            sceGumDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D, 6, 0, v);
+        }
         {
             HudState st{};
             st.hp = hp; st.hpMax = HP_MAX;
             st.en = en;     st.enMax = EN_MAX;           // EN_MAX sube con cada material
-            st.grv = 1.0f;  st.gravName = kGravName[gravG];
+            // La barra GRV media un literal 1.0f: pintaba un medidor SIEMPRE lleno, la
+            // misma trampa decorativa que el "1200" escrito a mano de la vida. Ahora mide
+            // lo unico que de verdad limita la gravedad: si te queda un cambio. Llena
+            // mientras puedas cambiar, y solo se vacia en los ultimos GRAV_EN_SWITCH,
+            // que es justo el aviso util (el siguiente salto te deja sin mecanica).
+            { float g1 = en / GRAV_EN_SWITCH; if (g1 > 1.0f) g1 = 1.0f; if (g1 < 0.0f) g1 = 0.0f;
+              st.grv = g1; }
+            st.gravName = kGravName[gravG];
             st.px = playerX; st.pz = playerZ; st.yaw = heroYaw;
             st.district = "CAMPANARIO";
             st.matTaken = objMaterialsTaken(); st.matTotal = objMaterialCount();
