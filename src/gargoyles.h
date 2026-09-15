@@ -55,7 +55,10 @@ static const float GG_CEIL  = 60.0f;   // techo del sector
 
 // margenes de vuelo: la gargola no se mete en la piedra ni atraviesa el muro
 static const float GG_CLR     = 1.60f;            // holgura al esquivar una masa
-static const float GG_LIM_XZ  = GG_HALF - 2.5f;   // limite de vuelo en XZ (51.5)
+static const float GG_LIM_XZ  = GG_HALF;          // limite de vuelo = cara interior del muro (54).
+                                                  // Antes era 54-2.5: mas ESTRECHO que el nido de
+                                                  // la gargola de pared (x=54), asi que al volver
+                                                  // quedaba clavada a 2.5 y no se petrificaba nunca.
 static const float GG_LIM_LO  = 1.20f;            // no roza el suelo
 static const float GG_LIM_HI  = GG_CEIL - 1.4f;   // no roza el techo (58.6)
 
@@ -854,7 +857,8 @@ static int gargHitPlayer(float px, float py, float pz, float r) {
 // SALE persiguiendo; la que cae pasa a MUERTA y deja de existir (ni piensa ni
 // se dibuja). No devuelve nada a proposito: quien quiera contar bajas puede
 // mirar g_garg[k].state.
-static void gargDamage(float x, float y, float z, float r, int dmg) {
+static int gargDamage(float x, float y, float z, float r, int dmg) {
+    int hits = 0;
     for (int k = 0; k < GARG_N; ++k) {
         Garg &g = g_garg[k];
         if (g.state == GARG_DEAD) continue;
@@ -865,6 +869,7 @@ static void gargDamage(float x, float y, float z, float r, int dmg) {
         const float rr = r + GG_RAD[g.variant];
         if (d2 > rr * rr) continue;
 
+        ++hits;
         g.hp -= dmg;
         if (g.hp <= 0) {
             g.state = GARG_DEAD;
@@ -880,6 +885,7 @@ static void gargDamage(float x, float y, float z, float r, int dmg) {
         g_gargLos[k]  = 1;          // si te dispara, te ha visto
         g_gargOpen[k] = 1.0f;       // y desde luego ya no es una estatua
     }
+    return hits;
 }
 
 // ============================================================================
