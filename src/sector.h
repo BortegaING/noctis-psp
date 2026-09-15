@@ -62,8 +62,8 @@ static void buildSectorFloorCeil(TexVertex *buf, int &i) {
     const int   N = 20;                             // celdas de ~5.8u
     const float C = (2.0f * H) / (float)N;
     const float uv = 1.0f / 10.0f;
-    const unsigned int fcol = RGBA(240, 232, 220, 255);   // suelo claro (losas)
-    const unsigned int ccol = RGBA(120, 126, 140, 255);   // techo mas oscuro (boveda)
+    const unsigned int fcol = RGBA(212, 194, 172, 255);   // suelo claro (losas)
+    const unsigned int ccol = RGBA(104,  92,  76, 255);   // techo mas oscuro (boveda)
     for (int gz = 0; gz < N; ++gz) {
         float z0 = -H + C * gz, z1 = z0 + C;
         for (int gx = 0; gx < N; ++gx) {
@@ -94,8 +94,8 @@ static void addArchT(TexVertex *buf, int &i, float cx, float cz, float span,
 
 // --- estructura: masas separadas + muros + arcada de columnas en los pasillos ---
 static void buildSectorWalls(TexVertex *buf, int &i) {
-    const unsigned int stone = brighten(RGBA(64, 70, 82, 255), 2.1f);
-    const unsigned int dark  = brighten(RGBA(46, 50, 60, 255), 2.0f);
+    const unsigned int stone = brighten(RGBA(69, 65, 58, 255), 2.1f);
+    const unsigned int dark  = brighten(RGBA(46, 41, 36, 255), 2.0f);
     const float mc = (SEC_M0 + SEC_M1) * 0.5f, ms = (SEC_M1 - SEC_M0);
 
     // 4 MASAS separadas: cuerpo + cornisa + remate escalonado (silueta gotica, no un ladrillo)

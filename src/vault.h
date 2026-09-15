@@ -121,11 +121,11 @@ static void addSkylightT(TexVertex *buf, int &i, float cx, float cz, float half,
 // ================================ LA BOVEDA COMPLETA ================================
 // 2418 verts exactos (presupuesto 2500). Determinista, sin rand y sin heap: se hornea una vez.
 static void buildVault(TexVertex *buf, int &i) {
-    const unsigned int stone = brighten(RGBA(64, 70, 82, 255), 2.1f);   // piedra del sector
-    const unsigned int dark  = brighten(RGBA(46, 50, 60, 255), 2.0f);   // piedra oscura
+    const unsigned int stone = brighten(RGBA(69, 65, 58, 255), 2.1f);   // piedra del sector
+    const unsigned int dark  = brighten(RGBA(46, 41, 36, 255), 2.0f);   // piedra oscura
     const unsigned int rib   = brighten(stone, 0.92f);                  // nervios: alla arriba, en penumbra
     const unsigned int key   = brighten(stone, 1.30f);                  // clave: el punto mas claro
-    const unsigned int glow  = RGBA(188, 196, 212, 255);                // lucernario
+    const unsigned int glow  = RGBA(138, 121,  98, 255);                // lucernario
 
     const float span = 2.0f * VLT_HALF;                 // 21 = luz total del nervio
     const float rs   = span / (float)VLT_SEG;           // 4.2  por tramo transversal

@@ -32,8 +32,8 @@ static unsigned int __attribute__((aligned(16))) g_list[262144];
 // debe ser MAS CLARO que la niebla para que las agujas lejanas se lean como
 // SILUETAS OSCURAS contra la bruma (look Bloodborne/BLAME), no como fantasmas
 // palidos flotando en negro. Antes: cielo 38 (mas oscuro que la niebla 66) -> vacio.
-static const unsigned int CLEAR_COLOR = RGBA(26, 32, 46, 255);   // cielo FRIO nocturno (megaestructura BLAME): azul profundo -> contrasta con el calido de las catedrales
-static const unsigned int HAZE = RGBA(58, 70, 88, 255); // bruma FRIA azul-gris: la geometria lejana se disuelve en frio -> el ambar/piedra calida saltan al frente
+static const unsigned int CLEAR_COLOR = RGBA( 44,  39,  33, 255);   // cielo FRIO nocturno (megaestructura BLAME): azul profundo -> contrasta con el calido de las catedrales
+static const unsigned int HAZE = RGBA(122, 106,  86, 255); // bruma FRIA azul-gris: la geometria lejana se disuelve en frio -> el ambar/piedra calida saltan al frente
 
 // Sentido de "cara frontal" para el back-face culling por-pase (R1 rendimiento).
 // El winding de cajas/piramides/piso es CONSISTENTE (probado), asi que exactamente

@@ -59,12 +59,12 @@ static inline void vpPyrA(LineVertex *buf, int &i, int a, float x, float y, floa
 // f = valor de la pieza (basa oscura, remate claro). La distancia al centro funde el
 // prop hacia la bruma igual que el resto del mundo -> profundidad dentro del pasillo.
 static unsigned int vpStone(unsigned int seed, float x, float z, float f) {
-    const unsigned int STONE = RGBA(70, 72, 80, 255);          // piedra gris fria (base pedida)
+    const unsigned int STONE = RGBA( 78,  70,  60, 255);          // piedra gris fria (base pedida)
     const float v = 0.90f + 0.20f * vpRnd(seed);               // variacion de sillar
     return fadeToVoid(brighten(STONE, 1.72f * f * v), sqrtf(x * x + z * z));
 }
-static const unsigned int VP_FLAME = RGBA(255, 180,  90, 255); // llama EMISIVA calida (unico acento)
-static const unsigned int VP_CORE  = RGBA(255, 236, 190, 255); // corazon al rojo blanco
+static const unsigned int VP_FLAME = RGBA(255, 168,  72, 255); // llama EMISIVA calida (unico acento)
+static const unsigned int VP_CORE  = RGBA(255, 226, 168, 255); // corazon al rojo blanco
 static const unsigned int VP_IRON  = RGBA( 78,  80,  92, 255); // hierro frio (cadenas)
 
 // =================================================================================
