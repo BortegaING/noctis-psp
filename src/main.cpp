@@ -587,6 +587,45 @@ static bool blocked(float px, float pz, float py) {
     return false;
 }
 
+// DESATASCO. blocked() solo RECHAZA el movimiento: nunca empuja hacia afuera. Asi que
+// si el jugador acaba DENTRO de una caja, todos los ejes quedan bloqueados y no sale
+// jamas -- que es exactamente "se quedo estancado en una pared". Y meterse dentro es
+// facil: cayendo a velocidad terminal se avanza 0.8 por frame, asi que se puede cruzar
+// el techo de una capilla sin que ningun frame caiga en la ventana de aterrizaje.
+//
+// Esto lo saca por la cara MAS CERCANA, o lo sube al techo si ese es el camino mas
+// corto (lo normal cuando te colaste por arriba). Repite unas pocas veces porque salir
+// de una caja puede meterte en la de al lado.
+static void unstick(float &px, float &py, float &pz) {
+    const float r = 1.1f;
+    for (int pass = 0; pass < 6; ++pass) {
+        bool moved = false;
+        for (int s = 0; s < g_cityCount; ++s) {
+            const CityBldg &b = g_city[s];
+            if (py >= b.h - 0.8f) continue;                      // ya estas por encima
+            const float x0 = b.x - b.w * 0.5f - r, x1 = b.x + b.w * 0.5f + r;
+            const float z0 = b.z - b.d * 0.5f - r, z1 = b.z + b.d * 0.5f + r;
+            if (px <= x0 || px >= x1 || pz <= z0 || pz >= z1) continue;
+            const float dx0 = px - x0, dx1 = x1 - px;
+            const float dz0 = pz - z0, dz1 = z1 - pz;
+            const float dup = b.h - py;
+            float d = dx0; int dir = 0;
+            if (dx1 < d) { d = dx1; dir = 1; }
+            if (dz0 < d) { d = dz0; dir = 2; }
+            if (dz1 < d) { d = dz1; dir = 3; }
+            if (dup < d) { d = dup; dir = 4; }
+            if      (dir == 0) px = x0 - 0.02f;
+            else if (dir == 1) px = x1 + 0.02f;
+            else if (dir == 2) pz = z0 - 0.02f;
+            else if (dir == 3) pz = z1 + 0.02f;
+            else               py = b.h + 0.02f;
+            moved = true;
+            break;
+        }
+        if (!moved) break;
+    }
+}
+
 // --- caja del jugador (local, se traslada con MODEL) ---
 static LineVertex __attribute__((aligned(16))) g_playerBox[24];
 static int g_playerBoxVerts = 0;
@@ -1321,9 +1360,19 @@ int main(void) {
             // 1.45, asi que el tope va por debajo de eso.
             if (velY < -FALL_CAP) velY = -FALL_CAP;
             // ===== integra vertical + suelo/azoteas =====
+            // El aterrizaje se comprueba con la altura MAS ALTA del tramo recorrido este
+            // frame, no solo con la de llegada. groundHeight solo reconoce una superficie
+            // que este a menos de 1.0 por encima de tus pies; cayendo a velocidad terminal
+            // se baja 0.8 por frame, asi que era perfectamente posible cruzar el techo de
+            // una capilla sin que ningun frame cayera dentro de esa ventana. Se atravesaba
+            // la terraza, se quedaba dentro de la caja, y ahi ya no se salia.
+            const float prevY = playerY;
             playerY += velY;
-            float gh = groundHeight(playerX, playerZ, playerY);
+            const float ghY = (prevY > playerY) ? prevY : playerY;
+            const float gh  = groundHeight(playerX, playerZ, ghY);
             if (playerY <= gh) { playerY = gh; velY = 0.0f; grounded = 1; } else grounded = 0;
+            // ultima red: si aun asi quedo dentro de algo, sacarlo por la cara mas cercana
+            unstick(playerX, playerY, playerZ);
             // ===== energia (EN) =====
             if (grounded && en < EN_MAX) en += EN_REGEN;
             if (en > EN_MAX) en = EN_MAX;
