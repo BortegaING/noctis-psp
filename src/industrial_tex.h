@@ -1,62 +1,57 @@
 #pragma once
-// MURO INDUSTRIAL-GOTICO DEL "POZO" (THE SHAFT) -- megaestructura estilo BLAME!: fria,
-// industrial, ANTIGUA, con trazas goticas apenas.  Esta tesela se repite por paredes de
-// cientos de unidades de alto (STEX=128 => TILE=6 unidades de mundo por repeticion), asi
-// que debe leerse como ESTRUCTURA MONUMENTAL (paneles, tubos, remaches, vigas), no como
-// una "paredcita".  Todo el detalle vive en la textura (el muro es solo masa).
-//   - PANELES de hormigon/acero: 4 hiladas de alto DESIGUAL (34/58/16/20 px) con columnas
-//     desiguales y desfasadas por hilada (rompe la "reja de oficina"), tono por panel,
-//     paneles oxidados mas oscuros, costuras hondas con bisel iluminado arriba y sombra
-//     abajo, y FILAS DE REMACHES (punto 3x3 con brillo arriba-izq y sombra abajo-der) a lo
-//     largo de todas las costuras.
-//   - TUBO GRUESO horizontal (r=5) con sombreado cilindrico brillo-medio-sombra, sombra
-//     proyectada bajo el tubo, escamas de oxido y ABRAZADERAS cada 32 px; TUBO FINO (r=2)
-//     abajo con sus abrazaderas desfasadas.
-//   - VIGA / NERVIO vertical (contrafuerte industrial, viga en I de frente) en la costura
-//     vertical: banda mas oscura con arista iluminada a la izquierda, ranura de sombra a la
-//     derecha, garganta central y pernos cada 16 px.  Corre SIN cortarse -> escala BLAME.
-//   - CONDUCTO de cables vertical (3 px, sombreado) con caja de empalme.
-//   - Intemperie: regueros de mugre bajando desde cada costura y desde los tubos, manchas
-//     de OXIDO (unico acento calido sobre la base fria), picaduras, FISURAS finas
-//     asimetricas y unas ABOLLADURAS (dents) con rim iluminado.
-//   - Traza GOTICA: un hueco OJIVAL recesado, estrecho, con jamba de acero y parteluz/
-//     travesano, vidrio AZUL FRIO tenue encendido (RGBA ~110,160,210 con vignette) y
-//     emplomado; y una LAMPARA/rejilla AMBAR diminuta con bisel oscuro (rara, unico
-//     otro acento).  Banda de FRANJAS DE PELIGRO desconchada y desvaida (antigua, sutil).
+// SILLAR GOTICO MONUMENTAL -- LA PIEL PRINCIPAL DEL SECTOR (muros exteriores, las 4 masas
+// y las columnas de la arcada).  Se ve de CERCA en los pasillos, asi que TODO el detalle
+// vive en la TEXTURA: no hay geometria por bloque.  Referencia de arte: gotico oscuro
+// monumental, piedra antigua y GASTADA en niebla gris-parda calida, siluetas casi negras y
+// un unico acento saturado (el puntito AMBAR de la ventana encendida).  Demasiado grande,
+// demasiado antiguo, demasiado silencioso: se combate la repeticion con VEJEZ ASIMETRICA.
+//   - SILLERIA (ashlar): 9 HILADAS de ALTURA DISTINTA (14/12/18/14/12/16/14/14/14 = 128),
+//     llagas de ANCHO DESIGUAL y DESPLAZADAS por hilada (4 llagas con jitter por hash),
+//     tono por bloque, "spolia" (bloques ahollinados oscuros / piedra fresca clara),
+//     juntas hondas de profundidad VARIABLE y ESQUINAS DESPORTILLADAS (arriba-izq / abajo-der).
+//   - CORNISA en la costura horizontal (chaflan + cara + goteron) que se completa con la
+//     TABLA DE CANECILLOS y la sombra de vuelo del otro lado de la costura -> banda continua.
+//   - IMPOSTA a media altura (vuelo iluminado + sombra) y ARQUERIA CIEGA: fila de arcos
+//     OJIVALES ciegos poco profundos, con baqueton, enjutas, abaco, plinto y COLUMNILLAS.
+//   - VENTANA OJIVAL estrecha y PROFUNDA: derrame (splay) + jamba + alfeizar volado; el
+//     vidrio lee OSCURO Y FRIO en la cabeza y el fondo del vano tiene un resplandor AMBAR
+//     (parteluz, travesano y emplomado recortados contra el) -> UNICO acento calido.
+//   - NICHO con figura tallada PALIDA bajo dosel volado, sobre peana.
+//   - DESGASTE: chorreras verticales de agua bajo cornisa / imposta / plinto / alfeizar,
+//     MUSGO humedo verdoso en juntas y bandas que escurren, FISURAS finas asimetricas,
+//     picaduras.  Nada de esto es simetrico: el ojo no lee la tesela como un sello limpio.
 // Determinista (hash entero, sin rand, sin heap; sin dependencia real de <math.h>).
-// FUNCION EXACTA de (x mod W, y mod W): TESELA PERFECTA en ambos ejes (NOTA final).
-// Brillo pensado para GU_TFX_MODULATE contra el vertice del muro:
-//   panel medio ~95-150 | costuras/sombras/garganta de viga ~55-80 | brillos de tubo y
-//   remache ~150-165 | vidrio frio encendido ~160-215 (canal b) | ambar ~190-200 (r).
-//   Tono FRIO-neutro: b >= g >= r por poco margen (gris azulado, NO saturado); el oxido
-//   es el unico calido.  El grueso queda MEDIO, no oscuro.
+// FUNCION EXACTA de (x mod W, y mod W) -> TESELA PERFECTA en ambos ejes (ver NOTA final).
+// Brillo pensado para GU_TFX_MODULATE contra un color de vertice YA ACLARADO:
+//   piedra media ~110-150 | juntas, llagas y recesos ~70-90 | fondo del nicho y cabeza
+//   fria del vano ~58-75 | cornisa/imposta/alfeizar/figura iluminados ~140-155 | AMBAR
+//   hasta ~208.  El GRUESO queda MEDIO (nunca bajo ~90): el pasillo no se va a negro.
+//   Piedra CALIDA parda (r > g > b); el musgo es la unica nota verde.  OJO 16 BITS: la
+//   textura se trunca a RGB565 (5/6/5 bits), asi que no hay degradados suaves largos:
+//   contraste CLARO por escalones y ruido fino de +-4 (que ademas hace de dither).
 static void genIndustrial(unsigned int *t, int W) {
-    // ---- geometria del modulo, derivada de W (exacta para potencia de 2; W=128 abajo) ----
-    const int cx     = W >> 1;            // 64  eje del hueco ojival
-    const int pipeY  = W * 5 / 32;        // 20  eje del TUBO GRUESO (y 15..25)
-    const int pipeR  = W * 5 / 128;       // 5   radio del tubo grueso
-    const int pipe2Y = W * 25 / 32;       // 100 eje del TUBO FINO (y 98..102)
-    const int pipe2R = W / 64;            // 2   radio del tubo fino
-    const int ribR   = W * 5 / 64;        // 10  semiancho de la VIGA en la costura vertical
-    const int condX  = W * 25 / 32;       // 100 eje del CONDUCTO de cables vertical
-    const int winW   = W / 16;            // 8   semiluz del hueco ojival
-    const int winSpr = W * 7 / 16;        // 56  arranque del arco ojival
-    const int winBot = W * 21 / 32;       // 84  alfeizar del hueco
-    const int winTop = winSpr - (W * 13 / 128);   // 43 punta del arco (radio = 2*winW)
-    const int winMid = (winSpr + winBot) / 2;     // 70 travesano
-    const int gcy    = (winTop + winBot) / 2;     // 63 centro del vignette del vidrio
-    const int ambX   = W * 43 / 64;       // 86  lampara ambar diminuta
-    const int ambY   = W * 31 / 64;       // 62
-    const int hz0    = W * 57 / 64;       // 114 banda de franjas de peligro (y 114..122)
-    const int hz1    = W * 61 / 64;       // 122
-    // hiladas de paneles: alto DESIGUAL (34 / 58 / 16 / 20 px) -> no lee como grilla
-    const int rowTop[4] = { 0, W * 17 / 64, W * 23 / 32, W * 27 / 32 };      // 0, 34, 92, 108
-    // columnas por hilada: desfase (rowOff) + costuras (colSeam) desiguales; -1 = fin
-    const int rowOff[4]     = { 0, 0, 0, W / 4 };
-    const int colSeam[4][4] = { { 0, W / 2, -1, -1 },                          // 64 | 64
-                                { 0, W / 4, W * 3 / 4, -1 },                   // 32 | 64 (hueco) | 32
-                                { 0, W * 5 / 16, W * 11 / 16, -1 },            // 40 | 48 | 40
-                                { 0, W / 2, -1, -1 } };                        // 64 | 64 (desfasado 32)
+    // ---- geometria del modulo (derivada de W; comentarios = valores exactos con W=128) ----
+    const int NC = 9;                                        // hiladas de silleria
+    const int courseY[9] = { 0, W*7/64, W*13/64, W*11/32, W*29/64,
+                             W*35/64, W*43/64, W*25/32, W*57/64 };  // 0,14,26,44,58,70,86,100,114
+    const int corY  = W - W*7/128;      // 121  CORNISA (ocupa hasta y=W-1, en la costura)
+    const int corbB = W*5/128;          // 5    canecillos + sombra de vuelo (y 0..5)
+    const int aTop  = W*21/128;         // 21   ARQUERIA CIEGA: abaco corrido
+    const int aSpr  = W*19/64;          // 38   arranque de los arcos ciegos
+    const int aBas  = W*51/128;         // 51   base de los arcos (plinto en 52/53)
+    const int aRise = W*7/64;           // 14   flecha de la ojiva ciega (punta en y=24)
+    const int aHW   = W*5/64;           // 10   semiluz del arco ciego (periodo 32 px)
+    const int impY  = W*31/64;          // 62   IMPOSTA a media altura
+    const int wcx   = W*5/16;           // 40   eje de la VENTANA (descentrada: asimetria)
+    const int wHW   = W/32;             // 4    semiluz del vano (estrecho -> alto)
+    const int wSpr  = W*21/32;          // 84   arranque del arco de la ventana
+    const int wRise = W/8;              // 16   flecha -> punta en y=68
+    const int wSill = W*7/8;            // 112  alfeizar
+    const int wMid  = W*3/4;            // 96   travesano / foco del resplandor ambar
+    const int nx    = W*27/32;          // 108  eje del NICHO
+    const int nTop  = W*9/16;           // 72   arranque del nicho (dosel en 68..71)
+    const int nBot  = W*13/16;          // 104  peana del nicho
+    const int nHW   = W*7/128;          // 7    semiluz del nicho
 
     // ---- utilidades enteras ----
     auto H = [](int a, int b) -> int {                 // hash determinista -> 0..255
@@ -67,10 +62,7 @@ static void genIndustrial(unsigned int *t, int W) {
     auto C  = [](int v, int lo, int hi) -> int { return v < lo ? lo : (v > hi ? hi : v); };
     auto AB = [](int v) -> int { return v < 0 ? -v : v; };
     auto MX = [](int a, int b) -> int { return a > b ? a : b; };
-    auto D2 = [](int ax, int ay, int bx, int by) -> int {
-        int dx = ax - bx, dy = ay - by; return dx*dx + dy*dy;
-    };
-    // reguero: envolvente vertical desde 'yL', sube en 'rise' y decae en 'run' (0 en ambos extremos)
+    // chorrera de agua: envolvente vertical desde una repisa 'yL', sube en 'rise' y decae en 'run'
     auto drip = [](int yy, int yL, int rise, int run) -> int {
         if (yy < yL || yy > yL + run) return 0;
         int d = yy - yL;
@@ -94,287 +86,235 @@ static void genIndustrial(unsigned int *t, int W) {
         if (d2 <= 2) return 4;
         return 0;
     };
-    // REMACHE 3x3: brillo arriba-izq, sombra abajo-der (rx, ry = offset al centro)
-    auto rivet = [](int rx, int ry) -> int {
-        if (rx < -1 || rx > 1 || ry < -1 || ry > 1) return 0;
-        int s = rx + ry;
-        if (s < 0) return 26;
-        if (s > 0) return -22;
-        return (rx == 0) ? 10 : -4;
-    };
-    // hueco ojival con semiluz 'hw' (misma pareja de centros -> offset limpio del arco)
-    auto winIn = [&](int px, int py, int hw) -> bool {
-        int ex = hw - winW;                                           // margen extra
-        if (AB(px - cx) <= hw && py >= winSpr && py <= winBot + ex) return true;   // cuerpo recto
-        if (py < winSpr) {
-            int rr = (winW + hw) * (winW + hw);
-            if (D2(px, py, cx - winW, winSpr) <= rr && D2(px, py, cx + winW, winSpr) <= rr) return true;
-        }
-        return false;
+    // OJIVA parabolica: semiluz efectiva en la fila 'py' del anillo de semiancho 'hw'
+    // (punta limpia, no semicirculo).  El anillo exterior (hw > hw0) sube y baja MAS ->
+    // arcos CONCENTRICOS que no convergen en el mismo punto.  -1 = fuera del hueco.
+    auto ogive = [](int py, int hw, int hw0, int ySpr, int rise, int yBot) -> int {
+        int ex = hw - hw0;
+        if (py > yBot + ex) return -1;
+        if (py >= ySpr)     return hw;
+        int d = ySpr - py, rs = rise + ex / 2;
+        if (d > rs) return -1;
+        int rr = rs * rs;
+        return hw - (hw * d * d + rr / 2) / rr;
     };
 
     for (int y = 0; y < W; ++y) {
-        // hilada del panel (constante por fila)
-        int row = 0; for (int k = 1; k < 4; ++k) if (y >= rowTop[k]) row = k;
-        const int rowH = ((row < 3) ? rowTop[row + 1] : W) - rowTop[row];
-        const int hj   = y - rowTop[row];                       // fila dentro del panel
-        const int dyT  = (y < (W - y)) ? y : (W - y);           // distancia a la costura horizontal
+        // ---- hilada actual + LLAGAS de esta hilada (anchos desiguales, desplazadas) ----
+        int course = 0;
+        for (int k = 1; k < NC; ++k) if (y >= courseY[k]) course = k;
+        const int ch = ((course < NC - 1) ? courseY[course + 1] : W) - courseY[course];
+        const int hj = y - courseY[course];                   // fila dentro de la hilada
+        int jx[4];                                            // 4 llagas, crecientes, todas < W
+        {
+            int off = (H(course * 3 + 7, 23) % 5) * (W / 32); // desfase por hilada: 0/4/8/12/16
+            for (int k = 0; k < 4; ++k)
+                jx[k] = k * (W / 4) + (H(course * 13 + k, 41) % 13) + off;
+        }
+        // ---- envolventes de las CHORRERAS (solo dependen de y; 0 en ambas costuras) ----
+        const int dripC = drip(y, corbB + 1, 3, W - corbB - 8);  // larga, desde la cornisa
+        const int dripI = drip(y, impY + 2, 2, W / 4);           // desde la imposta
+        const int dripA = drip(y, aBas + 4, 2, W * 3 / 16);      // desde el plinto de la arqueria
+        const int dripS = drip(y, wSill + 4, 2, W / 16);         // bajo el alfeizar
+
         for (int x = 0; x < W; ++x) {
-            // distancia CON SIGNO a la costura vertical (x=0/W): periodica, sella el modulo
-            int xw = (x < cx) ? x : x - W;
-            // columna del panel (con desfase por hilada, periodico via &(W-1))
-            int xx = (x + rowOff[row]) & (W - 1);
-            int col = 0, nc = 0;
-            for (int k = 0; k < 4; ++k) { if (colSeam[row][k] < 0) break; nc = k + 1; if (xx >= colSeam[row][k]) col = k; }
-            int colW = ((col < nc - 1) ? colSeam[row][col + 1] : W) - colSeam[row][col];
-            int vj   = xx - colSeam[row][col];                  // columna dentro del panel
+            // ---- bloque de silleria: indice, ancho y posicion dentro del bloque ----
+            int bj = -1;
+            for (int k = 3; k >= 0; --k) if (x >= jx[k]) { bj = k; break; }
+            int vj, bw;
+            if (bj < 0)       { bj = 3; vj = x + W - jx[3]; bw = jx[0] + W - jx[3]; } // bloque que ENVUELVE
+            else if (bj == 3) {         vj = x - jx[3];     bw = jx[0] + W - jx[3]; }
+            else              {         vj = x - jx[bj];    bw = jx[bj + 1] - jx[bj]; }
+            const int bId = H(course * 13 + 5, bj * 7 + 3);   // identidad del bloque 0..255
 
-            // ---- 1) PANEL: tono por panel + grano (hormigon vs acero) + picaduras ----
-            int pId   = H(row * 7 + col * 3 + 1, 91);           // identidad del panel 0..255
-            int ptone = (pId % 15) - 7;                         // -7..+7
-            bool conc = (pId & 1);                              // hormigon (grano grueso) vs acero (liso)
-            int lum   = 122 + ptone + (conc ? (H(x, y) % 9 - 4) : (H(x, y) % 3 - 1));
-            if (conc) lum += (H(x >> 2, y >> 2) % 7) - 3;       // moteado del hormigon
-            if (pId < 22) lum -= 12;                            // panel oxidado / repuesto oscuro
-            else if (pId > 240) lum += 8;                       // panel mas nuevo / claro
+            // ---- 1) PIEDRA: tono por bloque + grano + moteado + picaduras ----
+            int lum = 126 + (bId % 15) - 7;                   // piedra MEDIA (para el MODULATE)
+            lum += (H(x, y) % 9) - 4;                         // grano fino (hace de dither en 565)
+            lum += (H(x >> 2, y >> 2) % 7) - 3;               // moteado de la caliza
+            if      (bId < 30)  lum -= 18;                    // spolia ahollinada (bloque oscuro)
+            else if (bId > 228) lum += 14;                    // piedra fresca (bloque claro)
             { int n = H(x * 3 + 1, y * 5 + 2);
-              if (n < 9) lum -= 10; else if (n > 249) lum += 7; } // picaduras y brillos puntuales
-            // costuras hondas con bisel: arriba iluminado, abajo en sombra
-            if      (hj == 0)        lum -= 46;                 // costura horizontal (~76)
-            else if (hj == 1)        lum += 10;                 // bisel iluminado del panel
-            else if (hj == rowH - 1) lum -= 14;                 // sombra antes de la costura
-            if      (vj == 0)        lum -= 42;                 // costura vertical
-            else if (vj == 1)        lum += 8;
-            else if (vj == colW - 1) lum -= 12;
-            // FILAS DE REMACHES a 3 px de cada costura, cada 8 px
+              if (n < 10) lum -= 14; else if (n > 248) lum += 9; }   // picaduras / cuarzo
+
+            // ---- 2) JUNTAS: tendel y llaga hondos, de profundidad VARIABLE ----
+            if      (hj == 0)      lum -= 36 + (H(course * 5 + 1, 200) % 10);   // tendel
+            else if (hj == 1)      lum += 8;                                    // labio iluminado
+            else if (hj == ch - 1) lum -= 12;                                   // sombra del canto
+            if      (vj == 0)      lum -= 32 + (H(bj * 11 + 2, course * 17 + 9) % 9);  // llaga
+            else if (vj == 1)      lum += 6;
+            else if (vj == bw - 1) lum -= 10;
+            // ESQUINAS DESPORTILLADAS: ~18% pierde la arista alta-izq, ~15% la baja-der
+            if (hj <= 2 && vj <= 2 && H(bj * 3 + course * 7, 131) < 46) {
+                if      (hj + vj <= 1) lum += 16;             // cara fresca expuesta (mas clara)
+                else if (hj + vj == 2) lum += 6;
+                else if (hj + vj == 3) lum -= 8;              // labio de sombra
+            }
+            if (hj >= ch - 3 && vj >= bw - 3 && H(bj * 5 + course * 3, 77) < 38) {
+                int q = (ch - 1 - hj) + (bw - 1 - vj);
+                if      (q <= 1) lum += 13;
+                else if (q == 2) lum += 5;
+            }
+
+            // ---- 3) ARQUERIA CIEGA: arcos ojivales ciegos poco profundos (periodo 32) ----
+            if (y >= aTop && y <= aBas + 3) {
+                int u  = ((x + W / 16) & 31) - 16;            // arco centrado; columnilla en u=+-16
+                int au = AB(u);
+                if (y - aTop <= 1)  lum += 10;                // abaco corrido sobre los arcos
+                else if (y > aBas)  lum += (y == aBas + 1) ? 8 : -8;    // plinto: nariz + sombra
+                else if (u >= 13 || u <= -14) {               // COLUMNILLA entre arcos (fuste redondo)
+                    const int shaft[6] = { 6, 15, 11, 1, -13, -5 };     // luz por la izquierda
+                    lum += shaft[(u >= 13) ? (u - 13) : (u + 19)];
+                } else {
+                    int hwA = aHW;                            // jambas rectas bajo el arranque
+                    if (y < aSpr) { int d = aSpr - y, rr = aRise * aRise;
+                                    hwA = aHW - (aHW * d * d + rr / 2) / rr; }
+                    if (y < aSpr - aRise) hwA = -1;           // por encima de la punta: macizo
+                    if      (au <= hwA)     { lum -= 24; if (u < 0) lum += 9; }  // hueco ciego (luz rasante izq)
+                    else if (au == hwA + 1) lum += 13;        // baqueton / moldura del arco
+                    else                    lum += 3;         // enjuta
+                }
+            }
+
+            // ---- 4) CORNISA en la costura + CANECILLOS y sombra de vuelo al otro lado ----
+            if (y >= corY) {                                  // 121..127: banda volada
+                int d = y - corY;
+                if      (d == 0) lum = 88;                    // junta de retranqueo contra el muro
+                else if (d == 1) lum = 152;                   // chaflan superior iluminado
+                else if (d <= 4) lum = 138 - (d - 2) * 7;     // cara de la cornisa 138/131/124
+                else             lum = 148 - (d - 5) * 6;     // goteron (arista inferior)
+                lum += (H(x, y) % 7) - 3;
+            } else if (y <= corbB) {                          // 0..5: soffit + TABLA DE CANECILLOS
+                int cc = (x & 15) - 8, wt = (corbB - 1) - y;  // mensula que se estrecha al bajar
+                if (wt >= 0 && AB(cc) <= wt) lum = 124 - y * 4 + ((cc < 0) ? 7 : -7);
+                else                         lum = 78 + y * 5;   // sombra del vuelo (se abre al bajar)
+                lum += (H(x, y) % 5) - 2;
+            }
+
+            // ---- 5) IMPOSTA a media altura (vuelo iluminado + sombra dura) ----
+            if      (y == impY - 2) lum = 150;
+            else if (y == impY - 1) lum = 136;
+            else if (y == impY)     lum = 118;
+            else if (y == impY + 1) lum = 76;
+            else if (y == impY + 2) lum = 98;
+
+            // ---- 6) DESGASTE: chorreras de agua por columna + FISURAS finas ----
             {
-                int rv = 0;
-                if (hj == 2 || hj == 3 || hj == 4)                rv = rivet((xx & 7) - 4, hj - 3);
-                else if (hj >= rowH - 5 && hj <= rowH - 3)        rv = rivet((xx & 7) - 4, hj - (rowH - 4));
-                if (rv == 0) {
-                    if (vj >= 2 && vj <= 4)                       rv = rivet(vj - 3, (hj & 7) - 4);
-                    else if (vj >= colW - 5 && vj <= colW - 3)    rv = rivet(vj - (colW - 4), (hj & 7) - 4);
-                }
-                lum += rv;
-            }
-            // ---- 1b) costura horizontal MAYOR en la costura de la tesela (reborde/ala) ----
-            if      (dyT == 1) lum += 14;                       // labio iluminado del ala
-            else if (dyT == 2) lum += 4;
-
-            // ---- 2) ABOLLADURAS (dents): concavas, rim iluminado abajo-der ----
-            {
-                const int dc[3][3] = { { W * 3 / 16, W * 35 / 64, 4 },      // (24,70) r4
-                                       { W * 13 / 16, W * 19 / 32, 3 },     // (104,76) r3
-                                       { W * 15 / 32, W * 59 / 64, 3 } };   // (60,118) r3
-                for (int k = 0; k < 3; ++k) {
-                    int dx = x - dc[k][0], dy = y - dc[k][1], rr = dc[k][2];
-                    int d2 = dx*dx + dy*dy;
-                    if (d2 <= rr * rr) {
-                        lum += (dx + dy) * 3;                   // sombra arriba-izq, luz abajo-der
-                        if (d2 >= rr * rr - rr) lum += 5;       // rim
-                    }
-                }
-            }
-
-            // ---- 3) VIGA / NERVIO vertical en la costura (viga en I de frente, escala BLAME) ----
-            if (AB(xw) <= ribR) {
-                int d = AB(xw);
-                lum = 104 + (H(x, y) % 3 - 1);                  // cara del ala, acero liso
-                if      (d <= 1)         lum = 72;              // garganta central (alma)
-                else if (d == 2)         lum = 120;             // arista de la garganta
-                if      (xw == -ribR)    lum = 146;             // arista IZQ iluminada
-                else if (xw == -ribR+1)  lum = 126;
-                else if (xw == ribR)     lum = 60;              // ranura de sombra a la DER
-                else if (xw == ribR-1)   lum = 78;
-                if (d >= 5 && d <= 7) lum += rivet(d - 6, (y & 15) - 8);   // pernos cada 16 px
-                if (((y >> 5) & 1) && d == 4) lum -= 6;         // veta sutil del laminado
-            }
-
-            // ---- 4) CONDUCTO de cables vertical (3 px, sombreado) + caja de empalme ----
-            {
-                int dxc = x - condX;
-                if (dxc >= -1 && dxc <= 1) lum = 108 + (1 - AB(dxc + 1)) * 18 - (dxc == 1 ? 24 : 0);  // 126/108/84
-                else if (dxc == 2)         lum -= 12;           // sombra proyectada
-                else if (dxc == -2)        lum -= 4;
-                // caja de empalme 7x9 (x 97..103, y 90..98)
-                int by = y - (W * 45 / 64);                     // 90
-                if (AB(dxc) <= 3 && by >= 0 && by <= 8) {
-                    lum = 100;
-                    if (by == 0 || dxc == -3) lum = 128;        // bordes iluminados
-                    if (by == 8 || dxc == 3)  lum = 66;         // bordes en sombra
-                    if (AB(dxc) <= 1 && by >= 3 && by <= 5) lum = 88;   // tapa recesada
-                }
-            }
-
-            // ---- 5) TUBOS horizontales (sobre viga y conducto: van por delante) ----
-            {
-                int d = y - pipeY;                              // TUBO GRUESO
-                if (AB(d) <= pipeR) {
-                    lum = 100 + (pipeR - AB(d + 2)) * 12;       // brillo en d=-2 (160), sombra en d=+5 (76)
-                    lum += H(x, y) % 3 - 1;
-                    { int fl = H(x >> 2, 33); if (fl < 34 && d >= -1) lum -= (34 - fl) / 3; }   // escamas
-                }
-                else if (d > pipeR && d <= pipeR + 3) lum -= 20 - (d - pipeR) * 5;    // sombra proyectada
-                else if (d < -pipeR && d >= -pipeR - 2) lum -= 6;                    // oclusion arriba
-                int c = (x + 8) & 31;                           // ABRAZADERA cada 32 px (x 24..27 + ...)
-                if (c <= 3 && AB(d) <= pipeR + 2) {
-                    lum = 108;
-                    if (c == 0) lum = 134; else if (c == 3) lum = 70;
-                    if (AB(d) > pipeR) lum -= 12;               // oreja de la abrazadera
-                    if (c == 1 && d == pipeR + 1) lum = 140;    // perno
-                }
-                d = y - pipe2Y;                                 // TUBO FINO
-                if (AB(d) <= pipe2R) {
-                    lum = 104 + (pipe2R - AB(d + 1)) * 18;      // 140 / 122 / 104 / 86
-                    lum += H(x, y) % 3 - 1;
-                }
-                else if (d == pipe2R + 1) lum -= 14;
-                c = (x + 24) & 31;                              // abrazaderas desfasadas
-                if (c <= 2 && AB(d) <= pipe2R + 1) {
-                    lum = 106;
-                    if (c == 0) lum = 130; else if (c == 2) lum = 72;
-                }
-            }
-
-            // ---- 6) FRANJAS DE PELIGRO desconchadas y desvaidas (antiguas, sutiles) ----
-            int hz = 0;                                          // +1 franja clara (tibia), -1 oscura
-            if (y >= hz0 && y <= hz1 && x >= W * 3 / 32 && x <= W * 13 / 32) {   // x 12..52
-                int peel = H(x >> 1, (y >> 1) + 7);
-                if (peel > 74) hz = (((x + y) >> 2) & 1) ? 1 : -1;
-                if (hz < 0) lum -= 7;
-            }
-
-            // ---- 7) INTEMPERIE: regueros de mugre por columna + fisuras finas ----
-            {
-                int wet = 0;                                     // humedad por columna (rasgo vertical)
-                int coarse = H(x >> 2, 51);
-                int fine   = H(x, 77);
-                if (coarse < 90) wet += (90 - coarse);           // 0..90
-                if (fine   < 40) wet += (40 - fine) / 3;         // 0..13
-                int venv = drip(y, 0, 4, W - 4);                 // desde el ala superior (todo el alto)
-                for (int k = 1; k < 4; ++k) venv = MX(venv, drip(y, rowTop[k] + 1, 3, 30));   // desde cada costura
-                venv = MX(venv, drip(y, pipeY + pipeR + 1, 2, 40));   // bajo el tubo grueso
-                venv = MX(venv, drip(y, winBot + 4, 2, 18));          // bajo el alfeizar
-                lum -= wet * venv / 300;                         // oscurece hasta ~22 en columnas mojadas
-                int cd = crack(x, y, W * 9 / 64, W * 11 / 32, W * 3 / 16, W * 43 / 64);    // (18,44)-(24,86)
-                cd = MX(cd, crack(x, y, W * 25 / 32, W * 19 / 64, W * 7 / 8, W * 15 / 32)); // (100,38)-(112,60)
-                cd = MX(cd, crack(x, y, W * 35 / 64, W * 7 / 8, W * 23 / 32, W * 31 / 32)); // (70,112)-(92,124)
+                int wet = 0;
+                int coarse = H(x >> 2, 51);                   // bandas de ~4 px (mancha ancha)
+                int fine   = H(x, 77);                        // reguero fino por columna
+                if (coarse < 96) wet += (96 - coarse);        // 0..96
+                if (fine   < 44) wet += (44 - fine) / 3;      // 0..14
+                int venv = MX(MX(dripC, dripI), MX(dripA, dripS));
+                lum -= wet * venv / 300;                      // hasta ~23 en columnas mojadas
+                int cd = crack(x, y, W*7/64,  W*3/16,  W*5/64,  W*5/8);      // (14,24)-(10,80)
+                cd = MX(cd, crack(x, y, W*23/32, W*9/64,  W*49/64, W*7/16)); // (92,18)-(98,56)
+                cd = MX(cd, crack(x, y, W*15/32, W*27/32, W*9/16,  W*15/16));// (60,108)-(72,120)
+                cd = MX(cd, crack(x, y, W*3/16,  W*23/32, W*7/32,  W*29/32));// (24,92)-(28,116)
                 lum -= cd;
             }
 
-            // ---- 8) OXIDO: manchas calidas (parches + bajo tubos/abrazaderas + bajo remaches) ----
-            int rust = 0;
+            // ---- color de PIEDRA: calida/parda (r > g > b), nunca casi-negra ----
+            lum = C(lum, 54, 176);
+            int r = lum + 5, g = lum - 2, b = lum - 13;
+
+            // ---- 7) MUSGO / humedad verdosa (juntas y bandas que escurren) ----
             {
-                int a = H(x >> 3, y >> 3);
-                if (a < 34) rust += 34 - a;
-                int b2 = H((((x + 4) & (W - 1)) >> 3) + 17, (((y + 4) & (W - 1)) >> 3) + 5);
-                if (b2 < 28) rust += (28 - b2) / 2;
-                if (rust > 0) {                                                 // borde carcomido, sin celdas cuadradas
-                    int e = H(x >> 1, (y >> 1) + 9) % 7;                        // 0..6 mordida en bloques 2x2
-                    rust = rust * (H(x, y + 9) % 5 + 2) / 6;
-                    rust = (rust * (e + 2)) / 8;
+                int moss = 0;
+                if (hj <= 1 || vj == 0) { int m1 = H(x >> 1, y >> 1); if (m1 < 76) moss += (76 - m1) / 5; }
+                int damp = 0;
+                if (y > W * 27 / 32)           damp  = (y - W * 27 / 32) * 2;   // pie del pano (>108)
+                if (y > impY && y < impY + 7)  damp += 9;                       // bajo la imposta
+                if (y > aBas && y < aBas + 6)  damp += 7;                       // bajo el plinto
+                if (damp > 0) { int m2 = H(x >> 2, 88); if (m2 < 150) moss += ((150 - m2) * damp) / 260; }
+                if (moss > 0) {
+                    int m = (moss > 17) ? 17 : moss;
+                    r -= m + m / 3; g -= m * 2 / 5; b -= m;   // verde apagado: g cae MENOS que r y b
                 }
-                int d = y - pipeY;                                              // chorreado bajo el tubo grueso
-                if (d > pipeR && d < pipeR + 26 && H(x >> 1, 12) < 60) rust += (pipeR + 26 - d) * 2 / 3;
-                d = y - pipe2Y;
-                if (d > pipe2R && d < pipe2R + 10 && H(x >> 1, 21) < 50) rust += (pipe2R + 10 - d);
-                if (AB(xw) <= ribR && (y & 15) > 8 && (y & 15) < 14 && AB(AB(xw) - 6) <= 1) rust += 6; // bajo pernos
-                if (rust > 24) rust = 24;
             }
 
-            // ---- color BASE frio-neutro (b >= g >= r, poco margen) ----
-            int r = lum - 6, g = lum - 2, b = lum + 3;
-            if (rust > 0) { r += rust; g += rust / 4; b -= rust / 2; lum -= rust / 4; }
-            if (hz > 0)   { r += 9; g += 5; }                    // franja clara: amarillo desvaido
-
-            // ---- 9) HUECO OJIVAL recesado (interior de la tesela) ----
+            // ---- 8) VENTANA OJIVAL estrecha y PROFUNDA (derrame + jamba + vano ambar) ----
             {
-                bool glass = winIn(x, y, winW);
-                bool frame = !glass && winIn(x, y, winW + 2);
-                bool rec   = !glass && !frame && winIn(x, y, winW + 5);
-                if (rec) {                                        // derrame recesado (sombra)
-                    int v = lum - 18;
-                    if (x < cx - winW - 2) v += 6;                // lado izq recibe algo de luz
-                    r = v - 6; g = v - 2; b = v + 3;
+                int dxs = x - wcx, adx = AB(dxs);
+                int hS = ogive(y, wHW + 6, wHW, wSpr, wRise, wSill);   // DERRAME (splay) hundido
+                if (hS >= 0 && adx <= hS) {
+                    int v = 98 - (hS - adx) * 2 + ((dxs < 0) ? 14 : 0);// se hunde hacia el vano
+                    if (y > wSill) v = 128;                            // losa del alfeizar
+                    r = v + 5; g = v - 2; b = v - 13;
                 }
-                if (frame) {                                      // jamba de acero
-                    int v = 94 + (H(x, y) % 3 - 1);
-                    if (x < cx) v += 12;                          // arista iluminada
-                    if (y >= winBot + 1) v += 10;                 // alfeizar
-                    r = v - 6; g = v - 2; b = v + 3;
+                int hF = ogive(y, wHW + 2, wHW, wSpr, wRise, wSill);   // JAMBA / baqueton de piedra
+                if (hF >= 0 && adx <= hF) {
+                    int v = 118 + ((dxs < 0) ? 16 : -12) + (H(x, y) % 5 - 2);
+                    if (y >= wSill - 1) v = 142;                       // nariz del alfeizar
+                    r = v + 5; g = v - 2; b = v - 13;
                 }
-                if (glass) {
-                    bool bar = (x == cx) || (y == winMid);        // parteluz + travesano
-                    if (bar) { r = 74; g = 78; b = 84; }
-                    else {                                        // vidrio AZUL FRIO tenue encendido
-                        int gdx = x - cx, gdy = y - gcy;
-                        int fall = (gdx*gdx*3 + gdy*gdy) / 7;   // vignette: nucleo (110,160,210), borde apagado
-                        r = 110 - fall*3/4; if (r < 68)  r = 68;
-                        g = 160 - fall;     if (g < 104) g = 104;
-                        b = 210 - fall;     if (b < 152) b = 152;
-                        if (((x + y) & 7) == 0) { r -= 14; g -= 16; b -= 14; }   // emplomado
-                        if (((x - y) & 7) == 3) { r -= 6;  g -= 7;  b -= 6; }
+                int hI = ogive(y, wHW, wHW, wSpr, wRise, wSill);       // VANO
+                if (hI >= 0 && adx <= hI) {
+                    if ((dxs == 0 && y > wSpr - 6) || y == wMid - 4) { r = 84; g = 79; b = 70; } // parteluz + travesano
+                    else {
+                        int gdy = y - (wMid + 6);
+                        int a = 152 - (dxs * dxs * 9 + gdy * gdy * 2) / 5;   // resplandor AMBAR del fondo
+                        if (a < 0) a = 0;                                    // cabeza: vidrio oscuro y FRIO
+                        r = 56 + a;  g = 62 + a * 3 / 5;  b = 74 + a / 8;
+                        if (((x + y) & 7) == 0) { r -= 16; g -= 14; b -= 10; }  // emplomado
+                        if (((x - y) & 7) == 2) { r -= 7;  g -= 6;  b -= 4;  }
                     }
                 }
-                // sombra bajo el alfeizar
-                if (y == winBot + 6 && AB(x - cx) <= winW + 5) { r -= 8; g -= 8; b -= 8; }
             }
 
-            // ---- 10) LAMPARA / rejilla AMBAR diminuta con bisel (rara; unico otro acento) ----
+            // ---- 9) NICHO con figura tallada PALIDA (dosel volado + peana) ----
             {
-                int dx = x - ambX, dy = y - ambY;
-                if (AB(dx) <= 3 && AB(dy) <= 3) {
-                    if (AB(dx) <= 1 && AB(dy) <= 1) {
-                        int f = AB(dx) + AB(dy);                  // 0 nucleo, 1 borde
-                        r = 200 - f * 24; g = 138 - f * 22; b = 58 - f * 6;
+                int dxn = x - nx, adn = AB(dxn);
+                if (y >= nTop - 4 && y <= nBot + 3 && adn <= nHW + 3) {
+                    if (y < nTop) {                                    // DOSEL
+                        int v = (y == nTop - 4) ? 96 : ((y == nTop - 1) ? 74 : 144);
+                        r = v + 5; g = v - 2; b = v - 13;
+                    } else if (y > nBot) {                             // PEANA
+                        int v = (y == nBot + 1) ? 146 : 92;
+                        r = v + 5; g = v - 2; b = v - 13;
                     } else {
-                        int v = (dx == -3 || dy == -3) ? 112 : 70; // bisel: arriba-izq lit, resto sombra
-                        r = v - 4; g = v - 2; b = v + 2;
-                        if (AB(dx) <= 2 && AB(dy) <= 2) { r += 12; g += 6; }  // halo tibio
+                        int hwN = nHW, dh = (nTop + nHW) - y;          // cabeza redondeada del nicho
+                        if (dh > 0) { int rr = nHW * nHW; hwN = nHW - (nHW * dh * dh + rr / 2) / rr; }
+                        if (adn <= hwN) {
+                            bool body = (adn <= 2 && y >= nTop + nHW + 2 && y <= nBot - 2);
+                            bool head = (adn <= 1 && y >= nTop + nHW - 2 && y <  nTop + nHW + 2);
+                            if (body || head) {                        // figura de piedra PALIDA
+                                int v = 148 - ((dxn > 0) ? 22 : 0) - (((y & 3) == 0) ? 7 : 0);
+                                r = v + 4; g = v - 3; b = v - 14;
+                            } else {                                   // fondo hundido del nicho
+                                int v = 62 + ((dxn < 0) ? 10 : 0);
+                                r = v + 3; g = v - 1; b = v - 8;
+                            }
+                        } else if (adn == hwN + 1) { r = 150; g = 143; b = 130; }  // arista del nicho
                     }
                 }
             }
 
-            r = C(r, 44, 235); g = C(g, 42, 224); b = C(b, 40, 214);   // nada casi-negro, azul sin recorte
+            r = C(r, 46, 236); g = C(g, 44, 226); b = C(b, 42, 214);   // nada casi-negro, ambar sin recorte
             t[y * W + x] = RGBA(r, g, b, 255);
         }
     }
 }
 // NOTA (verificacion):
-// Elementos pintados: PANELES de hormigon/acero en 4 hiladas de alto desigual (34/58/16/20)
-//   con columnas desiguales y desfasadas, tono por panel (paneles oxidados mas oscuros /
-//   mas nuevos mas claros), grano grueso (hormigon) o liso (acero), picaduras, costuras
-//   hondas con bisel arriba y sombra abajo, y FILAS DE REMACHES 3x3 (brillo arriba-izq,
-//   sombra abajo-der) cada 8 px junto a TODAS las costuras; TUBO GRUESO (r=5) con sombreado
-//   cilindrico, sombra proyectada, escamas y ABRAZADERAS con perno cada 32 px; TUBO FINO
-//   (r=2) con abrazaderas desfasadas; VIGA en I vertical en la costura (arista izq
-//   iluminada, ranura de sombra der, garganta central, pernos cada 16 px, corre sin
-//   cortarse); CONDUCTO de cables vertical con caja de empalme; 3 ABOLLADURAS; FISURAS
-//   finas asimetricas; regueros de mugre por columna desde ala/costuras/tubos/alfeizar;
-//   manchas de OXIDO (parches + chorreado bajo tubos y pernos); banda de FRANJAS DE
-//   PELIGRO desconchada; traza gotica: HUECO OJIVAL recesado con jamba de acero, parteluz,
-//   travesano, vidrio AZUL FRIO encendido con vignette y emplomado; LAMPARA AMBAR diminuta.
-// Brillos (MODULATE): panel medio ~100-140 (base 122 +-7 tono +-4 grano; regueros lo bajan
-//   hasta ~95, sin ennegrecer); costuras horizontales ~76, verticales ~80, sombra de tubo
-//   y garganta de viga ~60-80, ranura de viga 60, bisel de lampara 70; brillos: arista de
-//   viga 146, brillo de tubo 160, remaches +26; vidrio (110,160,210) en el nucleo bajando a
-//   (68,104,152) en el borde -> canal b ~152-210 (encendido frio); ambar (200,138,58).
-//   Tono frio-neutro r=lum-6, g=lum-2, b=lum+3 (b >= g >= r, margen 9, no saturado); el
-//   OXIDO (r+rust, g+rust/4, b-rust/2, tope 24) es el unico calido junto al ambar y la
-//   franja desvaida (+9r,+5g).  El grueso queda medio (no oscuro).
+// Pintado: SILLERIA de 9 hiladas de alto desigual con llagas desplazadas y de ancho
+//   desigual, tono por bloque, spolia clara/oscura, juntas de profundidad variable y
+//   esquinas desportilladas; CORNISA en la costura + canecillos y sombra de vuelo;
+//   IMPOSTA a media altura; ARQUERIA CIEGA de arcos ojivales con baqueton, enjutas,
+//   abaco, plinto y columnillas; VENTANA OJIVAL profunda (derrame+jamba+alfeizar) con el
+//   vano oscuro y frio arriba y resplandor AMBAR abajo; NICHO con figura palida bajo
+//   dosel; y desgaste asimetrico: chorreras, musgo en juntas bajas, 4 fisuras, picaduras.
+// Brillo (MODULATE): piedra media ~110-150 (clamp de lum a 54..176 -> el grueso nunca cae
+//   bajo ~90 por el desgaste); tendeles/llagas/hueco ciego ~72-92; nicho y cabeza fria del
+//   vano ~58-75; cornisa/imposta/alfeizar/figura ~140-155; AMBAR hasta (208,153,93).
+//   Piedra parda r>g>b, unico verde = musgo (g cae menos que r y b).  Ruido +-4 = dither
+//   contra el bandeo de RGB565; todo el relieve es por escalones, sin degradados largos.
 // TESELA (ambos ejes, potencia de 2, GU_REPEAT):
-//   - Hiladas: rowTop[] parte en y=0 y la ultima termina en W (hj=0 en y=0 = costura de la
-//     tesela; hj=rowH-1 en y=W-1) -> costura horizontal continua al envolver.  Columnas:
-//     xx=(x+rowOff)&(W-1) y colSeam[] con la primera en 0 -> periodicas en x mod W.
-//   - Remaches: (xx&7), (hj&7) -> periodo 8 relativo a costuras interiores; pernos de viga
-//     (y&15) periodo 16 (128 multiplo).  Abrazaderas (x+8)&31, (x+24)&31: periodo 32.
-//   - Tubos y conducto son rasgos de fila/columna completos (funcion de y o de x) ->
-//     continuos al envolver; la VIGA usa distancia CON SIGNO a la costura (xw) y el ala
-//     superior distancia dyT -> continuos.
-//   - Regueros: funcion de columna (H de x>>2 y x) x envolvente en y que vale 0 en y=0 y
-//     en y=W-4..W-1 (drip(y,0,4,W-4)) -> sin salto en la costura horizontal.
-//   - Oxido: celdas H(x>>3,y>>3) periodicas (128/8) y celda desfasada con ((x+4)&(W-1))>>3.
-//     Franjas: banda interior (y 114..122, x 12..52).  Fisuras: segmentos INTERIORES
-//     (x in [18,112], y in [38,124]).  Abolladuras, hueco ojival (x 51..77, y 38..90),
-//     caja de empalme y lampara ambar: INTERIORES, nunca tocan x=0/W ni y=0/W.
-//   => TESELA PERFECTA en ambos ejes.
+//   - Todo es funcion exacta de (x mod W, y mod W): hiladas courseY[] empiezan en 0 y la
+//     ultima termina en W; las 4 llagas jx[] dependen solo de la hilada y el BLOQUE QUE
+//     ENVUELVE se resuelve explicito (x < jx[0] -> vj = x + W - jx[3]) -> la llaga cruza la
+//     costura vertical sin corte.  Canecillos (x&15) y arqueria ((x+8)&31): periodos 16 y
+//     32, divisores de 128.  Cornisa (y>=121) + soffit/canecillos (y<=5) se COMPLETAN a
+//     traves de la costura horizontal.  Chorreras: hash por columna x envolvente en y que
+//     vale 0 en y=0..5 y en y>=122 -> sin salto en la costura.  Ventana (x 30..50,
+//     y 62..118), nicho (x 98..118, y 68..107), arqueria (y 21..54) y las 4 fisuras
+//     (x 10..98, y 18..120) son INTERIORES: nunca tocan x=0/W ni y=0/W.
+//   => TESELA PERFECTA EN AMBOS EJES, sin costura visible.

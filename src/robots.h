@@ -1,182 +1,226 @@
 #pragma once
-// PROJECT NOCTIS - HABITANTES de la plaza: ROBOTS / ANDROIDES (la humanidad ya
-// no existe, directiva 8-9,35). NO son todos militares: cada uno es un ROL con
-// SILUETA propia y un ESTADO DE REPARACION distinto (pulido / oxidado / roto).
-// Estetica de personaje anime-estilizado contra el mundo brutal (contraste).
+// PROJECT NOCTIS - HABITANTES del sector: ROBOTS / ANDROIDES (la humanidad ya no
+// existe, directiva 8-9,35). NO son todos militares: cada uno es un ROL con
+// SILUETA propia y un ESTADO DE CONSERVACION distinto (pulido / oxidado /
+// remendado / desvaido). Estetica de personaje estilizada contra el mundo
+// brutal de piedra (contraste intencional).
 //
-// Se incluye en main.cpp DESPUES de char_prims.h (usa addLimb/addBall/addLoft
-// para cuerpos organicos) y de los helpers addSolidBox/addPyramid/brighten/RGBA.
-// El buffer es LineVertex (GU_TRIANGLES, flat). Culling OFF => winding libre.
+// Se incluye en main.cpp DESPUES de char_prims.h (addLimb/addBall/addLoft: nada
+// de cajas para los cuerpos) y de los helpers addSolidBox/addPyramid/brighten.
+// El buffer es LineVertex (GU_TRIANGLES). Pies en y=0, coords CRUDAS (sin WSCALE).
 //
-// Espacio: coords CRUDAS de la plaza (las mismas que g_city y los NPC viejos, SIN
-// WSCALE). Pies en y=0. El jugador nace en (0,0,0); los robots se colocan en un
-// anillo r~14..27 para que el jugador SE LOS ENCUENTRE, EVITANDO las 4 catedrales:
-//   GRAND  (0,-60, 52x44)  -> borde cercano z=-38
-//   TWIN   (62, 6, 44x48)  -> borde cercano x= 40
-//   BASILICA(-60,10,48x72) -> borde cercano x=-36
-//   BELL   (10,60, 40x40)  -> borde cercano z= 40
-// Todos los robots quedan holgados dentro de esos bordes y lejos del spawn.
+// ---- DONDE VAN (ver sector.h) --------------------------------------------
+// El mundo es un SECTOR CERRADO de pasillos goticos:
+//   * 4 MASAS solidas de 36x36 con |x| y |z| ambos entre 9 y 45  -> PROHIBIDO.
+//   * PASILLO EN CRUZ: |x| < 9 (a lo largo de Z) y |z| < 9 (a lo largo de X).
+//   * COLUMNAS exentas en |x|=7 (z = 0,+-16,+-32) y |z|=7 (x = 0,+-16,+-32),
+//     lado 3.3 (capitel 3.6) -> hueco libre ~+-1.8 alrededor de cada centro.
+//   * CONTRAFUERTES que salen de las masas hacia el pasillo: ocupan la banda
+//     |x| = 6.6..9.0 en z = +-16.2,+-27,+-37.8 (y su transpuesta).
+// Por eso todos los robots van con |x| <= ~6.0 (o |z| <= ~6.0) -> arrimados al
+// borde del pasillo, junto a la arcada, PERO en los huecos entre columna y
+// contrafuerte. El jugador nace en (0,0,0): el centro queda libre.
 //
-// PSP DURO: determinista (sin rand/heap), C++17, <math.h>. Presupuesto <= ~1800
-// verts en total. buildRobots() devuelve el total.
+// PSP DURO: determinista (sin rand/heap), C++17, <math.h>.
+// Presupuesto: 1662 verts en total (buffer g_npc[2400]). buildRobots() lo devuelve.
 
 #include <math.h>
 
-// ---- paleta: estados de reparacion (directiva) ----
-static const unsigned int R_STEEL = RGBA(150, 158, 170, 255); // acero pulido
-static const unsigned int R_PALE  = RGBA(202, 206, 212, 255); // metal palido pulido (mensajero)
-static const unsigned int R_BRASS = RGBA(120,  96,  60, 255); // laton / bronce oxidado
-static const unsigned int R_RUST  = RGBA(110,  70,  50, 255); // herrumbre
-static const unsigned int R_TEAL  = RGBA( 70, 150, 150, 255); // acento teal (patina)
-static const unsigned int R_DARK  = RGBA( 74,  78,  92, 255); // carcasa oscura
-static const unsigned int R_EYEW  = RGBA(255, 180,  90, 255); // ojo calido (ambar)
-static const unsigned int R_EYEC  = RGBA(120, 225, 235, 255); // ojo frio (cian)
+// ---- paleta: estados de conservacion (directiva) ----
+static const unsigned int R_STEEL = RGBA(150, 158, 170, 255); // acero
+static const unsigned int R_PALE  = RGBA(202, 206, 212, 255); // metal palido PULIDO (mensajero)
+static const unsigned int R_BRASS = RGBA(120,  96,  60, 255); // bronce OXIDADO (guardian)
+static const unsigned int R_RUST  = RGBA(110,  70,  50, 255); // herrumbre (mecanico)
+static const unsigned int R_TEAL  = RGBA( 70, 150, 150, 255); // patina / acento frio
+static const unsigned int R_EYEW  = RGBA(255, 180,  90, 255); // ojo CALIDO (ambar)
+static const unsigned int R_EYEC  = RGBA(120, 225, 235, 255); // ojo FRIO (cian)
 
-// direccion HORIZONTAL hacia el centro de la plaza (spawn del jugador): los
-// robots "miran" al jugador (cabeza/ojo/herramienta hacia adentro).
-static inline void robotFacing(float cx, float cz, float &fx, float &fz) {
-    float d = sqrtf(cx * cx + cz * cz);
-    if (d < 1e-4f) { fx = 0.0f; fz = -1.0f; return; }
-    fx = -cx / d; fz = -cz / d;
+// =====================================================================
+// MARCO LOCAL DEL ROBOT
+// Cada robot se modela en coordenadas propias: r = su derecha, f = hacia donde
+// MIRA, y = arriba. Asi un robot del pasillo X y uno del pasillo Z quedan bien
+// orientados (brazos al costado, visor al frente) con el mismo codigo.
+// =====================================================================
+struct RFrame { float cx, cz, fx, fz, rx, rz; };
+
+static RFrame rFrame(float cx, float cz, float fx, float fz) {
+    float d = sqrtf(fx * fx + fz * fz);
+    if (d < 1e-4f) { fx = 0.0f; fz = -1.0f; d = 1.0f; }
+    RFrame F;
+    F.cx = cx; F.cz = cz;
+    F.fx = fx / d; F.fz = fz / d;
+    F.rx = -F.fz; F.rz = F.fx;          // derecha = forward girado 90 grados
+    return F;
 }
+// mira al cruce del pasillo (donde nace el jugador)
+static RFrame rFrameToCenter(float cx, float cz) { return rFrame(cx, cz, -cx, -cz); }
 
-// ojo/visor: cubito luminoso (glow). 30 verts.
-static void addRobotEye(LineVertex *buf, int &i, float ex, float ey, float ez,
-                        float w, float h, unsigned int col) {
-    addSolidBox(buf, i, ex, ey - h * 0.5f, ez, w, w * 0.5f, h, col);
+static inline float rWX(const RFrame &F, float r, float f) { return F.cx + F.rx * r + F.fx * f; }
+static inline float rWZ(const RFrame &F, float r, float f) { return F.cz + F.rz * r + F.fz * f; }
+
+// cilindro conico entre dos puntos LOCALES (brazos, piernas, torso, baston). sides*12 verts
+static void rLimb(LineVertex *buf, int &i, const RFrame &F,
+                  float r0, float f0, float y0, float r1, float f1, float y1,
+                  float rad0, float rad1, int sides, unsigned int cB, unsigned int cT) {
+    addLimb(buf, i, rWX(F, r0, f0), y0, rWZ(F, r0, f0),
+                    rWX(F, r1, f1), y1, rWZ(F, r1, f1), rad0, rad1, sides, cB, cT);
 }
-
-// =====================================================================
-// 1) MENSAJERO  (STEEL/PALE) ~276v
-//    Alto y delgado, miembros esbeltos, cabeza-farol + antena. Metal palido
-//    pulido: el androide en mejor estado, elegante.
-// =====================================================================
-static void buildMessenger(LineVertex *buf, int &i, float cx, float cz) {
-    float fx, fz; robotFacing(cx, cz, fx, fz);
-    const unsigned int leg = brighten(R_STEEL, 0.85f);
-    addSolidBox(buf, i, cx - 0.16f, 0.0f, cz, 0.18f, 0.20f, 1.70f, leg);              // pierna L (30)
-    addSolidBox(buf, i, cx + 0.16f, 0.0f, cz, 0.18f, 0.20f, 1.70f, leg);              // pierna R (30)
-    addLimb(buf, i, cx, 1.70f, cz, cx, 3.00f, cz, 0.26f, 0.16f, 4, R_STEEL, R_PALE);  // torso conico esbelto (48)
-    addLimb(buf, i, cx - 0.22f, 2.92f, cz, cx - 0.30f, 2.00f, cz, 0.07f, 0.05f, 3, R_STEEL, R_PALE); // brazo L fino (36)
-    addLimb(buf, i, cx + 0.22f, 2.92f, cz, cx + 0.30f, 2.00f, cz, 0.07f, 0.05f, 3, R_STEEL, R_PALE); // brazo R fino (36)
-    addBall(buf, i, cx, 3.28f, cz, 0.17f, 0.21f, 0.17f, 2, 3, R_PALE);                // cabeza-farol (36)
-    addSolidBox(buf, i, cx - 0.025f, 3.49f, cz, 0.05f, 0.05f, 0.72f, R_PALE);         // antena (30)
-    addRobotEye(buf, i, cx + fx * 0.20f, 3.24f, cz + fz * 0.20f, 0.11f, 0.11f, R_EYEW); // ojo calido (30)
+// elipsoide facetado en local; radL = a lo ancho, radY = alto, radF = a lo largo. st*sl*6 verts
+static void rBall(LineVertex *buf, int &i, const RFrame &F, float r, float f, float y,
+                  float radL, float radY, float radF, int st, int sl, unsigned int col) {
+    float ex = fabsf(F.rx) * radL + fabsf(F.fx) * radF;
+    float ez = fabsf(F.rz) * radL + fabsf(F.fz) * radF;
+    addBall(buf, i, rWX(F, r, f), y, rWZ(F, r, f), ex, radY, ez, st, sl, col);
 }
-
-// =====================================================================
-// 2) MECANICO  (RUST) ~282v
-//    Encorvado, brazo izquierdo macizo, brazo-herramienta (taladro) derecho,
-//    placas parchadas/oxidadas. El obrero desgastado.
-// =====================================================================
-static void buildMechanic(LineVertex *buf, int &i, float cx, float cz) {
-    float fx, fz; robotFacing(cx, cz, fx, fz);
-    const unsigned int leg = brighten(R_RUST, 0.85f);
-    addSolidBox(buf, i, cx - 0.18f, 0.0f, cz, 0.22f, 0.24f, 1.30f, leg);              // pierna L (30)
-    addSolidBox(buf, i, cx + 0.18f, 0.0f, cz, 0.22f, 0.24f, 1.30f, leg);              // pierna R (30)
-    addSolidBox(buf, i, cx, 1.30f, cz, 0.80f, 0.60f, 0.90f, R_RUST);                  // torso ancho (30)
-    addBall(buf, i, cx - fx * 0.15f, 2.05f, cz - fz * 0.15f, 0.42f, 0.35f, 0.42f, 2, 3, brighten(R_RUST, 0.9f)); // joroba oxidada en la espalda (36)
-    addLimb(buf, i, cx - 0.45f, 2.10f, cz, cx - 0.56f, 1.15f, cz, 0.17f, 0.13f, 4, R_RUST, brighten(R_RUST, 1.12f)); // brazo macizo L (48)
-    addLimb(buf, i, cx + 0.46f, 2.05f, cz, cx + 0.60f + fx * 0.2f, 1.45f, cz + fz * 0.2f, 0.12f, 0.08f, 3, R_STEEL, R_STEEL); // brazo-herramienta (36)
-    addPyramid(buf, i, cx + 0.60f + fx * 0.2f, 1.20f, cz + fz * 0.2f, 0.16f, 0.16f, 0.40f, brighten(R_STEEL, 1.1f)); // punta/taladro (12)
-    addSolidBox(buf, i, cx + fx * 0.22f, 2.02f, cz + fz * 0.22f, 0.36f, 0.36f, 0.36f, brighten(R_RUST, 1.15f)); // cabeza baja adelantada (30)
-    addRobotEye(buf, i, cx + fx * 0.42f, 2.20f, cz + fz * 0.42f, 0.12f, 0.10f, R_EYEW); // ojo calido (30)
+// caja alineada a ejes pero DIMENSIONADA segun la orientacion (placas, mochila). 30 verts
+static void rBox(LineVertex *buf, int &i, const RFrame &F, float r, float f, float baseY,
+                 float wL, float wF, float h, unsigned int col) {
+    float w = fabsf(F.rx) * wL + fabsf(F.fx) * wF;
+    float d = fabsf(F.rz) * wL + fabsf(F.fz) * wF;
+    addSolidBox(buf, i, rWX(F, r, f), baseY, rWZ(F, r, f), w, d, h, col);
 }
-
-// =====================================================================
-// 3) GUARDIAN  (BRONZE) ~288v
-//    Pesado y ancho, torso acorazado, cabeza-casco con cresta, bronce oxidado
-//    con patina teal. Imponente pero no "militar moderno": arcaico.
-// =====================================================================
-static void buildGuardian(LineVertex *buf, int &i, float cx, float cz) {
-    float fx, fz; robotFacing(cx, cz, fx, fz);
-    const unsigned int leg = brighten(R_BRASS, 0.82f);
-    addSolidBox(buf, i, cx - 0.30f, 0.0f, cz, 0.32f, 0.34f, 1.40f, leg);              // pierna L gruesa (30)
-    addSolidBox(buf, i, cx + 0.30f, 0.0f, cz, 0.32f, 0.34f, 1.40f, leg);              // pierna R gruesa (30)
-    static const float gy[3] = { 1.40f, 2.20f, 2.90f };
-    static const float gr[3] = { 0.60f, 0.66f, 0.44f };
-    addLoft(buf, i, cx, cz, gy, gr, 3, 4, R_BRASS, brighten(R_BRASS, 1.10f));         // torso acorazado abombado (96)
-    addSolidBox(buf, i, cx - 0.60f, 2.40f, cz, 0.36f, 0.42f, 0.34f, brighten(R_BRASS, 0.9f)); // hombrera L (30)
-    addSolidBox(buf, i, cx + 0.60f, 2.40f, cz, 0.36f, 0.42f, 0.34f, brighten(R_BRASS, 0.9f)); // hombrera R (30)
-    addSolidBox(buf, i, cx, 2.90f, cz, 0.44f, 0.44f, 0.44f, brighten(R_BRASS, 1.12f));// casco (30)
-    addPyramid(buf, i, cx, 3.34f, cz, 0.44f, 0.44f, 0.36f, R_TEAL);                   // cresta (patina teal) (12)
-    addRobotEye(buf, i, cx + fx * 0.24f, 3.06f, cz + fz * 0.24f, 0.30f, 0.07f, R_EYEC); // visor frio ancho (30)
+// piramide orientada (cresta, antena, punta de herramienta). 12 verts
+static void rPyr(LineVertex *buf, int &i, const RFrame &F, float r, float f, float baseY,
+                 float wL, float wF, float apexH, unsigned int col) {
+    float w = fabsf(F.rx) * wL + fabsf(F.fx) * wF;
+    float d = fabsf(F.rz) * wL + fabsf(F.fz) * wF;
+    addPyramid(buf, i, rWX(F, r, f), baseY, rWZ(F, r, f), w, d, apexH, col);
+}
+// OJO luminoso: cubito brillante centrado en ey (calido o frio segun el robot). 30 verts
+static void rEye(LineVertex *buf, int &i, const RFrame &F, float r, float f, float ey,
+                 float w, float h, unsigned int col) {
+    rBox(buf, i, F, r, f, ey - h * 0.5f, w, w * 0.55f, h, col);
 }
 
 // =====================================================================
-// 4) DRON  (TEAL/STEEL) ~168v
-//    Pequeno orbe/ovoide FLOTANTE (sin piernas), un solo ojo. Barato y ligero.
+// 1) MENSAJERO  -- 282 verts
+//    Alto (3.6) y DELGADO, extremidades finas, cabeza-farol ovoide con antena.
+//    Metal palido PULIDO: el androide en mejor estado, elegante. Lleva el
+//    mensaje en alto con la mano derecha. Ojo calido.
 // =====================================================================
-static void buildDrone(LineVertex *buf, int &i, float cx, float cz) {
-    float fx, fz; robotFacing(cx, cz, fx, fz);
-    addBall(buf, i, cx, 1.70f, cz, 0.42f, 0.34f, 0.42f, 3, 5, R_STEEL);               // cuerpo ovoide flotante (90)
-    addBall(buf, i, cx, 1.35f, cz, 0.16f, 0.14f, 0.16f, 2, 4, R_TEAL);                // pod sensor inferior (48)
-    addRobotEye(buf, i, cx + fx * 0.40f, 1.72f, cz + fz * 0.40f, 0.18f, 0.16f, R_EYEC); // ojo unico grande frio (30)
+static void buildMessenger(LineVertex *buf, int &i, const RFrame &F) {
+    const unsigned int lo = brighten(R_STEEL, 0.78f);
+    rLimb(buf, i, F, -0.17f, 0.00f, 0.00f, -0.13f, 0.02f, 1.76f, 0.13f, 0.09f, 3, lo, R_STEEL);       // pierna L      36
+    rLimb(buf, i, F,  0.17f, 0.00f, 0.00f,  0.13f, 0.02f, 1.76f, 0.13f, 0.09f, 3, lo, R_STEEL);       // pierna R      36
+    rLimb(buf, i, F,  0.00f, 0.00f, 1.70f,  0.00f, 0.03f, 3.02f, 0.27f, 0.16f, 4, R_STEEL, R_PALE);   // torso esbelto 48
+    rLimb(buf, i, F, -0.23f, 0.02f, 2.92f, -0.31f, 0.10f, 1.92f, 0.075f, 0.05f, 3, R_PALE, R_STEEL);  // brazo L fino  36
+    rLimb(buf, i, F,  0.23f, 0.02f, 2.92f,  0.26f, 0.34f, 2.12f, 0.075f, 0.05f, 3, R_PALE, R_STEEL);  // brazo R (ofrece) 36
+    rBall(buf, i, F,  0.00f, 0.02f, 3.30f,  0.17f, 0.22f, 0.19f, 2, 4, R_PALE);                       // cabeza-farol  48
+    rPyr (buf, i, F,  0.00f, 0.00f, 3.50f,  0.10f, 0.10f, 0.60f, brighten(R_PALE, 1.10f));            // antena        12
+    rEye (buf, i, F,  0.00f, 0.17f, 3.30f,  0.10f, 0.10f, R_EYEW);                                    // ojo calido    30
 }
 
 // =====================================================================
-// 5) ANCIANO  (STEEL desvaido) ~288v
-//    Figura togada/encapuchada: falda alta acampanada por LOFT, larga y digna,
-//    con baston. Colores apagados: misterioso, el mas viejo de todos.
+// 2) MECANICO  -- 282 verts
+//    ENCORVADO (torso inclinado hacia adelante), brazo izquierdo macizo y brazo
+//    derecho convertido en HERRAMIENTA que se afila en punta caliente. Oxidado,
+//    con una pierna de repuesto en acero que no combina (remiendo). Ojo calido.
 // =====================================================================
-static void buildAncient(LineVertex *buf, int &i, float cx, float cz) {
-    float fx, fz; robotFacing(cx, cz, fx, fz);
-    const unsigned int robeB = brighten(R_STEEL, 0.66f); // desvaido abajo
-    const unsigned int robeT = brighten(R_STEEL, 0.94f);
-    static const float ay[4] = { 0.0f, 0.70f, 1.80f, 2.70f };
-    static const float ar[4] = { 0.95f, 0.85f, 0.50f, 0.40f };
-    addLoft(buf, i, cx, cz, ay, ar, 4, 4, robeB, robeT);                              // falda/toga acampanada (144)
-    addLimb(buf, i, cx, 2.70f, cz, cx, 3.15f, cz, 0.34f, 0.22f, 4, robeT, brighten(R_STEEL, 0.85f)); // hombros/cogulla (48)
-    addBall(buf, i, cx, 3.20f, cz, 0.20f, 0.24f, 0.20f, 2, 3, brighten(R_STEEL, 0.78f)); // cabeza encapuchada (36)
-    addSolidBox(buf, i, cx + 0.52f, 0.0f, cz, 0.06f, 0.06f, 3.30f, R_BRASS);          // baston (30)
-    addRobotEye(buf, i, cx + fx * 0.18f, 3.16f, cz + fz * 0.18f, 0.09f, 0.09f, R_EYEC); // ojo frio profundo (30)
+static void buildMechanic(LineVertex *buf, int &i, const RFrame &F) {
+    const unsigned int patch = brighten(R_STEEL, 0.92f);   // pieza NUEVA, no combina
+    rLimb(buf, i, F, -0.23f, 0.00f, 0.00f, -0.19f, 0.00f, 1.18f, 0.18f, 0.14f, 3, brighten(R_RUST, 0.80f), R_RUST); // pierna L oxidada 36
+    rLimb(buf, i, F,  0.23f, 0.00f, 0.00f,  0.19f, 0.00f, 1.18f, 0.18f, 0.14f, 3, brighten(patch, 0.80f), patch);   // pierna R remendada 36
+    rLimb(buf, i, F,  0.00f, -0.06f, 1.12f, 0.00f, 0.42f, 2.14f, 0.42f, 0.32f, 4, R_RUST, brighten(R_RUST, 1.18f)); // torso encorvado 48
+    rLimb(buf, i, F, -0.42f, 0.38f, 2.04f, -0.53f, 0.30f, 1.02f, 0.17f, 0.13f, 4, R_RUST, brighten(R_RUST, 1.10f)); // brazo macizo L  48
+    rLimb(buf, i, F,  0.40f, 0.40f, 2.00f,  0.47f, 0.86f, 1.30f, 0.12f, 0.03f, 3, patch, brighten(R_TEAL, 1.10f));  // brazo-herramienta 36
+    rPyr (buf, i, F,  0.47f, 0.86f, 1.20f,  0.13f, 0.13f, 0.24f, R_EYEW);                                           // punta caliente  12
+    rBall(buf, i, F,  0.00f, 0.52f, 2.24f,  0.24f, 0.20f, 0.26f, 2, 3, brighten(R_RUST, 1.20f));                    // cabeza baja     36
+    rEye (buf, i, F,  0.00f, 0.74f, 2.26f,  0.12f, 0.09f, R_EYEW);                                                  // ojo calido      30
 }
 
 // =====================================================================
-// 6) CAMINANTE  (DARK) ~222v
-//    Cuadrupedo/insectoide portador: cuerpo bajo alargado sobre 4 patas.
-//    Silueta totalmente distinta a los bipedos.
+// 3) GUARDIAN  -- 378 verts
+//    ANCHO y pesado (3.5 de alto, hombros a 1.4): torso acorazado abombado por
+//    LOFT, hombreras, brazos gruesos, casco con cresta. Bronce OXIDADO con
+//    patina teal: arcaico, no militar moderno. Visor frio ancho.
 // =====================================================================
-static void buildWalker(LineVertex *buf, int &i, float cx, float cz) {
-    float fx, fz; robotFacing(cx, cz, fx, fz);
-    addBall(buf, i, cx, 0.90f, cz, 0.55f, 0.30f, 0.78f, 2, 4, R_DARK);                // caparazon bajo (48)
-    const unsigned int legc = brighten(R_DARK, 1.05f);
-    addLimb(buf, i, cx - 0.40f, 0.85f, cz - 0.55f, cx - 0.64f, 0.0f, cz - 0.74f, 0.09f, 0.05f, 3, legc, R_DARK); // pata FL (36)
-    addLimb(buf, i, cx + 0.40f, 0.85f, cz - 0.55f, cx + 0.64f, 0.0f, cz - 0.74f, 0.09f, 0.05f, 3, legc, R_DARK); // pata FR (36)
-    addLimb(buf, i, cx - 0.40f, 0.85f, cz + 0.55f, cx - 0.64f, 0.0f, cz + 0.74f, 0.09f, 0.05f, 3, legc, R_DARK); // pata BL (36)
-    addLimb(buf, i, cx + 0.40f, 0.85f, cz + 0.55f, cx + 0.64f, 0.0f, cz + 0.74f, 0.09f, 0.05f, 3, legc, R_DARK); // pata BR (36)
-    addRobotEye(buf, i, cx + fx * 0.62f, 1.00f, cz + fz * 0.62f, 0.12f, 0.09f, R_EYEW); // sensor frontal (30)
+static void buildGuardian(LineVertex *buf, int &i, const RFrame &F) {
+    const unsigned int dk = brighten(R_BRASS, 0.78f);
+    static const float gy[3] = { 1.38f, 2.22f, 2.94f };   // cintura -> pecho -> cuello
+    static const float gr[3] = { 0.50f, 0.66f, 0.42f };
+    rLimb(buf, i, F, -0.34f, 0.00f, 0.00f, -0.30f, 0.00f, 1.44f, 0.27f, 0.22f, 3, dk, R_BRASS);   // pierna L gruesa 36
+    rLimb(buf, i, F,  0.34f, 0.00f, 0.00f,  0.30f, 0.00f, 1.44f, 0.27f, 0.22f, 3, dk, R_BRASS);   // pierna R gruesa 36
+    addLoft(buf, i, F.cx, F.cz, gy, gr, 3, 4, R_BRASS, brighten(R_BRASS, 1.15f));                 // torso acorazado 96
+    rLimb(buf, i, F, -0.66f, 0.00f, 2.36f, -0.70f, 0.16f, 1.32f, 0.16f, 0.13f, 3, R_BRASS, dk);   // brazo L         36
+    rLimb(buf, i, F,  0.66f, 0.00f, 2.36f,  0.70f, 0.16f, 1.32f, 0.16f, 0.13f, 3, R_BRASS, dk);   // brazo R         36
+    rBox (buf, i, F, -0.62f, 0.00f, 2.30f,  0.36f, 0.44f, 0.36f, brighten(R_BRASS, 0.92f));       // hombrera L      30
+    rBox (buf, i, F,  0.62f, 0.00f, 2.30f,  0.36f, 0.44f, 0.36f, brighten(R_BRASS, 0.92f));       // hombrera R      30
+    rBall(buf, i, F,  0.00f, 0.02f, 3.04f,  0.28f, 0.26f, 0.30f, 2, 3, brighten(R_BRASS, 1.20f)); // casco           36
+    rPyr (buf, i, F,  0.00f, 0.00f, 3.26f,  0.14f, 0.46f, 0.40f, R_TEAL);                         // cresta patinada 12
+    rEye (buf, i, F,  0.00f, 0.26f, 3.06f,  0.34f, 0.08f, R_EYEC);                                // visor frio      30
 }
 
 // =====================================================================
-// 7) TECNICO / EXPLORADOR  (STEEL + acentos TEAL) ~240v
-//    Variante: mochila, un brazo con instrumento, tono acero con patina teal.
+// 4) DRON  -- 138 verts
+//    Cuerpo OVOIDE que FLOTA: no tiene piernas, su punto mas bajo queda en
+//    y~1.25. Un solo OJO grande frio adelante. Barato: es el que se ve de
+//    lejos al fondo del pasillo.
 // =====================================================================
-static void buildTechnician(LineVertex *buf, int &i, float cx, float cz) {
-    float fx, fz; robotFacing(cx, cz, fx, fz);
-    const unsigned int leg = brighten(R_STEEL, 0.85f);
-    addSolidBox(buf, i, cx - 0.16f, 0.0f, cz, 0.20f, 0.22f, 1.50f, leg);              // pierna L (30)
-    addSolidBox(buf, i, cx + 0.16f, 0.0f, cz, 0.20f, 0.22f, 1.50f, leg);              // pierna R (30)
-    addLimb(buf, i, cx, 1.50f, cz, cx, 2.80f, cz, 0.24f, 0.20f, 4, R_STEEL, R_TEAL);  // torso (acento teal arriba) (48)
-    addSolidBox(buf, i, cx - fx * 0.22f, 1.70f, cz - fz * 0.22f, 0.36f, 0.26f, 0.60f, brighten(R_STEEL, 0.82f)); // mochila a la espalda (30)
-    addLimb(buf, i, cx + 0.26f, 2.72f, cz, cx + 0.34f + fx * 0.15f, 1.90f, cz + fz * 0.15f, 0.08f, 0.06f, 3, R_STEEL, R_TEAL); // brazo-instrumento (36)
-    addBall(buf, i, cx, 2.84f, cz, 0.20f, 0.20f, 0.20f, 2, 3, brighten(R_STEEL, 1.10f)); // cabeza (36)
-    addRobotEye(buf, i, cx + fx * 0.20f, 2.86f, cz + fz * 0.20f, 0.12f, 0.10f, R_EYEC); // ojo teal (30)
+static void buildDrone(LineVertex *buf, int &i, const RFrame &F) {
+    rBall(buf, i, F, 0.00f, 0.00f, 1.78f, 0.40f, 0.30f, 0.48f, 3, 4, R_STEEL);   // ovoide flotante 72
+    rBall(buf, i, F, 0.00f, 0.00f, 1.38f, 0.16f, 0.13f, 0.16f, 2, 3, R_TEAL);    // pod sensor      36
+    rEye (buf, i, F, 0.00f, 0.44f, 1.80f, 0.18f, 0.16f, R_EYEC);                 // ojo unico frio  30
 }
 
 // =====================================================================
-// buildRobots: coloca los 6-7 robots en el anillo de la plaza y devuelve el
-// total de verts. Posiciones DETERMINISTAS (sin rand), en los huecos entre
-// catedrales (N/E/O/S ocupados) y lejos del spawn (0,0).
+// 5) ANCIANO  -- 294 verts
+//    Figura ENCAPUCHADA: tunica acampanada construida con LOFT (4 anillos),
+//    cogulla conica, baston de bronce. Acero desvaido, digno y desgastado.
+//    Ojo frio, chico y hundido bajo la capucha.
+// =====================================================================
+static void buildAncient(LineVertex *buf, int &i, const RFrame &F) {
+    const unsigned int robeB = brighten(R_STEEL, 0.58f);   // desvaido abajo (polvo)
+    const unsigned int robeT = brighten(R_STEEL, 0.92f);
+    static const float ay[4] = { 0.00f, 0.72f, 1.80f, 2.62f };
+    static const float ar[4] = { 0.85f, 0.76f, 0.46f, 0.38f };
+    addLoft(buf, i, F.cx, F.cz, ay, ar, 4, 4, robeB, robeT);                                           // tunica    144
+    rLimb(buf, i, F, 0.00f, 0.00f, 2.60f, 0.00f, 0.04f, 3.08f, 0.34f, 0.20f, 4, robeT, brighten(R_STEEL, 0.80f)); // cogulla 48
+    rBall(buf, i, F, 0.00f, 0.06f, 3.16f, 0.19f, 0.23f, 0.21f, 2, 3, brighten(R_STEEL, 0.70f));        // cabeza     36
+    rLimb(buf, i, F, 0.56f, 0.06f, 0.00f, 0.50f, 0.10f, 3.24f, 0.055f, 0.045f, 3, R_BRASS, brighten(R_BRASS, 1.20f)); // baston 36
+    rEye (buf, i, F, 0.00f, 0.19f, 3.16f, 0.085f, 0.085f, R_EYEC);                                     // ojo frio   30
+}
+
+// =====================================================================
+// 6) TECNICO  -- 288 verts
+//    Estatura media, MOCHILA de instrumentos a la espalda y brazo derecho
+//    levantado con un instrumento (acento teal). Acero con patina: en servicio,
+//    ni pulido ni podrido. Ojo frio.
+// =====================================================================
+static void buildTechnician(LineVertex *buf, int &i, const RFrame &F) {
+    const unsigned int lo = brighten(R_STEEL, 0.80f);
+    rLimb(buf, i, F, -0.17f, 0.00f, 0.00f, -0.15f, 0.00f, 1.44f, 0.15f, 0.11f, 3, lo, R_STEEL);      // pierna L   36
+    rLimb(buf, i, F,  0.17f, 0.00f, 0.00f,  0.15f, 0.00f, 1.44f, 0.15f, 0.11f, 3, lo, R_STEEL);      // pierna R   36
+    rLimb(buf, i, F,  0.00f, 0.00f, 1.40f,  0.00f, 0.02f, 2.72f, 0.26f, 0.20f, 4, R_STEEL, R_TEAL);  // torso      48
+    rBox (buf, i, F,  0.00f, -0.28f, 1.72f, 0.42f, 0.26f, 0.62f, brighten(R_STEEL, 0.80f));          // mochila    30
+    rLimb(buf, i, F, -0.26f, 0.00f, 2.62f, -0.30f, -0.06f, 1.78f, 0.08f, 0.055f, 3, R_STEEL, lo);    // brazo L    36
+    rLimb(buf, i, F,  0.26f, 0.00f, 2.62f,  0.33f, 0.34f, 1.94f, 0.08f, 0.055f, 3, R_STEEL, R_TEAL); // brazo-instrumento 36
+    rBall(buf, i, F,  0.00f, 0.02f, 2.82f,  0.18f, 0.19f, 0.20f, 2, 3, brighten(R_STEEL, 1.12f));    // cabeza     36
+    rEye (buf, i, F,  0.00f, 0.19f, 2.84f,  0.12f, 0.10f, R_EYEC);                                   // ojo frio   30
+}
+
+// =====================================================================
+// buildRobots: 6 habitantes repartidos por los 4 brazos del pasillo en cruz,
+// siempre en suelo libre (y=0) y arrimados al borde, en el HUECO entre columna
+// y contrafuerte. Determinista (sin rand). Devuelve el total de verts = 1662.
+//
+//   robot        pos (x,z)        r      brazo del pasillo / hueco usado
+//   MENSAJERO   (  5.8,  22.5)  23.2   +Z, lado E (cols z=16,32 / contraf. 16.2,27)
+//   ANCIANO     ( -5.9,  11.5)  12.9   +Z, lado O, cerca del cruce
+//   GUARDIAN    ( -5.5, -21.5)  22.2   -Z, lado O, de cara al cruce
+//   DRON        (  5.2, -41.6)  41.9   -Z, fondo del pasillo, FLOTANDO
+//   MECANICO    ( 20.5,  -5.6)  21.3   +X, lado N, reparando la pared
+//   TECNICO     (-23.5,   5.6)  24.2   -X, lado S
+// Ninguno cae en una masa (una de las dos coordenadas siempre < 6.2 en modulo,
+// las masas empiezan en 9) ni pisa columna (centros en |7| con z/x multiplo de
+// 16) ni contrafuerte (bandas 6.6..9.0 en +-16.2/+-27/+-37.8). Centro libre.
 // =====================================================================
 static int buildRobots(LineVertex *buf) {
     int i = 0;
-    buildMessenger (buf, i,  14.0f, -14.0f); // NE interior  (d~19.8)
-    buildMechanic  (buf, i,  23.0f,   8.0f); // E interior   (d~24.4, TWIN empieza x=40)
-    buildGuardian  (buf, i,   6.0f,  22.0f); // S interior   (d~22.8, BELL empieza z=40)
-    buildDrone     (buf, i, -16.0f,  -8.0f); // O interior   (d~17.9, flota)
-    buildAncient   (buf, i, -18.0f,  16.0f); // SO hueco      (d~24.1)
-    buildWalker    (buf, i, -20.0f, -18.0f); // NO hueco      (d~26.9)
-    buildTechnician(buf, i,  24.0f,  -6.0f); // ESE interior  (d~24.7)
-    return i;
+    buildMessenger (buf, i, rFrameToCenter(   5.8f,  22.5f));                    // 282
+    buildAncient   (buf, i, rFrameToCenter(  -5.9f,  11.5f));                    // 294
+    buildGuardian  (buf, i, rFrameToCenter(  -5.5f, -21.5f));                    // 378
+    buildDrone     (buf, i, rFrameToCenter(   5.2f, -41.6f));                    // 138
+    buildMechanic  (buf, i, rFrame       (  20.5f,  -5.6f, -0.55f, -0.83f));     // 282 (mira la pared que repara)
+    buildTechnician(buf, i, rFrameToCenter( -23.5f,   5.6f));                    // 288
+    return i;   // 1662 <= 1700 (buffer g_npc[2400])
 }
