@@ -222,8 +222,14 @@ static int buildSpirescape(LineVertex *buf) {
     const int   RN [5] = {  12,    16,    20,    26,    32    };  // siluetas
     const float RR0[5] = { 120.f, 138.f, 158.f, 180.f, 200.f };   // radio minimo
     const float RRS[5] = {  18.f,  20.f,  22.f,  20.f,  20.f };   // ancho del anillo
-    const float RH0[5] = {  52.f,  60.f,  70.f,  80.f,  88.f };   // altura minima
-    const float RHS[5] = {  92.f, 102.f, 112.f, 122.f, 130.f };   // rango de altura
+    // Las alturas NO crecen con la distancia por capricho: estan calibradas al
+    // TAMANO APARENTE (altura/radio), que es lo que de verdad se ve. Quedan en
+    // 0.82 / 0.80 / 0.77 / 0.65 / 0.60 de media: el anillo cercano DOMINA y cada
+    // capa siguiente se hunde un poco mas, asi que los lejanos asoman ENTRE los
+    // cercanos en vez de taparlos. Si todas tuvieran la misma altura real, los
+    // anillos de atras leerian como una valla baja y se perderia el escalonado.
+    const float RH0[5] = {  74.f,  70.f,  68.f,  74.f,  74.f };   // altura minima
+    const float RHS[5] = {  96.f, 106.f, 112.f, 120.f, 120.f };   // rango de altura
     const float RCL[5] = { 0.22f, 0.20f, 0.16f, 0.12f, 0.10f };   // amplitud de racimo
     const int   RLO[5] = {   3,     3,     4,     5,     5    };  // lobulos (racimos/vuelta)
     const float RPH[5] = { 0.00f, 1.05f, 2.30f, 3.55f, 4.80f };   // fase de los racimos
@@ -348,16 +354,20 @@ static int buildSpirescape(LineVertex *buf) {
 
             // ---- VENTANA ENCENDIDA (8 en total, 30 v cada una) ----
             // Solo anillos 0 y 1: mas lejos la niebla ya se come el ambar y el
-            // punto leeria como estrella. Se reparten por alturas distintas del
-            // fuste (18%..48% del alto) para que se lean como VENTANAS de una
-            // fachada y no como una guirnalda a la misma cota.
+            // punto leeria como estrella. Se reparten por alturas distintas
+            // (26%..48% del apice) para que se lean como VENTANAS de una fachada
+            // y no como una guirnalda a la misma cota.
+            // OJO: la cota se mide desde y=0 (la linea del horizonte), NO desde
+            // YBASE: los fustes nacen enterrados en -30 y un porcentaje del vano
+            // total dejaria ventanas BAJO el horizonte, invisibles. Con 26%..48%
+            // del apice la ventana cae siempre en el primer cuerpo (el mas
+            // ancho) y por encima de la bruma baja.
             const bool lit = (q == 0 && (j == 0 || j == 3 || j == 5 || j == 8 || j == 10))
                           || (q == 1 && (j == 1 || j == 7 || j == 13));
             if (lit) {
                 const unsigned int hE = spireHash(seed * 9u + 16u);
                 const float sz = 2.4f + spireF01(hE) * 1.8f;                // ~5-7 px
-                const float wy = YBASE + (yTop - YBASE)
-                               * (0.18f + spireF01(hE >> 8) * 0.30f);
+                const float wy = yTop * (0.26f + spireF01(hE >> 8) * 0.22f);
                 const float wd = ((W > D) ? W : D) * bulk * 0.5f + 1.0f;
                 // pegada a la cara que MAS mira al centro del recinto (eje
                 // dominante): el punto cae SOBRE la silueta, nunca flotando.
@@ -386,7 +396,22 @@ static int buildSpirescape(LineVertex *buf) {
 // Anillo 4  r 200..220  32 siluetas: 4 gemelas + 28 fantasma            =  432 v
 // Ventanas ambar                      8 cajas(30)                       =  240 v
 //                                                               TOTAL   = 3528 v
-// 106 siluetas / 124 remates verticales. Alturas ~32..300 (el bloque va x0.60).
-// Niebla por capa: 8% / 23% / 39% / 57% / 90%. Esquina mas interior: r >= 102.
-// Alcance: el punto mas lejano (r=220 visto desde la esquina opuesta del
-// recinto, ~76) queda a ~296 < 320 = plano lejano de la camara. Entra entero.
+// 106 siluetas / 124 remates verticales. Apices y = 53..225 (el bloque va x0.60).
+//
+// Verificado sobre la geometria que genera este archivo:
+//   * NIEBLA por anillo (t de fadeToVoid): 8-23% / 23-39% / 39-57% / 57-74% /
+//     74-90%. Cinco bandas sin solape: las capas se distinguen a simple vista.
+//   * TAMANO APARENTE medio (H/r): 0.82 / 0.80 / 0.77 / 0.65 / 0.60. Descendente
+//     -> el anillo 0 manda y los de atras asoman entre medio.
+//   * HUECO ANGULAR maximo por anillo: 74 / 49 / 38 / 29 / 22 grados (los claros
+//     de los racimos). Sumando los cinco anillos el hueco maximo es de 12
+//     grados, muy por debajo del campo de vision horizontal (~98): NINGUNA
+//     direccion queda vacia, y el claro de una capa siempre deja ver la de
+//     atras. Eso es justo lo que da la sensacion de bosque sin fondo.
+//   * GUARDIA DE RECINTO: la esquina mas interior de todo el telon cae en
+//     r = 109.5 (el minimo permitido era 100; WMAX no llega a recortar ninguna).
+//   * ALCANCE: el punto mas lejano queda en r = 237; con el jugador en el borde
+//     del recinto (58) son 295 < 320 = plano lejano de la camara. Entra entero,
+//     nada se corta contra el far plane.
+//   * VENTANAS: 8, en y = 19..55, ocho cotas distintas, todas por debajo del
+//     arranque de la aguja de su torre y por encima del horizonte.
