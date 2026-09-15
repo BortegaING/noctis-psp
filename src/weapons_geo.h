@@ -18,7 +18,7 @@
 //   ORIGEN (0,0,0) = centro del puno (donde cierra la mano).
 //   -Y  = hacia la PUNTA (la hoja baja).      +Y = pomo / regaton (0.30..0.74).
 //   -X  = FILO (borde cortante).              +X = LOMO (canto romo).
-//   +-Z = CARAS PLANAS de la hoja (espesor); |z| <= 0.13 en todas.
+//   +-Z = CARAS PLANAS de la hoja (espesor); |z| <= 0.15 en todas.
 //   Unidades = las del personaje (char_prims.h: humano ~3.4-3.8 de alto).
 //   El largo sale de kMelee[idx].reach (decimetros * 0.12) y el grosor de
 //   kMelee[idx].weight => un arma pesada SE VE maciza y una rapida SE VE fina.
@@ -113,7 +113,7 @@ static int buildMeleeWeapon(LineVertex *buf, int idx, unsigned int tint)
     //     tsuba CUADRADA, empunadura mas larga y un lomo reforzado.
     // =================================================================
     case 1: {
-        addLimb(buf, i, 0.00f, 0.40f, 0.01f,  0.00f, -0.02f, 0.00f,
+        addLimb(buf, i, 0.00f, 0.40f, 0.01f,  0.00f, -0.09f, 0.00f,
                 0.060f, 0.056f, 6, WRAP, GRIP);                      // tsuka larga (72)
         addLimb(buf, i, 0.00f, 0.40f, 0.01f,  0.00f,  0.47f, 0.012f,
                 0.066f, 0.046f, 4, DARKM, SPINE);                    // pomo (48)
@@ -172,9 +172,9 @@ static int buildMeleeWeapon(LineVertex *buf, int idx, unsigned int tint)
         addLimb(buf, i, 0.00f, -0.22f - L*0.68f, 0.0f, 0.00f, -0.22f - L*0.95f, 0.0f,
                 W * 0.74f, 0.005f, 4, STEEL, EDGE);                  // tramo 3 / punta (48)
         addLimb(buf, i, 0.00f, -0.22f - L*0.32f, -0.05f, 0.00f, -0.22f - L*0.32f, 0.05f,
-                0.032f, 0.032f, 3, GRAV, GRAV);                      // nodo de union 1 (36)
+                0.055f, 0.055f, 3, GRAV, GRAV);                      // nodo de union 1 (36)
         addLimb(buf, i, 0.00f, -0.22f - L*0.66f, -0.05f, 0.00f, -0.22f - L*0.66f, 0.05f,
-                0.028f, 0.028f, 3, GRAV, GRAV);                      // nodo de union 2 (36)
+                0.048f, 0.048f, 3, GRAV, GRAV);                      // nodo de union 2 (36)
         break;                                                        // = 408
     }
 
@@ -188,19 +188,22 @@ static int buildMeleeWeapon(LineVertex *buf, int idx, unsigned int tint)
                 0.075f, 0.070f, 6, GRIP, WRAP);                      // barra de agarre (72)
         addSolidBox(buf, i, 0.00f,  0.34f, 0.00f, 0.13f, 0.13f, 0.10f, DARKM); // contrapeso (30)
         addSolidBox(buf, i, 0.00f, -0.20f, 0.00f, 0.30f, 0.14f, 0.07f, SPINE); // guarda-bloque (30)
-        addLimb(buf, i, 0.00f, -0.14f, 0.0f, 0.00f, -0.14f - L*0.92f, 0.0f,
-                W * 1.05f, W * 0.95f, 4, STEEL, SPINE);              // cuerpo del cleaver (48)
-        addLimb(buf, i, -W * 0.85f, -0.16f, 0.0f, -W * 0.95f, -0.14f - L*0.92f, 0.0f,
-                W * 0.55f, W * 0.50f, 4, EDGE, EDGE);                // FILO claro (48)
-        addLimb(buf, i,  W * 0.80f, -0.16f, 0.0f,  W * 0.85f, -0.14f - L*0.90f, 0.0f,
-                W * 0.50f, W * 0.45f, 4, DARKM, SPINE);              // lomo oscuro (48)
-        addLimb(buf, i, 0.00f, -0.14f - L*0.92f, 0.0f, -W * 0.50f, -0.14f - L*1.06f, 0.0f,
-                W * 0.95f, 0.020f, 4, STEEL, EDGE);                  // punta de cincel (48)
-        for (int t = 0; t < 5; ++t) {                                 // dientes (5 * 12 = 60)
-            float ty = -0.28f - L * 0.15f * (float)t;
-            addPyramid(buf, i, -W * 1.45f, ty, 0.00f, 0.075f, 0.055f, 0.105f, SPINE);
+        // cuchilla que se ENSANCHA al bajar (perfil de cleaver, no un ladrillo)
+        addLimb(buf, i, 0.00f, -0.14f, 0.0f, 0.00f, -0.14f - L*0.88f, 0.0f,
+                W * 0.80f, W * 1.15f, 4, STEEL, SPINE);              // cuerpo (48)
+        addLimb(buf, i, -W * 0.62f, -0.16f, 0.0f, -W * 1.05f, -0.14f - L*0.88f, 0.0f,
+                W * 0.45f, W * 0.55f, 4, EDGE, EDGE);                // FILO claro (48)
+        addLimb(buf, i,  W * 0.58f, -0.16f, 0.0f,  W * 0.95f, -0.14f - L*0.86f, 0.0f,
+                W * 0.42f, W * 0.52f, 4, DARKM, SPINE);              // lomo oscuro (48)
+        addLimb(buf, i, 0.00f, -0.14f - L*0.88f, 0.0f, -W * 0.70f, -0.14f - L*1.08f, 0.0f,
+                W * 1.15f, 0.025f, 4, STEEL, EDGE);                  // punta de cincel (48)
+        for (int t = 0; t < 6; ++t) {                                 // DIENTES fuera del filo (6 * 12 = 72)
+            float f  = 0.10f + 0.145f * (float)t;                     // de la guarda a la punta
+            float ty = -0.14f - L * f;
+            float tx = -(W * (0.62f + 0.49f * f) + W * 0.62f);        // sigue el filo, sobresale
+            addPyramid(buf, i, tx, ty, 0.00f, 0.090f, 0.105f, 0.140f, SPINE);
         }
-        break;                                                        // = 384
+        break;                                                        // = 396
     }
 
     // =================================================================
@@ -218,12 +221,12 @@ static int buildMeleeWeapon(LineVertex *buf, int idx, unsigned int tint)
                 R * 1.35f, R * 1.30f, 5, GRIP, DARKM);               // envoltura de agarre (60)
         addLimb(buf, i, 0.00f, -0.02f, 0.00f, 0.00f, -L * 0.66f, 0.00f,
                 R * 1.05f, R * 0.95f, 6, WRAP, DARKM);               // asta baja (72)
-        addLimb(buf, i, 0.00f, -L * 0.66f, 0.00f, 0.00f, -L * 0.71f, 0.00f,
-                R * 1.55f, R * 1.25f, 5, SPINE, STEEL);              // cuello/socket (60)
-        addLimb(buf, i, 0.00f, -L * 0.705f, 0.00f, 0.00f, -L * 0.78f, 0.00f,
-                R * 1.20f, W * 1.05f, 4, STEEL, EDGE);               // hoja: ensancha (48)
-        addLimb(buf, i, 0.00f, -L * 0.78f, 0.00f, 0.00f, -L * 0.955f, 0.00f,
-                W * 1.05f, 0.004f, 4, EDGE, STEEL);                  // hoja: punta (48)
+        addLimb(buf, i, 0.00f, -L * 0.655f, 0.00f, 0.00f, -L * 0.70f, 0.00f,
+                R * 1.70f, R * 1.35f, 5, SPINE, STEEL);              // cuello/socket (60)
+        addLimb(buf, i, 0.00f, -L * 0.695f, 0.00f, 0.00f, -L * 0.785f, 0.00f,
+                R * 1.25f, W * 1.45f, 4, STEEL, EDGE);               // hoja: ensancha (48)
+        addLimb(buf, i, 0.00f, -L * 0.785f, 0.00f, 0.00f, -L * 0.955f, 0.00f,
+                W * 1.45f, 0.004f, 4, EDGE, STEEL);                  // hoja: punta (48)
         break;                                                        // = 408
     }
 
@@ -315,8 +318,9 @@ static int buildMeleeWeapon(LineVertex *buf, int idx, unsigned int tint)
                 W * 1.14f, W * 0.94f, 4, STEEL, STEEL);              // hoja tramo 1 (48)
         addLimb(buf, i, 0.00f, -0.16f - L*0.62f, 0.00f, 0.00f, -0.16f - L*1.00f, 0.00f,
                 W * 0.94f, 0.005f, 4, STEEL, EDGE);                  // hoja tramo 2 (48)
-        addLimb(buf, i, 0.00f, -0.24f, W * 0.72f, 0.00f, -0.16f - L*0.60f, W * 0.60f,
-                0.020f, 0.016f, 4, GOLD, GOLDD);                     // incrustacion (48)
+        // incrustacion: va SOBRE la cara +Z (si no, queda enterrada en la hoja)
+        addLimb(buf, i, 0.00f, -0.24f, W * 1.22f, 0.00f, -0.16f - L*0.60f, W * 1.02f,
+                0.022f, 0.018f, 4, GOLD, GOLDD);                     // (48)
         break;                                                        // = 402
     }
     }
@@ -325,18 +329,18 @@ static int buildMeleeWeapon(LineVertex *buf, int idx, unsigned int tint)
 }
 
 // =====================================================================
-//  TABLA DE REFERENCIA (extension aproximada en espacio local, unidades de
-//  personaje; el eje +Y es el pomo, -Y la punta, -X el filo):
-//    idx  arma                 y max   y min   x min   x max   verts
-//     0   Katana                0.36   -1.50   -0.33   +0.13    408
-//     1   Katana Pesada         0.47   -1.66   -0.28   +0.15    390
-//     2   Espada Energetica     0.31   -1.42   -0.09   +0.09    408
-//     3   Hoja Gravitacional    0.35   -1.93   -0.10   +0.10    408
-//     4   Espada Industrial     0.44   -1.54   -0.21   +0.15    384
-//     5   Lanza                 0.74   -2.52   -0.09   +0.09    408
-//     6   Guadana               0.70   -1.86   -1.13   +0.06    396
-//     7   Espada de Dos Manos   0.69   -2.26   -0.46   +0.46    396
-//     8   Hoja Experimental     0.26   -1.72   -0.16   +0.16    372
-//     9   Arma Ancestral        0.56   -2.08   -0.36   +0.36    402
-//  Ninguna supera 448 verts (MELEE_MAX_VERTS) ni |z| = 0.13.
+//  TABLA DE REFERENCIA (caja real medida, en unidades de personaje; +Y = pomo,
+//  -Y = punta, -X = filo, +-Z = espesor):
+//    idx  arma                 y max   y min   x min   x max   |z|    verts
+//     0   Katana                0.36   -1.50   -0.34   +0.12   0.08    408
+//     1   Katana Pesada         0.47   -1.66   -0.29   +0.15   0.10    390
+//     2   Espada Energetica     0.31   -1.42   -0.09   +0.09   0.06    408
+//     3   Hoja Gravitacional    0.35   -1.93   -0.10   +0.10   0.10    408
+//     4   Espada Industrial     0.44   -1.57   -0.22   +0.16   0.13    396
+//     5   Lanza                 0.74   -2.52   -0.11   +0.11   0.11    408
+//     6   Guadana               0.70   -1.92   -1.12   +0.05   0.10    396
+//     7   Espada de Dos Manos   0.68   -2.26   -0.46   +0.46   0.11    396
+//     8   Hoja Experimental     0.26   -1.72   -0.19   +0.10   0.08    372
+//     9   Arma Ancestral        0.56   -2.08   -0.37   +0.37   0.15    402
+//  Peor caso 408 verts (< MELEE_MAX_VERTS = 448); ningun |z| pasa de 0.15.
 // =====================================================================

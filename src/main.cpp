@@ -235,6 +235,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "atmosphere.h"   // Vacio/Abismo (ruinas suspendidas) + siluetas colosales lejanas
 #include "weapons_fx.h"   // FX/comportamiento distinto por arma a distancia (10)
 #include "anim.h"        // ciclo de caminata procedural del hunter
+#include "weapons_geo.h" // buildMeleeWeapon(): las 10 armas melee con forma propia (lista para cablear al cambio de arma)
 #include "viewmodel.h"    // arma en 1ra persona (pistola de chispa) + spec de movimiento
 #include "gravity.h"      // 6 direcciones de gravedad (mecanica firma, directiva 22)
 #include "village_props.h" // props del pueblo (faroles calidos, rejas, tumbas) - BLAME!/Bloodborne
