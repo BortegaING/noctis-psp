@@ -629,6 +629,7 @@ static const Npc kNpcs[] = {
 };
 static const int kNpcCount = (int)(sizeof(kNpcs) / sizeof(kNpcs[0]));
 #include "robots.h"   // buildRobots(): NPCs roboticos variados (mensajero/mecanico/guardian/dron/...)
+#include "dialogue.h" // 84 lineas repartidas en 6 robots, cada uno con su caracter y su pedazo de historia
 static LineVertex __attribute__((aligned(16))) g_npc[2400];
 static int g_npcVerts = 0;
 static int g_npcKilled[64] = {0};   // (robots = habitantes, no enemigos; el kill-system queda inerte)
@@ -979,6 +980,7 @@ int main(void) {
 #endif
     buildNpcs();
     gargInit();
+    dlgInit();      // los 6 robots dejan de ser estatuas mudas
     // buildChains();   // cadenas QUITADAS (cosas entremedio que bajan FPS); g_chainVerts=0
     buildEnv();
     // buildFarSilhouettes() y buildVoidLayer() BORRADAS: generaban 3.228 vertices de
@@ -1004,6 +1006,10 @@ int main(void) {
     const float HP_MAX = 100.0f;
     float hp = HP_MAX;      // VIDA REAL: antes la barra era decorativa y el numero estaba escrito a mano
     int   hurtFlash = 0;
+    // DIALOGO: hablan solos al acercarte. Todos los botones estaban ya ocupados, y que
+    // te hablen al pasar encaja mejor con el sitio que pedir un boton mas.
+    int   dlgPrev = -1, dlgTimer = 0;
+    const char *dlgLine = 0, *dlgWho = 0;
     float EN_MAX = 780.0f;   // sube con cada material recogido (objEnergyMax)
     // constantes de movilidad (diseno del agente)
     const float DEADZONE = 0.18f, RUN_SPEED = 0.22f, ACCEL_GND = 0.20f, ACCEL_AIR = 0.09f, STOP_FRIC = 0.22f, CAM_SPEED = 0.03f;
@@ -1199,6 +1205,7 @@ int main(void) {
                                                 sinf(camYaw) * cp2, sp2, -cosf(camYaw) * cp2);
                   if (tg >= 0 && tg != gravG) {
                       gravG = tg; en -= GRAV_EN_SWITCH;        // cuesta energia: obliga a planear la ruta
+                      dlgNotifyGravity();                     // los robots cercanos lo comentan
                       velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f; grounded = 0;
                   }
               }
@@ -1339,7 +1346,7 @@ int main(void) {
             gargUpdate(playerX, playerY, playerZ, gravG);
             {   // las gargolas que te alcanzan hacen dano; al morir, vuelves al ultimo ancla
                 const int nHit = gargHitPlayer(playerX, playerY, playerZ, 1.0f);
-                if (nHit > 0) { hp -= (float)(nHit * GARG_TOUCH_DMG); hurtFlash = 12; }
+                if (nHit > 0) { hp -= (float)(nHit * GARG_TOUCH_DMG); hurtFlash = 12; dlgNotifyHurt(); }
                 if (hp <= 0.0f) {
                     objRespawn(&playerX, &playerY, &playerZ);
                     gravG = objRespawnGrav();
@@ -1357,6 +1364,22 @@ int main(void) {
                 gravG = objRespawnGrav();                     // ...con SU gravedad (si no, caes 60)
                 velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f;
                 grounded = 1;
+            }
+
+            // ===== DIALOGO: hablan al acercarte, una vez por acercamiento =====
+            // dlgNearest mide distancia 3D real, no en el plano: caminando por una pared
+            // 20 unidades por encima de un robot NO se le habla, que es lo correcto.
+            // Hay que llamarla cada frame aunque no haya nadie cerca, porque es ella la
+            // que hace caducar las reacciones de gravedad y de herida.
+            {
+                const int near = dlgNearest(playerX, playerY, playerZ, 4.0f);
+                if (near >= 0 && near != dlgPrev) {
+                    dlgLine = dlgSpeak(near, DLG_AUTO);   // DLG_AUTO elige segun el contexto
+                    dlgWho  = dlgName(near);
+                    dlgTimer = 280;
+                }
+                dlgPrev = near;
+                if (dlgTimer > 0) --dlgTimer;
             }
 
             // recoleccion de recursos por proximidad
@@ -1435,7 +1458,7 @@ int main(void) {
             // 3RA PERSONA con GRAVEDAD: "arriba" = -gravedad; adelante en el plano de la gravedad.
             // Con gravedad normal el nub gira la vista (camYaw); con gravedad cambiada la vista
             // queda fija al plano (el nub mueve en el plano) -> siempre consistente con el movimiento.
-            (void)camPitch; (void)bobX; (void)bobY; (void)EYE_H;
+            (void)bobX; (void)bobY; (void)EYE_H;
             float gx, gy, gz, rx, ry, rz, fx, fy, fz;
             gravDirVec(gravG, &gx, &gy, &gz); gravBasis(gravG, &rx, &ry, &rz, &fx, &fy, &fz);
             float s = (gravG == 0) ? sinf(camYaw) : 0.0f, c = (gravG == 0) ? cosf(camYaw) : 1.0f;
@@ -1463,7 +1486,16 @@ int main(void) {
                             ? 0.0f : 2.2f;
             }
             ScePspFVector3 eye = { playerX - fX * camBack + uX * CAM_UP, playerY - fY * camBack + uY * CAM_UP, playerZ - fZ * camBack + uZ * CAM_UP };
-            ScePspFVector3 ctr = { playerX + fX * 4.0f + uX * 1.8f, playerY + fY * 4.0f + uY * 1.8f, playerZ + fZ * 4.0f + uZ * 1.8f };
+            // LA VISTA AHORA SIGUE AL CABECEO. Antes habia un (void)camPitch: la camara
+            // tenia un angulo FIJO mientras el rayo de gravedad SI usaba camPitch, que el
+            // D-pad mueve casi 74 grados arriba y abajo. O sea que "la gravedad va a la
+            // cara que miras" era mentira: la imagen no se movia, el rayo si, y acababas
+            // saltando a una cara que no estabas mirando.
+            // Se inclina el objetivo, no el ojo: la camara no orbita ni se mete en sitios
+            // raros al mirar al cenit, y el rayo y la imagen ya apuntan a lo mismo.
+            const float cpv = cosf(camPitch), spv = sinf(camPitch);
+            const float aX = fX * cpv + uX * spv, aY = fY * cpv + uY * spv, aZ = fZ * cpv + uZ * spv;
+            ScePspFVector3 ctr = { playerX + aX * 4.0f + uX * 1.8f, playerY + aY * 4.0f + uY * 1.8f, playerZ + aZ * 4.0f + uZ * 1.8f };
             ScePspFVector3 up  = { uX, uY, uZ };
             sceGumLookAt(&eye, &ctr, &up);
 #endif
@@ -1668,6 +1700,14 @@ int main(void) {
             st.paused = (paused != 0);
             hudDraw(st);
         }
+        // ---- DIALOGO de los robots: nombre y linea, con desvanecido al final ----
+        if (dlgTimer > 0 && dlgLine) {
+            int a = 255;
+            if (dlgTimer < 60) a = dlgTimer * 4;       // se apaga en el ultimo segundo
+            drawText(24, 196, 1.0f, RGBA(196, 170, 120, a), dlgWho);
+            drawText(24, 208, 1.0f, RGBA(228, 222, 206, a), dlgLine);
+        }
+
         // ---- REPARTO DEL FRAME (mantener SELECT). Sin sprintf: en PSP arrastra medio
         // stdio al binario, y aqui solo hacen falta tres numeros con un decimal.
         if (pad.Buttons & PSP_CTRL_SELECT) {
