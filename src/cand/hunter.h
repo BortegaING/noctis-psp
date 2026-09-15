@@ -78,14 +78,27 @@ static int build_hunter(LineVertex *buf)
     addLimb(buf,i,  0.44f,1.18f,-0.06f,  0.48f,0.98f,-0.06f, 0.09f,0.0f, 4, skirtDk, coatDk); // lado der
     addLimb(buf,i, -0.44f,1.18f,-0.06f, -0.48f,0.98f,-0.06f, 0.09f,0.0f, 4, skirtDk, coatDk); // lado izq
 
-    // ================= CLEAVER (right hand, sawtooth, point-down) =============
-    // ESPADA con FORMA: empunadura + guarda + hoja que se AFILA hacia la punta
-    addLimb(buf,i, 0.60f,1.50f,-0.06f, 0.70f,1.28f,-0.11f, 0.05f,0.05f, 6, coatDk, coatDk); // empunadura
-    addSolidBox(buf,i, 0.71f,1.24f,-0.11f, 0.30f,0.07f,0.09f, RGBA(120,100,60,255));         // guarda (cruz)
-    addSolidBox(buf,i, 0.73f,0.80f,-0.115f, 0.30f,0.05f,0.46f, steel);                        // hoja ancha
-    addSolidBox(buf,i, 0.74f,0.50f,-0.115f, 0.21f,0.05f,0.32f, steel);                        // se angosta
-    addSolidBox(buf,i, 0.75f,0.28f,-0.115f, 0.12f,0.05f,0.24f, steel);                        // hacia la punta
-    addSolidBox(buf,i, 0.755f,0.15f,-0.115f, 0.05f,0.05f,0.15f, brighten(steel,1.3f));        // PUNTA/filo
+    // ================= SABLE DEL CAZADOR (mano derecha, punta abajo) ==========
+    // Antes eran 4 CAJAS apiladas cada vez mas angostas: una escalera, sin punta ni filo
+    // ("cuadrados grises"). Ahora la hoja es un prisma que se AFINA de verdad con addLimb,
+    // el filo mas claro que el lomo (degradado colB->colT) y remata en PUNTA.
+    {
+        const unsigned int edge  = RGBA(196, 206, 226, 255);  // filo pulido
+        const unsigned int spine = RGBA( 92, 100, 118, 255);  // lomo, mas oscuro
+        const unsigned int brass = RGBA(152, 122,  62, 255);  // guarda de laton
+        const unsigned int wood  = RGBA( 58,  42,  32, 255);  // empunadura
+        const float bx = 0.735f, bz = -0.112f;                // eje de la hoja
+        // empunadura: se ensancha hacia la mano + pomo redondo
+        addLimb(buf,i, bx-0.02f,1.52f,bz+0.04f,  bx,1.27f,bz, 0.038f,0.055f, 6, wood, wood);
+        addBall(buf,i, bx-0.022f,1.545f,bz+0.045f, 0.055f,0.05f,0.055f, 2,5, brass);
+        // guarda: dos brazos cortos que cruzan la hoja (no un ladrillo)
+        addLimb(buf,i, bx-0.16f,1.245f,bz,  bx+0.16f,1.245f,bz, 0.030f,0.030f, 4, brass, brass);
+        addLimb(buf,i, bx,1.245f,bz-0.07f,  bx,1.245f,bz+0.07f, 0.026f,0.026f, 3, brass, brass);
+        // hoja: ancha junto a la guarda, se afina hacia abajo; filo claro / lomo oscuro
+        addLimb(buf,i, bx,1.23f,bz,  bx,0.42f,bz, 0.115f,0.062f, 4, edge, spine);
+        // punta: remata en filo
+        addLimb(buf,i, bx,0.42f,bz,  bx,0.10f,bz, 0.062f,0.006f, 4, edge, edge);
+    }
     // ================= BELT BUCKLE (tiny flat prop) =================
     addSolidBox(buf,i, 0.00f,1.66f,-0.30f, 0.14f,0.05f,0.08f, steel);
 

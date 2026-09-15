@@ -18,6 +18,14 @@ static const float SEC_CEIL   = 60.0f;  // TECHO = doble de la altura de una mas
 static const float SEC_MASS_H = 30.0f;  // altura de las masas ("edificios")
 static const float SEC_M0     =  9.0f;  // borde interior de las masas -> pasillo en cruz de 18
 static const float SEC_M1     = 45.0f;  // borde exterior -> pasillo perimetral de 9
+// --- arcada: columnas EXENTAS (separadas de la masa, se puede pasar por detras) ---
+static const float SEC_COL_OFF  =  7.0f;  // a 2u de la cara de la masa: no quedan pegadas
+static const float SEC_COL_STEP = 16.0f;  // separacion entre columnas
+static const float SEC_COL_W    =  3.3f;  // lado del fuste (colision)
+static const float SEC_COL_H    = 18.6f;  // alto total con capitel
+static const int   SEC_COL_SEG  =  5;     // el fuste va en TRAMOS: un quad de 16u de alto
+                                          // cruza el plano de la camara al pasar cerca y el
+                                          // hardware lo DESCARTA entero -> la columna "se borra".
 
 // --- colision: llena g_city con los volumenes solidos (cajas alineadas a ejes) ---
 // Se reusa el sistema de colision que ya existe; los techos de las masas son pisables.
@@ -35,7 +43,17 @@ static void buildSectorCollision() {
     g_city[n++] = {  0.0f, -wc, 2.0f * (SEC_HALF + wt), wt, SEC_CEIL, c };  // muro -Z
     g_city[n++] = {  wc,  0.0f, wt, 2.0f * (SEC_HALF + wt), SEC_CEIL, c };  // muro +X
     g_city[n++] = { -wc,  0.0f, wt, 2.0f * (SEC_HALF + wt), SEC_CEIL, c };  // muro -X
-    g_cityCount = n;
+    // COLUMNAS de la arcada: antes eran solo adorno y se atravesaban. Ahora son solidas
+    // (y sus capiteles quedan pisables, util para la escalada con gravedad).
+    for (int a = 0; a < 2; ++a)
+        for (int s = -1; s <= 1; s += 2)
+            for (int k = -2; k <= 2; ++k) {
+                float t = (float)k * SEC_COL_STEP;
+                float x = (a == 0) ? (SEC_COL_OFF * s) : t;
+                float z = (a == 0) ? t : (SEC_COL_OFF * s);
+                g_city[n++] = { x, z, SEC_COL_W, SEC_COL_W, SEC_COL_H, c };
+            }
+    g_cityCount = n;                                   // 4 masas + 4 muros + 20 columnas = 28
 }
 
 // --- SUELO y TECHO (teselados finos: la camara nunca cruza un triangulo grande) ---
@@ -105,18 +123,23 @@ static void buildSectorWalls(TexVertex *buf, int &i) {
     // ARCADA de los pasillos en cruz: columnas SEPARADAS + arcos ojivales entre ellas.
     // Van en los bordes del pasillo (|x|=9 y |z|=9), dejando el centro libre para caminar.
     const float colH = 16.0f, colR = 1.5f;
+    const float segH = colH / (float)SEC_COL_SEG;    // tramos cortos (ver SEC_COL_SEG)
     for (int a = 0; a < 2; ++a) {                    // a=0 pasillo en Z, a=1 pasillo en X
         for (int s = -1; s <= 1; s += 2) {           // los dos lados del pasillo
             for (int k = -2; k <= 2; ++k) {          // 5 columnas por lado
-                float t = (float)k * 16.0f;          // separadas 16u (no pegadas)
-                float x = (a == 0) ? (SEC_M0 * s) : t;
-                float z = (a == 0) ? t : (SEC_M0 * s);
-                addSolidBoxT(buf, i, x, 0.0f,  z, colR * 2.2f, colR * 2.2f, 1.2f, dark);   // basa
-                addSolidBoxT(buf, i, x, 1.2f,  z, colR * 1.6f, colR * 1.6f, colH, stone);  // fuste
+                float t = (float)k * SEC_COL_STEP;
+                float x = (a == 0) ? (SEC_COL_OFF * s) : t;
+                float z = (a == 0) ? t : (SEC_COL_OFF * s);
+                addSolidBoxT(buf, i, x, 0.0f, z, colR * 2.2f, colR * 2.2f, 1.2f, dark);    // basa
+                for (int g = 0; g < SEC_COL_SEG; ++g)   // FUSTE EN TRAMOS (no un bloque de 16)
+                    addSolidBoxT(buf, i, x, 1.2f + segH * (float)g, z,
+                                 colR * 1.6f, colR * 1.6f, segH, (g & 1) ? stone : brighten(stone, 0.94f));
                 addSolidBoxT(buf, i, x, 1.2f + colH, z, colR * 2.4f, colR * 2.4f, 1.4f, dark); // capitel
                 if (k < 2) {   // arco ojival hacia la columna siguiente
-                    float ax = (a == 0) ? x : t + 8.0f, az = (a == 0) ? t + 8.0f : z;
-                    addArchT(buf, i, ax, az, 8.0f, 1.2f + colH + 1.4f, 7.0f, colR * 1.5f, (a == 0) ? 1 : 0, stone);
+                    float ax = (a == 0) ? x : t + SEC_COL_STEP * 0.5f;
+                    float az = (a == 0) ? t + SEC_COL_STEP * 0.5f : z;
+                    addArchT(buf, i, ax, az, SEC_COL_STEP * 0.5f, 1.2f + colH + 1.4f, 7.0f,
+                             colR * 1.5f, (a == 0) ? 1 : 0, stone);
                 }
             }
         }

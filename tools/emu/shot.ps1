@@ -56,16 +56,23 @@ $w = $r.Rr - $r.L; $ht = $r.B - $r.T
 if ($w -lt 400) { [W3]::MoveWindow($h, -2600, 80, 980, 600, $true) | Out-Null; Start-Sleep -Seconds 1; $r = New-Object W3+R; [W3]::GetWindowRect($h, [ref]$r) | Out-Null; $w = $r.Rr - $r.L; $ht = $r.B - $r.T }
 $cx = [int]($w/2); $cy = [int]($ht/2)
 $saved = $false
-for ($k = 0; $k -lt 12 -and -not $saved; $k++) {
+# Espera a que el juego este REALMENTE dibujando: el HUD (barras HP/EN/GRV) siempre
+# tiene pixeles vivos arriba-izquierda. Si el frame sigue apagado, reintenta.
+for ($k = 0; $k -lt 30 -and -not $saved; $k++) {
   Start-Sleep -Milliseconds 500
   $bmp = New-Object System.Drawing.Bitmap($w, $ht)
   $g = [System.Drawing.Graphics]::FromImage($bmp)
   $hdc = $g.GetHdc(); [W3]::PrintWindow($h, $hdc, 2) | Out-Null; $g.ReleaseHdc($hdc)
-  # con software renderer la captura es fiable; rechaza solo el frame BLANCO de
-  # carga. Toma un par de frames de calentamiento primero.
-  $px = $bmp.GetPixel($cx, $cy)
-  $white = ($px.R -gt 235 -and $px.G -gt 235 -and $px.B -gt 235)
-  if (-not $white -and $k -ge 3) { $bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png); $saved = $true }
+  $alive = $false
+  for ($sy = 80; $sy -lt 200 -and -not $alive; $sy += 8) {
+    for ($sx = 40; $sx -lt 520; $sx += 8) {
+      if ($sx -ge $w -or $sy -ge $ht) { continue }
+      $p = $bmp.GetPixel($sx, $sy)
+      if ($p.R -gt 110 -or $p.G -gt 110 -or $p.B -gt 110) { $alive = $true; break }
+    }
+  }
+  $bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)   # guarda SIEMPRE: si falla, quiero VER que hay
+  if ($alive) { $saved = $true }
   $g.Dispose(); $bmp.Dispose()
 }
 Write-Output ("SHOT {0}x{1} saved={2}" -f $w, $ht, $saved)

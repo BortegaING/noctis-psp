@@ -665,34 +665,45 @@ static void swizzleTex(unsigned char *out, const unsigned char *in, int width, i
 }
 
 // texturas del juego (rellenadas por los generadores del agente) + copia swizzled
+// ---- RGBA8888 -> RGB565: la mitad de bytes leidos por pixel. En un escenario
+// limitado por FILL (el cuello de la PSP) esto es de lo que mas rinde. El swizzle
+// se hace DESPUES, sobre los datos ya de 16 bits (ancho en bytes = lado * 2).
+static unsigned short __attribute__((aligned(16))) g_tmp16[128 * 128];
+static void to5650(unsigned short *dst, const unsigned int *src, int n) {
+    for (int k = 0; k < n; ++k) {
+        unsigned int c = src[k];
+        int r = c & 0xFF, g = (c >> 8) & 0xFF, b = (c >> 16) & 0xFF;
+        dst[k] = (unsigned short)((r >> 3) | ((g >> 2) << 5) | ((b >> 3) << 11));
+    }
+}
 #define WTEX 32
 static unsigned int __attribute__((aligned(16))) g_winTex[WTEX * WTEX];
-static unsigned int __attribute__((aligned(16))) g_winTexS[WTEX * WTEX];
-static void buildWinTex() { genWindow(g_winTex, WTEX); swizzleTex((unsigned char*)g_winTexS, (const unsigned char*)g_winTex, WTEX * 4, WTEX); sceKernelDcacheWritebackAll(); }
+static unsigned short __attribute__((aligned(16))) g_winTexS[WTEX * WTEX];
+static void buildWinTex() { genWindow(g_winTex, WTEX); to5650(g_tmp16, g_winTex, WTEX * WTEX); swizzleTex((unsigned char*)g_winTexS, (const unsigned char*)g_tmp16, WTEX * 2, WTEX); sceKernelDcacheWritebackAll(); }
 
 #define MTEX 64
 static unsigned int __attribute__((aligned(16))) g_metalTex[MTEX * MTEX];
-static unsigned int __attribute__((aligned(16))) g_metalTexS[MTEX * MTEX];
-static void buildMetalTex() { genMetal(g_metalTex, MTEX); swizzleTex((unsigned char*)g_metalTexS, (const unsigned char*)g_metalTex, MTEX * 4, MTEX); sceKernelDcacheWritebackAll(); }
+static unsigned short __attribute__((aligned(16))) g_metalTexS[MTEX * MTEX];
+static void buildMetalTex() { genMetal(g_metalTex, MTEX); to5650(g_tmp16, g_metalTex, MTEX * MTEX); swizzleTex((unsigned char*)g_metalTexS, (const unsigned char*)g_tmp16, MTEX * 2, MTEX); sceKernelDcacheWritebackAll(); }
 
 #define STEX 128
 static unsigned int __attribute__((aligned(16))) g_stoneTex[STEX * STEX];
-static unsigned int __attribute__((aligned(16))) g_stoneTexS[STEX * STEX];
-static void buildStoneTex() { genStone(g_stoneTex, STEX); swizzleTex((unsigned char*)g_stoneTexS, (const unsigned char*)g_stoneTex, STEX * 4, STEX); sceKernelDcacheWritebackAll(); }
+static unsigned short __attribute__((aligned(16))) g_stoneTexS[STEX * STEX];
+static void buildStoneTex() { genStone(g_stoneTex, STEX); to5650(g_tmp16, g_stoneTex, STEX * STEX); swizzleTex((unsigned char*)g_stoneTexS, (const unsigned char*)g_tmp16, STEX * 2, STEX); sceKernelDcacheWritebackAll(); }
 
 // fachada gotica (ventanas ojivales en la TEXTURA): los edificios simples la usan
 static unsigned int __attribute__((aligned(16))) g_facadeTex[STEX * STEX];
-static unsigned int __attribute__((aligned(16))) g_facadeTexS[STEX * STEX];
-static void buildFacadeTex() { genFacade(g_facadeTex, STEX); swizzleTex((unsigned char*)g_facadeTexS, (const unsigned char*)g_facadeTex, STEX * 4, STEX); sceKernelDcacheWritebackAll(); }
+static unsigned short __attribute__((aligned(16))) g_facadeTexS[STEX * STEX];
+static void buildFacadeTex() { genFacade(g_facadeTex, STEX); to5650(g_tmp16, g_facadeTex, STEX * STEX); swizzleTex((unsigned char*)g_facadeTexS, (const unsigned char*)g_tmp16, STEX * 2, STEX); sceKernelDcacheWritebackAll(); }
 // EL POZO: textura INDUSTRIAL-gotica fria (paneles/tuberias/remaches) para balcon + muros del pozo
 static unsigned int __attribute__((aligned(16))) g_indTex[STEX * STEX];
-static unsigned int __attribute__((aligned(16))) g_indTexS[STEX * STEX];
-static void buildIndTex() { genIndustrial(g_indTex, STEX); swizzleTex((unsigned char*)g_indTexS, (const unsigned char*)g_indTex, STEX * 4, STEX); sceKernelDcacheWritebackAll(); }
+static unsigned short __attribute__((aligned(16))) g_indTexS[STEX * STEX];
+static void buildIndTex() { genIndustrial(g_indTex, STEX); to5650(g_tmp16, g_indTex, STEX * STEX); swizzleTex((unsigned char*)g_indTexS, (const unsigned char*)g_tmp16, STEX * 2, STEX); sceKernelDcacheWritebackAll(); }
 
 // adoquin/losas para el PISO de todo el mundo
 static unsigned int __attribute__((aligned(16))) g_groundTex[STEX * STEX];
-static unsigned int __attribute__((aligned(16))) g_groundTexS[STEX * STEX];
-static void buildGroundTex() { genGround(g_groundTex, STEX); swizzleTex((unsigned char*)g_groundTexS, (const unsigned char*)g_groundTex, STEX * 4, STEX); sceKernelDcacheWritebackAll(); }
+static unsigned short __attribute__((aligned(16))) g_groundTexS[STEX * STEX];
+static void buildGroundTex() { genGround(g_groundTex, STEX); to5650(g_tmp16, g_groundTex, STEX * STEX); swizzleTex((unsigned char*)g_groundTexS, (const unsigned char*)g_tmp16, STEX * 2, STEX); sceKernelDcacheWritebackAll(); }
 
 static void buildChains() {
     int i = 0;
@@ -1311,7 +1322,7 @@ int main(void) {
 
         // piedra texturizada (torres, agujas, muros, suelo, plataforma)
         sceGuEnable(GU_TEXTURE_2D);
-        sceGuTexMode(GU_PSM_8888, 0, 0, GU_TRUE);   // GU_TRUE = texturas SWIZZLED (PSP real)
+        sceGuTexMode(GU_PSM_5650, 0, 0, GU_TRUE);   // 16 bits + SWIZZLED: mitad de lectura por pixel
         sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);   // PISO: adoquin gotico (genGround, alto contraste: juntas oscuras + losas)
         sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGB);   // PISO en REPLACE: brillo = textura directa (el MODULATE lo dejaba casi negro = vacio)
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);   // 1 texel/pixel: gran ahorro de fill en PSP real
