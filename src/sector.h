@@ -248,6 +248,15 @@ static void buildChapel(TexVertex *buf, int &i, int a, float s, float cx, float 
 static void buildSectorWalls(TexVertex *buf, int &i) {
     const unsigned int stone = brighten(RGBA(69, 65, 58, 255), 2.1f);
     const unsigned int dark  = brighten(RGBA(46, 41, 36, 255), 2.0f);
+    // PAREDES mas oscuras (Benjamin: "a las paredes colocale un color mas oscuro, no un
+    // color tan piedra"). Son los paños grandes: el cuerpo de las masas y los muros
+    // exteriores. Se baja el multiplicador de 2.1 a 1.35, o sea de (144,136,121) a
+    // (93,88,78). Se mantiene el MISMO tono calido (r > g > b) a proposito: el problema
+    // viejo de "todo se ve gris" venia de una piedra azulada, y volver a enfriarla lo
+    // traeria de vuelta. Solo baja el valor, no cambia el color.
+    // El relieve gotico, las capillas y las cornisas NO se tocan: al quedar mas claras
+    // que el paño, la arquitectura resalta contra la pared en vez de fundirse con ella.
+    const unsigned int wallStone = brighten(RGBA(69, 65, 58, 255), 1.35f);
     const float mc = (SEC_M0 + SEC_M1) * 0.5f, ms = (SEC_M1 - SEC_M0);
 
     // 4 MASAS separadas: cuerpo + cornisa + remate escalonado (silueta gotica, no un ladrillo)
@@ -257,7 +266,7 @@ static void buildSectorWalls(TexVertex *buf, int &i) {
         // las medidas salen de las constantes SEC_CORN_*/SEC_CAP_*/SEC_BUT_* de arriba:
         // buildSectorCollision usa LAS MISMAS, asi lo que se ve y lo que se choca no
         // se pueden separar (era justo el bug: cornisa, remate y contrafuertes sin caja).
-        addSolidBoxT(buf, i, x, 0.0f, z, ms, ms, SEC_MASS_H, stone);                        // cuerpo
+        addSolidBoxT(buf, i, x, 0.0f, z, ms, ms, SEC_MASS_H, wallStone);                    // cuerpo
         addSolidBoxT(buf, i, x, SEC_MASS_H, z, ms * SEC_CORN_S, ms * SEC_CORN_S,
                      SEC_CORN_H, dark);                                                     // cornisa
         addSolidBoxT(buf, i, x, SEC_MASS_TOP, z, ms * SEC_CAP_S, ms * SEC_CAP_S,
@@ -286,8 +295,8 @@ static void buildSectorWalls(TexVertex *buf, int &i) {
         const float sgn   = (wI & 1) ? -1.0f : 1.0f;
         const float cx    = alongX ? 0.0f : wc * sgn, cz = alongX ? wc * sgn : 0.0f;
         const float bw    = alongX ? wl : wt,        bd = alongX ? wt : wl;
-        addSolidBoxT(buf, i, cx, 0.0f,  cz, bw, bd, opY0, stone);                       // antifecho
-        addSolidBoxT(buf, i, cx, opY1,  cz, bw, bd, SEC_CEIL - opY1, stone);            // muro alto
+        addSolidBoxT(buf, i, cx, 0.0f,  cz, bw, bd, opY0, wallStone);                   // antifecho
+        addSolidBoxT(buf, i, cx, opY1,  cz, bw, bd, SEC_CEIL - opY1, wallStone);        // muro alto
         for (int k = 0; k < nPier; ++k) {        // pilares entre ventanal y ventanal
             float t = -wl * 0.5f + bay * (float)k;
             if (t < -wl * 0.5f || t > wl * 0.5f) continue;

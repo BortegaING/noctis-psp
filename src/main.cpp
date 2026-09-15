@@ -1686,13 +1686,48 @@ int main(void) {
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
         }
 
-        // ---- arco de melee (Circulo): destello frontal al golpear ----
+        // ---- TAJO de la espada (Circulo) ----
+        // Era literalmente un addSolidBox: por eso "se sigue viendo como un cuadrado en
+        // la pantalla". No era un arco mal hecho, es que nunca fue un arco.
+        // Ahora es una cinta curva que BARRE delante del personaje durante los 8 frames
+        // que dura el golpe: la cabeza va por delante, ancha y clara, y la cola la sigue
+        // afilandose. El filo ademas CAE al avanzar, asi que es un tajo diagonal y no un
+        // disco plano, que es lo que lo hace leerse como un sablazo y no como un aro.
         if (meleeFx > 0) {
-            float reach = kMelee[curMelee].reach * 0.20f;
-            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
+            const float reach = kMelee[curMelee].reach * 0.20f;
+            const float p     = 1.0f - (float)meleeFx / 8.0f;   // 0 al golpear -> 1 al final
+            const float TAIL  = 0.45f;                          // largo de la estela
+            float h1 = 0.10f + p * 1.05f; if (h1 > 1.0f) h1 = 1.0f;   // cabeza del tajo
+            float h0 = h1 - TAIL;         if (h0 < 0.0f) h0 = 0.0f;   // cola
+            const int NS = 8;
+            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * (NS * 6));
             int vi = 0;
-            addSolidBox(v, vi, playerX + fx * reach * 0.6f, playerY + 1.0f, playerZ + fz * reach * 0.6f,
-                        reach * 1.2f, 0.28f, reach * 1.2f, RGBA(205, 225, 255, 255));
+            const float SWEEP = 2.35f;                          // radianes que abarca
+            const float aBase = heroYaw - SWEEP * 0.5f;
+            const float span  = (h1 - h0) > 0.001f ? (h1 - h0) : 0.001f;
+            for (int k = 0; k < NS; ++k) {
+                const float f0 = h0 + span * ((float)k        / (float)NS);
+                const float f1 = h0 + span * ((float)(k + 1)  / (float)NS);
+                const float A0 = aBase + SWEEP * f0, A1 = aBase + SWEEP * f1;
+                const float y0 = playerY + 1.55f - 0.95f * f0 * f0;
+                const float y1 = playerY + 1.55f - 0.95f * f1 * f1;
+                const float w0 = 0.26f + 0.64f * f0, w1 = 0.26f + 0.64f * f1;
+                const float ri0 = reach * (1.02f - w0 * 0.5f), ro0 = reach * (1.02f + w0 * 0.5f);
+                const float ri1 = reach * (1.02f - w1 * 0.5f), ro1 = reach * (1.02f + w1 * 0.5f);
+                const float s0 = sinf(A0), c0 = -cosf(A0), s1 = sinf(A1), c1 = -cosf(A1);
+                const float g0 = 0.30f + 0.70f * ((f0 - h0) / span);   // apagado en la cola
+                const float g1 = 0.30f + 0.70f * ((f1 - h0) / span);
+                const unsigned int cA = RGBA(40 + (int)(150.0f * g0), 45 + (int)(190.0f * g0),
+                                             25 + (int)(225.0f * g0), 255);
+                const unsigned int cB = RGBA(40 + (int)(150.0f * g1), 45 + (int)(190.0f * g1),
+                                             25 + (int)(225.0f * g1), 255);
+                v[vi++] = { cA, playerX + s0 * ri0, y0, playerZ + c0 * ri0 };
+                v[vi++] = { cA, playerX + s0 * ro0, y0, playerZ + c0 * ro0 };
+                v[vi++] = { cB, playerX + s1 * ro1, y1, playerZ + c1 * ro1 };
+                v[vi++] = { cA, playerX + s0 * ri0, y0, playerZ + c0 * ri0 };
+                v[vi++] = { cB, playerX + s1 * ro1, y1, playerZ + c1 * ro1 };
+                v[vi++] = { cB, playerX + s1 * ri1, y1, playerZ + c1 * ri1 };
+            }
             sceGumLoadIdentity();
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
         }
