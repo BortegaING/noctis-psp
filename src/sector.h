@@ -114,11 +114,28 @@ static void buildSectorWalls(TexVertex *buf, int &i) {
     }
 
     // MUROS exteriores hasta el techo (cierran el sector)
+    // MUROS exteriores CON VENTANALES: antifecho solido abajo, muro macizo arriba y una
+    // hilera de pilares en medio -> huecos altos por los que se ve el telon de agujas en
+    // niebla (la postal de la referencia). La COLISION sigue siendo el muro entero, asi
+    // que se ve hacia afuera pero no se puede salir ni caer.
     const float wt = 4.0f, wc = SEC_HALF + wt * 0.5f, wl = 2.0f * (SEC_HALF + wt);
-    addSolidBoxT(buf, i,  0.0f, 0.0f,  wc, wl, wt, SEC_CEIL, stone);
-    addSolidBoxT(buf, i,  0.0f, 0.0f, -wc, wl, wt, SEC_CEIL, stone);
-    addSolidBoxT(buf, i,  wc,  0.0f,  0.0f, wt, wl, SEC_CEIL, stone);
-    addSolidBoxT(buf, i, -wc,  0.0f,  0.0f, wt, wl, SEC_CEIL, stone);
+    const float opY0 = 7.0f, opY1 = 27.0f;       // franja abierta (altura de la vista)
+    const float pierW = 5.0f, bay = 19.0f;       // pilar y paso entre ventanales
+    const int   nPier = (int)(wl / bay) + 1;
+    for (int wI = 0; wI < 4; ++wI) {
+        const bool alongX = (wI < 2);            // 0,1 = muros +Z/-Z ; 2,3 = muros +X/-X
+        const float sgn   = (wI & 1) ? -1.0f : 1.0f;
+        const float cx    = alongX ? 0.0f : wc * sgn, cz = alongX ? wc * sgn : 0.0f;
+        const float bw    = alongX ? wl : wt,        bd = alongX ? wt : wl;
+        addSolidBoxT(buf, i, cx, 0.0f,  cz, bw, bd, opY0, stone);                       // antifecho
+        addSolidBoxT(buf, i, cx, opY1,  cz, bw, bd, SEC_CEIL - opY1, stone);            // muro alto
+        for (int k = 0; k < nPier; ++k) {        // pilares entre ventanal y ventanal
+            float t = -wl * 0.5f + bay * (float)k;
+            if (t < -wl * 0.5f || t > wl * 0.5f) continue;
+            addSolidBoxT(buf, i, alongX ? t : cx, opY0, alongX ? cz : t,
+                         alongX ? pierW : wt, alongX ? wt : pierW, opY1 - opY0, dark);
+        }
+    }
 
     // ARCADA de los pasillos en cruz: columnas SEPARADAS + arcos ojivales entre ellas.
     // Van en los bordes del pasillo (|x|=9 y |z|=9), dejando el centro libre para caminar.

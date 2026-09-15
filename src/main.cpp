@@ -1282,7 +1282,7 @@ int main(void) {
 #else
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
-        sceGumPerspective(66.0f, 16.0f / 9.0f, 1.0f, 200.0f); // sector cerrado: nada esta mas lejos -> menos fill y mejor precision de Z
+        sceGumPerspective(66.0f, 16.0f / 9.0f, 1.0f, 320.0f); // alcanza el telon de agujas (r 120..190) visto desde el lado opuesto del recinto
 
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();

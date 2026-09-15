@@ -60,11 +60,13 @@ static inline float spireF01(unsigned int h) {
 
 // Distancia reescalada para fadeToVoid (a=20, b=140). El telon ocupa r=120..190,
 // un tramo que fadeToVoid crudo aplastaria contra el tope: r>=140 -> HAZE puro,
-// todo del mismo color, sin profundidad. Estiramos 118..192 sobre 30..132:
-//   r=120 -> t~0.11 (casi negro)   r=155 -> t~0.46
-//   r=170 -> t~0.74                r=190 -> t~0.91 (casi niebla pura)
+// todo del mismo color, sin profundidad. Estiramos 118..192 sobre 30..137:
+//   r=120 -> t~0.11 (casi negro)   r=140 -> t~0.35
+//   r=160 -> t~0.59                r=190 -> t~0.95 (casi niebla pura)
+// El extremo lejano queda pegado a HAZE a proposito: ese anillo NO tiene que
+// leerse como objeto, solo espesar la bruma para que el bosque no tenga fondo.
 static inline float spireFog(float r) {
-    const float f = 30.0f + (r - 118.0f) * 1.38f;
+    const float f = 30.0f + (r - 118.0f) * 1.45f;
     return (f < 0.0f) ? 0.0f : f;
 }
 
