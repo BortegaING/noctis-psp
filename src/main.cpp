@@ -234,6 +234,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "cand/wraith.h"
 #include "atmosphere.h"   // Vacio/Abismo (ruinas suspendidas) + siluetas colosales lejanas
 #include "weapons_fx.h"   // FX/comportamiento distinto por arma a distancia (10)
+#include "anim.h"        // ciclo de caminata procedural del hunter
 #include "viewmodel.h"    // arma en 1ra persona (pistola de chispa) + spec de movimiento
 #include "gravity.h"      // 6 direcciones de gravedad (mecanica firma, directiva 22)
 #include "village_props.h" // props del pueblo (faroles calidos, rejas, tumbas) - BLAME!/Bloodborne
@@ -995,6 +996,7 @@ int main(void) {
     float heroYaw = 0.0f;   // hacia donde encara el modelo (gira al avanzar)
     int   paused = 0, prevStart = 0;
     float walkPhase = 0.0f, idleT = 0.0f;   // animacion del personaje
+    float speed01 = 0.0f;                   // velocidad normalizada 0..1 para la pose de caminata
     int   moving = 0;
     // ===== PRIMERA PERSONA: mirada + head-bob + sway del arma (constantes del agente de jugabilidad) =====
     float camPitch = 0.0f;                          // mirar arriba/abajo
@@ -1195,6 +1197,8 @@ int main(void) {
             if (en > EN_MAX) en = EN_MAX;
             if (en < 0.0f) en = 0.0f;
             // ===== animacion (segun velocidad real) =====
+            speed01 = sqrtf(velX * velX + velZ * velZ) / RUN_SPEED;
+            if (speed01 > 1.0f) speed01 = 1.0f;
             moving = (velX * velX + velZ * velZ > 0.002f) ? 1 : 0;
             if (moving) walkPhase += 0.17f;   // ritmo de paso mas lento (acorde al RUN_SPEED bajo)
             idleT += 0.05f;
@@ -1239,6 +1243,8 @@ int main(void) {
                 if (grounded && en < EN_MAX) en += EN_REGEN;
                 if (en > EN_MAX) en = EN_MAX; if (en < 0.0f) en = 0.0f;
                 if (gvr * gvr + gvf * gvf > 0.004f) heroYaw = atan2f(gvr, gvf);   // encara el avance en el plano
+                speed01 = sqrtf(gvr * gvr + gvf * gvf) / RUN_SPEED;
+                if (speed01 > 1.0f) speed01 = 1.0f;
                 moving = (gvr * gvr + gvf * gvf > 0.002f) ? 1 : 0;
                 idleT += 0.05f;
             }
@@ -1424,18 +1430,30 @@ int main(void) {
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);   // habitantes roboticos
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_envVerts, 0, g_env);
 
-        // ---- 3RA PERSONA: el HUNTER encara heroYaw (=camYaw), leve balanceo al caminar ----
+        // ---- 3RA PERSONA: el HUNTER con ciclo de caminata (anim.h) ----
+        // Orden importante: gravedad -> encare -> bob (ya en el cuerpo) -> inclinacion
+        // pivotando en la CADERA. Corrige tres fallos del bloque viejo: inclinaba hacia
+        // ATRAS, el pitch se aplicaba en el eje del MUNDO (corriendo de lado parecia
+        // volcar) y el balanceo tardaba dos ciclos en cerrar.
         {
-            float hb = moving ? (sinf(walkPhase) * 0.045f) : (sinf(idleT) * 0.03f);
+            HunterPose hp = hunterPose(walkPhase, idleT, speed01, grounded);
+            const float HIP = 1.70f;
             sceGumLoadIdentity();
-            ScePspFVector3 pp = { playerX, playerY + hb, playerZ };
+            ScePspFVector3 pp = { playerX, playerY, playerZ };
             sceGumTranslate(&pp);
-            ScePspFVector3 gm = { 0.0f, 0.0f, 0.0f };   // pies hacia la gravedad
-            if (gravG == 1) gm.z = 3.14159f; else if (gravG == 2) gm.z = -1.5708f; else if (gravG == 3) gm.z = 1.5708f;
-            else if (gravG == 4) gm.x = 1.5708f; else if (gravG == 5) gm.x = -1.5708f;
+            ScePspFVector3 gm = { 0.0f, 0.0f, 0.0f };           // pies hacia la gravedad
+            if (gravG == 1) gm.z = 3.14159f; else if (gravG == 2) gm.z = -1.5708f;
+            else if (gravG == 3) gm.z = 1.5708f; else if (gravG == 4) gm.x = 1.5708f;
+            else if (gravG == 5) gm.x = -1.5708f;
             sceGumRotateXYZ(&gm);
-            ScePspFVector3 fr = { (moving ? 0.045f : 0.0f), heroYaw, moving ? sinf(walkPhase * 0.5f) * 0.03f : 0.0f };
-            sceGumRotateXYZ(&fr);
+            ScePspFVector3 fy = { 0.0f, heroYaw + hp.yawSway, 0.0f };
+            sceGumRotateXYZ(&fy);
+            ScePspFVector3 bob = { hp.bobX * HUNTER_BOB_SCALE, hp.bobY * HUNTER_BOB_SCALE, 0.0f };
+            sceGumTranslate(&bob);
+            ScePspFVector3 up   = { 0.0f,  HIP, 0.0f }; sceGumTranslate(&up);
+            ScePspFVector3 body = { hunterPitchRad(hp), 0.0f, hunterRollRad(hp) };
+            sceGumRotateXYZ(&body);
+            ScePspFVector3 dn   = { 0.0f, -HIP, 0.0f }; sceGumTranslate(&dn);
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_heroV, 0, g_hero);
         }
 
