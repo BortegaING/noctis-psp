@@ -702,25 +702,14 @@ static void to5650(unsigned short *dst, const unsigned int *src, int n) {
         dst[k] = (unsigned short)((r >> 3) | ((g >> 2) << 5) | ((b >> 3) << 11));
     }
 }
-#define WTEX 32
-static unsigned int __attribute__((aligned(16))) g_winTex[WTEX * WTEX];
-static unsigned short __attribute__((aligned(16))) g_winTexS[WTEX * WTEX];
-static void buildWinTex() { genWindow(g_winTex, WTEX); to5650(g_tmp16, g_winTex, WTEX * WTEX); swizzleTex((unsigned char*)g_winTexS, (const unsigned char*)g_tmp16, WTEX * 2, WTEX); sceKernelDcacheWritebackAll(); }
-
-#define MTEX 64
-static unsigned int __attribute__((aligned(16))) g_metalTex[MTEX * MTEX];
-static unsigned short __attribute__((aligned(16))) g_metalTexS[MTEX * MTEX];
-static void buildMetalTex() { genMetal(g_metalTex, MTEX); to5650(g_tmp16, g_metalTex, MTEX * MTEX); swizzleTex((unsigned char*)g_metalTexS, (const unsigned char*)g_tmp16, MTEX * 2, MTEX); sceKernelDcacheWritebackAll(); }
-
 #define STEX 128
-static unsigned int __attribute__((aligned(16))) g_stoneTex[STEX * STEX];
-static unsigned short __attribute__((aligned(16))) g_stoneTexS[STEX * STEX];
-static void buildStoneTex() { genStone(g_stoneTex, STEX); to5650(g_tmp16, g_stoneTex, STEX * STEX); swizzleTex((unsigned char*)g_stoneTexS, (const unsigned char*)g_tmp16, STEX * 2, STEX); sceKernelDcacheWritebackAll(); }
-
-// fachada gotica (ventanas ojivales en la TEXTURA): los edificios simples la usan
-static unsigned int __attribute__((aligned(16))) g_facadeTex[STEX * STEX];
-static unsigned short __attribute__((aligned(16))) g_facadeTexS[STEX * STEX];
-static void buildFacadeTex() { genFacade(g_facadeTex, STEX); to5650(g_tmp16, g_facadeTex, STEX * STEX); swizzleTex((unsigned char*)g_facadeTexS, (const unsigned char*)g_tmp16, STEX * 2, STEX); sceKernelDcacheWritebackAll(); }
+// CUATRO TEXTURAS BORRADAS: ventana, metal, piedra y fachada. Se generaban, se
+// convertian a 5650 y se swizzleaban en el arranque, y no las ataba NADIE: los
+// unicos sceGuTexImage del programa son el atlas de fuente, g_indTexS y
+// g_groundTexS. Eran 227 KB de .bss permanentes (sobrevivian incluso a -O2, porque
+// SI se escribian: solo no se leian nunca) mas cuatro pasadas de ruido procedural
+// en cada arranque. Los generadores siguen en agent_textures.h y facade_tex.h por
+// si vuelven a hacer falta; lo que se va es la copia residente en memoria.
 // EL POZO: textura INDUSTRIAL-gotica fria (paneles/tuberias/remaches) para balcon + muros del pozo
 static unsigned int __attribute__((aligned(16))) g_indTex[STEX * STEX];
 static unsigned short __attribute__((aligned(16))) g_indTexS[STEX * STEX];
@@ -977,12 +966,10 @@ int main(void) {
     sceCtrlSetSamplingCycle(0);
     sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
 
-    buildWinTex();
-    buildStoneTex();
-    buildFacadeTex();
     buildGroundTex();
-    buildMetalTex();
-    buildCity();          // genera la ciudad (g_city) ANTES del mundo/colision
+    // buildCity() borrado: llenaba g_city con 8 monolitos y les ponia g_cityCount = 8,
+    // y dos lineas mas abajo buildSolidWorld() llama a buildSectorCollision(), que
+    // arranca en n = 0 y lo sobreescribe entero. Nunca existieron.
     buildIndTex();  // textura industrial del pozo (antes de renderizar)
     buildSolidWorld();
     buildApron();   // (legacy; no se dibuja en EL POZO)
@@ -994,13 +981,13 @@ int main(void) {
     gargInit();
     // buildChains();   // cadenas QUITADAS (cosas entremedio que bajan FPS); g_chainVerts=0
     buildEnv();
-    g_farSilVerts = buildFarSilhouettes(g_farSil);
-    g_voidVerts   = buildVoidLayer(g_void);
-    // EL POZO: puentes + abismo del pozo
-    g_bridgesVerts   = 0;   // (pozo apagado: fill)
+    // buildFarSilhouettes() y buildVoidLayer() BORRADAS: generaban 3.228 vertices de
+    // siluetas lejanas y capa de vacio, y seis lineas mas abajo se ponia a cero su
+    // contador, asi que nunca llegaban a un draw. Se pagaba la generacion entera para
+    // tirarla. Son del mundo de la PLAZA vieja: sus agujas y ruinas quedarian flotando
+    // dentro del sector cerrado de hoy.
+    g_bridgesVerts   = 0;   // puentes y pozo del mundo viejo: apagados por fill
     g_voidShaftVerts = 0;
-    // El fondo de la PLAZA vieja (agujas r90+, ruinas/siluetas exteriores, props y robots
-    // de plaza) quedaria FLOTANDO dentro del pozo o detras de sus muros -> apagado.
     g_voidVerts = 0; g_farSilVerts = 0; g_chainVerts = 0;   // capas del mundo viejo (sin uso)
     g_vpropsVerts = buildVillageProps(g_vprops);
     g_spireVerts  = buildSpirescape(g_spire);
@@ -1040,7 +1027,10 @@ int main(void) {
 
     int fps = 0, frameAccum = 0;
     long long lastTick = sceKernelGetSystemTimeWide();
-    char hud[80];
+    char hud[80];   // ahora SI se usa: el texto del reparto del frame (mantener SELECT)
+    // Reparto del frame en milisegundos, suavizado. Mantener SELECT para verlo.
+    float msCpu = 0.0f, msGe = 0.0f, msWait = 0.0f;
+    long long tFrame = sceKernelGetSystemTimeWide();
 
     int collected[64] = {0};
     int collectedCount = 0, pickTimer = 0, pickedType = 0;
@@ -1678,15 +1668,52 @@ int main(void) {
             st.paused = (paused != 0);
             hudDraw(st);
         }
+        // ---- REPARTO DEL FRAME (mantener SELECT). Sin sprintf: en PSP arrastra medio
+        // stdio al binario, y aqui solo hacen falta tres numeros con un decimal.
+        if (pad.Buttons & PSP_CTRL_SELECT) {
+            int n = 0;
+            auto put = [&](const char *lbl, float ms) {
+                while (*lbl && n < 70) hud[n++] = *lbl++;
+                int t = (int)(ms * 10.0f + 0.5f); if (t > 9999) t = 9999;
+                if (t >= 1000) hud[n++] = (char)('0' + (t / 1000) % 10);
+                if (t >= 100)  hud[n++] = (char)('0' + (t / 100)  % 10);
+                hud[n++] = (char)('0' + (t / 10) % 10);
+                hud[n++] = '.';
+                hud[n++] = (char)('0' + t % 10);
+                hud[n++] = ' ';
+            };
+            put("CPU ", msCpu); put("GE ", msGe); put("ESP ", msWait);
+            hud[n] = 0;
+            // Como leerlo: a 30 fps el presupuesto es 33.3 ms. Si manda ESP, sobra
+            // tiempo. Si manda GE, el cuello es la GPU (relleno o vertices). Si manda
+            // CPU, el cuello es el codigo y optimizar el dibujado no sirve de nada.
+            drawText(8, 250, 1.0f, RGBA(235, 225, 190, 255), hud);
+        }
         sceGuDisable(GU_TEXTURE_2D);
         sceGuDisable(GU_BLEND);
         sceGuEnable(GU_DEPTH_TEST);
 #endif
 
+        // ===== REPARTO DEL FRAME (L + SELECT lo muestra en el HUD) =====
+        // Medir antes de optimizar. Hasta ahora el proyecto daba por hecho que el cuello
+        // era el relleno, y una auditoria con los numeros delante dice que con -O2 el
+        // relleno no llega al 20% del presupuesto de 30 fps. Esto parte el frame en
+        // tres y lo zanja en la consola de verdad, en vez de discutirlo con aritmetica:
+        //   CPU = juego + generar vertices a mano | GE = transformar + rellenar
+        //   ESP = lo que se espera al vblank (si esto domina, sobra tiempo: vamos bien)
+        // sceGuSync serializa, asi que el tiempo de GE que sale de aqui es real.
+        const long long tCpu = sceKernelGetSystemTimeWide();
         sceGuFinish();
         sceGuSync(0, 0);
+        const long long tGe = sceKernelGetSystemTimeWide();
         audioFrame(walkPhase, gravG);  // MISMA fase que la animacion: el sonido cae con el pie que apoya
         sceDisplayWaitVblankStart();
+        const long long tEnd = sceKernelGetSystemTimeWide();
+        // media movil simple: un valor por frame salta demasiado para leerlo en marcha
+        msCpu = msCpu * 0.9f + (float)(tCpu - tFrame) * 0.001f * 0.1f;
+        msGe  = msGe  * 0.9f + (float)(tGe  - tCpu  ) * 0.001f * 0.1f;
+        msWait= msWait* 0.9f + (float)(tEnd - tGe   ) * 0.001f * 0.1f;
+        tFrame = tEnd;
         sceGuSwapBuffers();
     }
 
