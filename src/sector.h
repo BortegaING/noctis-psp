@@ -82,14 +82,15 @@ static void buildSectorCollision() {
     // CONTRAFUERTES: pilares de piedra de 24.6 de alto que vuelan 2.4 al pasillo
     // (ocupan de 6.6 a 9.0 en la coordenada perpendicular). Se dibujaban desde el
     // principio pero no tenian caja: se atravesaban caminando, y la camara tambien.
-    // Entran los 16 de |o| = 10.8. El del CENTRO de cada cara (o = 0) NO: cae dentro
-    // del portal ciego que ya cierra arch_detail.h (|o| <= 3.9, vuelo 2.3). OJO: esa
-    // caja solo llega a y=15, asi que el contrafuerte central sigue sin colision de
-    // 15 a 24.6; subirla es cosa de arch_detail.h, no de este archivo.
+    // Entran los 24: los 16 de |o| = 10.8 y tambien los 8 del CENTRO de cada cara. El
+    // central se dejaba fuera dando por hecho que lo tapaba la caja del portal ciego de
+    // arch_detail.h, pero esa caja solo llega a y=10.5 (el tope real de las jambas):
+    // de ahi a 24.6 el pilar quedaba fantasma. El portal es una puerta CIEGA, no un paso,
+    // asi que macizo de suelo a cornisa es lo correcto.
     for (int q = 0; q < 4; ++q) {
         float sx = (q & 1) ? -1.0f : 1.0f, sz = (q & 2) ? -1.0f : 1.0f;
         float x = mc * sx, z = mc * sz;
-        for (int k = -1; k <= 1; k += 2) {          // los dos de fuera; el central lo cubre el portal
+        for (int k = -1; k <= 1; ++k) {             // los TRES, central incluido
             float o = (float)k * ms * SEC_BUT_O;
             g_city[n++] = { x - sx * (ms * 0.5f + SEC_BUT_DP), z + o,
                             SEC_BUT_W, SEC_BUT_D, SEC_BUT_H, c };
@@ -97,8 +98,8 @@ static void buildSectorCollision() {
                             SEC_BUT_D, SEC_BUT_W, SEC_BUT_H, c };
         }
     }
-    g_cityCount = n;   // 4 masas + 4 remates + 4 muros + 20 columnas + 16 contrafuertes = 48
-                       // (+35 de arch_detail.h = 83 de las 256 de g_city)
+    g_cityCount = n;   // 4 masas + 4 remates + 4 muros + 20 columnas + 24 contrafuertes = 56
+                       // (+38 de arch_detail.h = 94 de las 256 de g_city)
 }
 
 // --- SUELO y TECHO (teselados finos: la camara nunca cruza un triangulo grande) ---
