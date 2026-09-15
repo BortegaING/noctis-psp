@@ -1252,7 +1252,23 @@ int main(void) {
             float s = (gravG == 0) ? sinf(camYaw) : 0.0f, c = (gravG == 0) ? cosf(camYaw) : 1.0f;
             float fX = fx * c + rx * s, fY = fy * c + ry * s, fZ = fz * c + rz * s;
             float uX = -gx, uY = -gy, uZ = -gz;
-            ScePspFVector3 eye = { playerX - fX * 9.0f + uX * 4.5f, playerY - fY * 9.0f + uY * 4.5f, playerZ - fZ * 9.0f + uZ * 4.5f };
+            // COLISION DE CAMARA: iba 9 unidades atras a ciegas y se metia DENTRO de los
+            // muros y las columnas. Ahora avanza desde el hombro hacia atras y se corta en
+            // el ultimo punto libre, con margen para no rozar la piedra.
+            const float CAM_BACK = 9.0f, CAM_UP = 4.5f, CAM_R = 0.9f;
+            float camBack = CAM_BACK;
+            {
+                const float ox = playerX + uX * CAM_UP, oy = playerY + uY * CAM_UP, oz = playerZ + uZ * CAM_UP;
+                for (int stp = 1; stp <= 9; ++stp) {
+                    const float d = CAM_BACK * (float)stp * (1.0f / 9.0f);
+                    if (gravBlocked(gravG, ox - fX * d, oy - fY * d, oz - fZ * d, CAM_R)) {
+                        camBack = CAM_BACK * (float)(stp - 1) * (1.0f / 9.0f);
+                        break;
+                    }
+                }
+                if (camBack < 2.2f) camBack = 2.2f;   // nunca dentro del propio personaje
+            }
+            ScePspFVector3 eye = { playerX - fX * camBack + uX * CAM_UP, playerY - fY * camBack + uY * CAM_UP, playerZ - fZ * camBack + uZ * CAM_UP };
             ScePspFVector3 ctr = { playerX + fX * 4.0f + uX * 1.8f, playerY + fY * 4.0f + uY * 1.8f, playerZ + fZ * 4.0f + uZ * 1.8f };
             ScePspFVector3 up  = { uX, uY, uZ };
             sceGumLookAt(&eye, &ctr, &up);
