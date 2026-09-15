@@ -945,6 +945,13 @@ static void initGu() {
     // muros 116 unidades, y es la razon por la que medio motor esta teselado a
     // trozos de 6. Con esto encendido el hardware recorta de verdad.
     sceGuEnable(GU_CLIP_PLANES);
+    // Escritura de Z EXPLICITA. Estaba en el default de sceGuInit y se daba por buena
+    // por inferencia, no por comprobacion. Y de ella depende entero el reordenamiento
+    // del pase (oclusores primero para que el z-buffer descarte suelo y techo tapados):
+    // si algun dia el default cambiara, ese ahorro se evaporaria en silencio y nadie lo
+    // relacionaria con esto. GU_FALSE = escrituras ACTIVADAS (semantica invertida, esta
+    // asi en pspgu.h). Cuesta un comando de GE por arranque.
+    sceGuDepthMask(GU_FALSE);
     sceGuEnable(GU_DEPTH_TEST);
     sceGuFrontFace(NOCTIS_FRONTFACE); // cara exterior = NOCTIS_FRONTFACE (winding probado consistente)
     sceGuDisable(GU_CULL_FACE);  // default OFF; el culling se ACTIVA por-pase en el lazo de render
