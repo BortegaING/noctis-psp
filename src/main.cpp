@@ -1283,80 +1283,49 @@ int main(void) {
         const float fwdX = sinf(camYaw);
         const float fwdZ = -cosf(camYaw);
 
-        // piedra texturizada (torres, agujas, muros, suelo, plataforma)
+        // ===== MUNDO SOLIDO =====
+        // Orden: OCLUSORES primero. El z-buffer descarta la escritura de color de todo el
+        // suelo y el techo que queda detras de una masa, en vez de pintarlo y taparlo. Y una
+        // sola atadura de textura por grupo: cada sceGuTexImage invalida la cache de la GE.
+        // (Se limpiaron 11 dibujados de 0 vertices y 4 texturas muertas que quedaban de los
+        //  mundos anteriores: catedrales, agujas de fondo, ventanas y metal del mirador.)
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexMode(GU_PSM_5650, 0, 0, GU_TRUE);   // 16 bits + SWIZZLED: mitad de lectura por pixel
-        sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);   // PISO: adoquin gotico (genGround, alto contraste: juntas oscuras + losas)
-        sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGB);   // PISO en REPLACE: brillo = textura directa (el MODULATE lo dejaba casi negro = vacio)
-        sceGuTexFilter(GU_NEAREST, GU_NEAREST);   // 1 texel/pixel: gran ahorro de fill en PSP real
-        sceGuTexWrap(GU_REPEAT, GU_REPEAT);
-        // --- MUNDO SOLIDO con CULLING por estructura + LOD (solo lo cercano/al frente) ---
-        // ===== EL POZO: BALCON + MUROS colosales (textura INDUSTRIAL, MODULATE = niebla por vertice) =====
-        sceGuDisable(GU_CULL_FACE);  // BALCON: su piso son quads de UNA cara con el winding del piso viejo (opuesto a las cajas) -> con cull ON desaparecia. OFF aqui no cuesta fill extra.
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
-        sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);   // BALCON: losa de piedra
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_ledgeEnd - g_ledgeStart, 0, g_solidWorld + g_ledgeStart);   // PISO grande
-        {   // APRON fino que sigue al jugador (tapa el hueco de la celda bajo la camara)
-            ScePspFVector3 ap = { floorf(playerX / 12.0f + 0.5f) * 12.0f, 0.03f, floorf(playerZ / 12.0f + 0.5f) * 12.0f };
+        sceGuTexFilter(GU_NEAREST, GU_NEAREST);     // 1 texel/pixel
+        sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+
+        // 1) MUROS, MASAS, ARCADA, BOVEDA y TRACERIA (los que tapan): cull ON
+        sceGuEnable(GU_CULL_FACE);
+        sceGuTexImage(0, STEX, STEX, STEX, g_indTexS);
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_wallEnd - g_wallStart, 0, g_solidWorld + g_wallStart);
+
+        // 2) SUELO y TECHO: quads de UNA cara (winding propio) -> sin cull.
+        //    El apron va PRIMERO porque esta 0.03 mas arriba: gana el z-test y el suelo
+        //    grueso de debajo se descarta en vez de repintarse.
+        sceGuDisable(GU_CULL_FACE);
+        sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);
+        {
+            ScePspFVector3 ap = { floorf(playerX / 12.0f + 0.5f) * 12.0f, 0.03f,
+                                  floorf(playerZ / 12.0f + 0.5f) * 12.0f };
             sceGumTranslate(&ap);
             sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_apronCount, 0, g_apron);
             sceGumLoadIdentity();
         }
-        sceGuEnable(GU_CULL_FACE);   // MUROS: winding = convencion addSolidBoxT (verificado) -> cull ON, mitad del fill de costillas/tuberias/cajas (PSP iba a 1 FPS)
-        sceGuTexImage(0, STEX, STEX, STEX, g_indTexS);      // MUROS: industrial-gotico frio
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_wallEnd  - g_wallStart,  0, g_solidWorld + g_wallStart);    // muros del pozo
-        sceGuTexImage(0, STEX, STEX, STEX, g_facadeTexS);   // CATEDRALES: fachada gotica (hitos al otro lado del vacio)
-        sceGuEnable(GU_CULL_FACE);   // catedrales: cajas cerradas, winding consistente -> cull (mitad del fill)
-        // 4 catedrales-landmark: dibujar SIEMPRE (nunca desaparecen al caminar), pero con
-        // LOD -> lejos solo la MASA nucleo [sStart,sDetail); cerca (centro<LOD_DIST) completa
-        // con su ornamento fino (aguja/arbotantes/pinaculos). sDetail lo fija cada catedral.
-        for (int s = 0; s < g_srangeCount; ++s) {
-            const StructRange &r = g_srange[s];
-            float ddx = r.cx - playerX, ddz = r.cz - playerZ;
-            float d2 = ddx * ddx + ddz * ddz;
-            int count = (d2 > LOD_DIST * LOD_DIST) ? (r.sDetail - r.sStart) : r.sCount;
-            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, count, 0, g_solidWorld + r.sStart);
-        }
-        sceGuDisable(GU_CULL_FACE);  // cola/torre de fondo (addArchSpan/addBridge/buildTower): winding NO verificado -> OFF por seguridad
-        sceGuTexImage(0, STEX, STEX, STEX, g_stoneTexS);   // vuelve a PIEDRA para agujas/cola
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_spireEnd - g_spireStart, 0, g_solidWorld + g_spireStart); // agujas (fondo)
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_solidVerts - g_tailStart, 0, g_solidWorld + g_tailStart);  // cola/catedral: siempre
-
-        // ventanas: textura de vidriera (CLAMP). Solo torres CERCANAS + agujas/cathedral (siempre).
-        sceGuDisable(GU_CULL_FACE);  // ventanas (addWinRow) tienen winding INCONSISTENTE -> NO cullear; metal tambien queda OFF
-        sceGuTexImage(0, WTEX, WTEX, WTEX, g_winTexS);
-        sceGuTexWrap(GU_CLAMP, GU_CLAMP);
-        for (int s = 0; s < g_srangeCount; ++s) {
-            const StructRange &r = g_srange[s];
-            if (r.wCount <= 0) continue;
-            // ventanas de las catedrales (g_win): SIEMPRE (landmarks lejanos pero pocos)
-            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, r.wCount, 0, g_win + r.wStart);
-        }
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_winVerts - g_winTailStart, 0, g_win + g_winTailStart); // agujas + cathedral
-
-        // metal: baranda con textura de acero (REPEAT)
-        sceGuTexImage(0, MTEX, MTEX, MTEX, g_metalTexS);
-        sceGuTexWrap(GU_REPEAT, GU_REPEAT);
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_metalVerts, 0, g_metal);
+        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_ledgeEnd - g_ledgeStart, 0, g_solidWorld + g_ledgeStart);
         sceGuDisable(GU_TEXTURE_2D);
 
-        // atmosfera de fondo: siluetas colosales lejanas + ruinas suspendidas del abismo
-        sceGuEnable(GU_CULL_FACE);   // puentes + abismo = cajas/piramides addSolidBox (winding consistente) -> cull ON (fill)
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_farSilVerts, 0, g_farSil);   // MEGAESTRUCTURA colosal del horizonte (360, en bruma)
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidVerts,   0, g_void);     // (plaza vieja, apagado)
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_bridgesVerts,   0, g_bridges);   // EL POZO: puentes/megavigas cruzando el abismo
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidShaftVerts, 0, g_voidShaft); // EL POZO: abismo sin fondo (arriba y abajo)
-        g_objMarkVerts = objBuildMarkers(g_objMark, idleT);   // anclas, materiales y faro
+        // 3) SIN textura. Con cull: objetivo, gargolas, telon de agujas y props (cajas).
+        sceGuEnable(GU_CULL_FACE);
+        g_objMarkVerts = objBuildMarkers(g_objMark, idleT);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_objMarkVerts, 0, g_objMark);
         g_gargVerts = gargBuildAll(g_gargVB, idleT);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_gargVerts, 0, g_gargVB);
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_spireVerts, 0, g_spire);     // MAR DENSO de agujas (el look de la referencia)
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);   // props del pueblo
-        // cables + robots + ambiente (braseros) sin textura
-        sceGumDrawArray(GU_LINES, LINE_FLAGS, g_chainVerts, 0, g_chains);
-        sceGuDisable(GU_CULL_FACE);  // de aqui en adelante SIN culling: addLimb/addBall (robots, hunter)
-                                     // tienen el winding OPUESTO al de las cajas y desapareceria todo.
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);   // habitantes roboticos
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_spireVerts, 0, g_spire);
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);
+        // Sin cull: robots y braseros usan addLimb/addBall, cuyo winding es el OPUESTO.
+        sceGuDisable(GU_CULL_FACE);
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_envVerts, 0, g_env);
 
         // ---- 3RA PERSONA: el HUNTER con ciclo de caminata (anim.h) ----
