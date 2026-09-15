@@ -40,9 +40,11 @@
 //      de 4.67, las jambas en 2 de 5.15, el parteluz en 2 de 5.95 y cada brazo del arco en 2
 //      cuerdas de 4.6 y 5.0.
 //
-// DEJA PASAR LA VISTA: todo elemento tiene 0.55-0.9 de grosor y entre todos tapan ~26% del
-// area del vano, casi todo pegado al borde y a la cabeza; el centro-bajo (por donde se ve el
-// telon de agujas en niebla) queda partido nada mas que por el parteluz.
+// DEJA PASAR LA VISTA: todo elemento tiene 0.55-0.9 de grosor. Entre todos tapan 91 de las
+// 280 unidades del vano (32%), pero 28 de esas 91 son el ALFEIZAR, que va abajo del todo:
+// en la franja por la que se mira (y = 9..27) el marco tapa el 25% y queda 75% de AIRE, y lo
+// tapado esta pegado al borde y a la cabeza. El centro-bajo (por donde se ve el telon de
+// agujas en niebla) no lo parte nada mas que el parteluz.
 //
 // COSTO: 19 quads + 2 triangulos = 120 verts por vano x 24 vanos = 2880 verts.
 // DONDE SE LLAMA: en buildSolidWorld, junto a buildSectorWalls/buildVault y DENTRO del rango
@@ -130,8 +132,9 @@ static void trcBar(TexVertex *buf, int &i, const TrcWall &w,
 
 // --- el despiece de UN ventanal, centrado en u = uc (luz 2*TRC_HW, de y=7 a y=27) ---
 static void trcBay(TexVertex *buf, int &i, const TrcWall &w, float uc) {
-    const unsigned int stone = brighten(RGBA(64, 70, 82, 255), 2.1f);
-    const unsigned int dark  = brighten(RGBA(46, 50, 60, 255), 2.0f);
+    // MISMA piedra que buildSectorWalls (si alla se retoca la paleta, retocar aqui tambien)
+    const unsigned int stone = brighten(RGBA(69, 65, 58, 255), 2.1f);
+    const unsigned int dark  = brighten(RGBA(46, 41, 36, 255), 2.0f);
     const unsigned int face  = brighten(dark,  0.82f);   // = "frente" de una caja: calza con los pilares
     const unsigned int faceL = brighten(stone, 0.82f);   // parteluz/clave/oculo: un punto mas claro
     const unsigned int faceD = brighten(dark,  0.60f);   // = "costado": el talud del alfeizar
