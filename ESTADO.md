@@ -11,6 +11,99 @@ Usuario: Benjamin (BortegaING). Responder **en espanol**, sin emojis. No gastar 
 Juego para **PSP** (consola real: PSP-2000) en C++17 con PSPSDK. Inspiracion: BLAME!
 (brutalismo, megaestructura, escala) + gravedad. Se juega en **3ra persona**.
 
+---
+
+# AUDITORIA DEL 2026-09-15 (commits da08bf8..7ac28b9) — LEER ESTO PRIMERO
+
+Siete agentes revisaron el proyecto entero en paralelo. Encontraron cosas graves. Lo que
+sigue es lo que cambio y, sobre todo, **lo que hay que comprobar en la consola**.
+
+## Las tres causas de fondo (explican anos de sintomas)
+
+**1. El juego se compilaba SIN OPTIMIZAR.** `CMakeLists.txt` no fijaba `CMAKE_BUILD_TYPE`
+ni ninguna bandera `-O`, o sea `-O0`, en una CPU MIPS de 333 MHz y con coma flotante por
+todas partes. Arreglado con `-O2` (no `-O3`: daba 329 KB contra 257 KB, y la PSP tiene
+16 KB de cache de instrucciones). **El EBOOT bajo de 1.460.000 a 250.896 bytes.**
+Esto por si solo vale mas que cualquier optimizacion de render que hicimos.
+
+**2. El motor nunca recortaba contra el plano cercano.** `GU_CLIP_PLANES` no se habilitaba
+en ningun sitio, asi que el GE **descartaba el triangulo entero** en cuanto un vertice
+quedaba detras de la camara. Las caras de las masas son quads de 36 unidades y los muros
+miden 116: medidos, 600 triangulos con aristas de hasta 120. **Esto es "los edificios
+desaparecen cuando caminas", y tambien explica el historial del suelo.** Y explica el
+proyecto hacia atras: la convencion de "ninguna pieza puede pasar de 6 unidades", que
+condiciona como esta escrito medio motor, era un apaño para esto.
+
+**3. El commit c6522dd (mio) borro el bucle de juego.** Decia arreglar seis bugs; lo que
+hizo fue quitar 160 lineas de `main.cpp` y poner 8. Se llevo por delante: el salto, la
+caida, el planeo, el aterrizaje, el wall-walk entero, la regeneracion de energia, el
+daño, el respawn, la recogida de materiales, el faro y el movimiento de las balas.
+El juego compilaba y renderizaba precioso, y **no era un juego**: no se podia recoger
+nada, ningun enemigo podia herirte y no se podia terminar. Repuesto en 9474d29 con los
+seis arreglos aplicados ENCIMA, que es lo que habia que hacer la primera vez.
+
+## Lo que se arreglo, por si aparece un sintoma
+
+| Sintoma que verias | Causa | Commit |
+|---|---|---|
+| Paredes y suelo que van y vienen al caminar | sin `GU_CLIP_PLANES` | e9c2bdd |
+| Parche cuadrado mas claro siguiendo al jugador | el apron usaba otra escala de textura y otro color que el suelo | e9c2bdd |
+| Ver a traves de un muro al pegar la espalda | la camara subia a 2.2 sin comprobar 2.2 | e9c2bdd |
+| Muro invisible curvo en el pasillo perimetral | clamp CIRCULAR de r=54 en una sala CUADRADA de medio lado 54 | e9c2bdd |
+| Cadenas del techo que terminan en nada | piramide invertida: winding al reves con cull ON | e9c2bdd |
+| La puerta del portal y el timpano se borran al mirar arriba | quad de 9.30, sobre el limite de 6 | 3644a60 |
+| Quedarse parado en el aire cerca de un portal | caja de colision a y=15 sin piedra encima | 3644a60 |
+| Atravesar un pilar de piedra caminando | 24 contrafuertes dibujados y sin caja | 625b589 |
+| Pies metidos 1.6 en el techo de una masa | la caja llegaba a 30, la superficie visible esta a 31.6 | 625b589 |
+| Recibir daño sin que pase nada en pantalla | `hurtFlash` se contaba y no lo dibujaba nadie | fc7a7f0 |
+| Volver con 100 de vida tras salir con 12 | la vida no se guardaba (el campo existia y nadie lo escribia) | fc7a7f0 |
+| "Continuar" te lleva al punto equivocado | `saveCounter` a cero en las 5 ranuras -> siempre elegia la de recuperacion | fc7a7f0 |
+| Las gemas reaparecen en cada sesion | el inventario no se guardaba | fc7a7f0 |
+| Apuntar la gravedad a una cara que no mirabas | la vista ignoraba el cabeceo, el rayo no | 7ac28b9 |
+
+Ademas: **UB real** en el hash de las texturas (`x * 374761393` con `x` de tipo `int`
+desborda con signo a partir de x=6; a `-O0` se envolvia por casualidad). Habia que
+arreglarlo ANTES de encender la optimizacion, no despues (da08bf8). Y se liberaron
+**291 KB de RAM** de cuatro texturas que se generaban y no ataba nadie (1b4a0c4).
+
+## MEDIDOR DEL FRAME: manten SELECT
+
+El proyecto lleva desde el principio dando por hecho que el cuello de botella es el
+relleno. Una auditoria con los numeros delante dice que **con `-O2` el relleno no llega
+al 20% del presupuesto de 30 fps** (unas 4,8 pantallas, 3,5-6,3 ms de 33,3). Pero eso
+es aritmetica, no una medicion.
+
+Asi que ahora el juego lo mide solo. **Manten SELECT** y salen tres numeros:
+- `CPU` = logica mas generar vertices a mano
+- `GE`  = transformar y rellenar
+- `ESP` = lo que se espera al vblank
+
+A 30 fps el presupuesto es 33.3 ms. **Si manda ESP, sobra tiempo.** Si manda GE, el
+cuello es la GPU. Si manda CPU, optimizar el dibujado no sirve de nada. Ese numero decide
+que hacemos despues, asi que anotalo.
+
+## Lo siguiente, ya diagnosticado y sin aplicar
+
+Por orden de ahorro segun la auditoria de rendimiento:
+1. **Cielo al final con z-test, y quitar el clear de color** (~1,44 pantallas). Hoy el
+   cielo pinta 58.848 px de los que sobreviven entre 130 y 8.600.
+2. **Quitar el apron** (~0,51 pantallas + 1.176 verts + un draw call). Existia por el
+   problema del plano cercano, que ya esta resuelto. **No lo quite a ciegas**: si el
+   recorte no se porta como esperamos en la consola, el apron es la red de seguridad.
+   Quitalo cuando confirmes que el suelo se ve bien.
+3. **Texturas a VRAM**: hay 1,20 MB libres y las tres vivas suman 131 KB. Son 0,85-1,16 MB
+   por frame que hoy van por el bus principal. Orden: industrial, suelo, fuente.
+4. **Culling por masa y LOD del ornamento**: la infraestructura (`StructRange`, `g_srange`,
+   `LOD_DIST = 42`) esta escrita y **apagada** (`g_srangeCount = 0`).
+5. **NO apagues el dither**: en la GE es una suma de tabla 4x4 en el ROP, ahorro cero, y
+   devuelve el bandeado de 16 bits que pagamos por evitar.
+
+Sin cablear a proposito: **`weapons_geo.h`** (10 armas melee con modelo propio). El hunter
+ya lleva su sable curvo, asi que engancharlo es un cambio de diseño, no un arreglo, y sin
+verlo en pantalla arriesga un arma flotando. Instrucciones en el propio archivo.
+
+---
+
 ## Estado actual (commit 5e62c77)
 - Escena: **piso teselado grande + 8 monolitos enormes muy separados** (`src/city.h`, ~720 verts),
   niebla fria, luna 2D. Personaje (hunter) visible con camara detras.
@@ -215,8 +308,17 @@ Todo lo de abajo entro SIN que nadie lo viera funcionando: compila y cada agente
 suyo, pero nadie lo jugo. Probar EN ESTE ORDEN y parar en el primero que falle: asi se sabe
 que capa lo rompio, en vez de adivinar entre veinte.
 
-1. ARRANCA y se ve el pasillo. Anotar el FPS (es el unico dato que no puedo medir yo).
-2. EL SUELO se ve claro y con losas, hasta los pies. (Historial: fallo muchas veces.)
+0. **MANTEN SELECT** y anota los tres numeros (CPU / GE / ESP). Es el dato que decide
+   todo lo que viene despues, y el unico que no puedo medir yo.
+1. ARRANCA y se ve el pasillo. Anotar el FPS.
+1b. **CAMINA MIRANDO A LO LARGO DEL PASILLO**: las paredes NO deben aparecer y
+   desaparecer. Esto es lo que arreglo `GU_CLIP_PLANES` y es el sintoma mas repetido de
+   todo el proyecto. Si sigue pasando, decirlo: seria el hallazgo mas importante.
+2. EL SUELO se ve claro y con losas, hasta los pies, **sin un cuadrado mas claro que te
+   sigue**. (Historial: fallo muchas veces.)
+2b. PEGA LA ESPALDA a un muro: la camara se acerca, no atraviesa la piedra.
+2c. CAMINA A UNA ESQUINA del pasillo perimetral: se debe poder llegar (antes habia un
+   muro invisible curvo que cortaba las cuatro esquinas).
 3. MIRAR ARRIBA: se ve la boveda con nervios, y el FARO colgando en el cruce.
 4. MIRAR A UN VENTANAL: se ve el arco ojival y, detras, el bosque de agujas en niebla.
 5. CAMINAR: el personaje da pasos (no se desliza), no se ve cuadrado, lleva sable curvo.
@@ -225,6 +327,12 @@ que capa lo rompio, en vez de adivinar entre veinte.
    Truco que el propio diseño asume: conviene SALTAR y cambiar en el aire, no parado.
 8. SUBIR: capitel -> techo de masa -> techo. Al tocar un ancla deberia autoguardar.
 9. GARGOLAS: acercarse a una posada; deberia abrir el ojo y despegarse. Huir a >58 la suelta.
-10. SALIR Y VOLVER A ENTRAR: deberia continuar donde estabas (guardado automatico).
+10. SALIR Y VOLVER A ENTRAR: deberia continuar donde estabas, **con la misma vida y sin
+    que reaparezcan las gemas que ya recogiste** (antes las tres cosas fallaban).
+11. ACERCATE A UN ROBOT: deberia hablarte solo, con su nombre arriba. Son 6 y cada uno
+    dice cosas distintas. Cambia la gravedad delante de uno y vuelve: lo comenta.
+12. DEJA QUE TE TOQUE UNA GARGOLA: la pantalla debe dar un destello rojo y la barra de
+    vida bajar de verdad. Si mueres, vuelves al ultimo ancla.
+13. RECOGE UN MATERIAL y mira que la energia maxima sube. Con los 10, el faro.
 
 Si algo de esto falla, decir CUAL numero: cada uno apunta a un archivo distinto.
