@@ -468,6 +468,7 @@ static int g_cityCount = 0;
 #include "sector.h"              // SECTOR CERRADO de pasillos (planta de cruz gotica): el mundo actual
 #include "vault.h"               // boveda gotica del techo (nervios, mensulas, clave)
 #include "tracery.h"             // arcos ojivales, parteluz y oculo de los ventanales
+#include "arch_detail.h"         // arcadas ciegas, contrafuertes, portales, hornacinas, balaustrada
 
 // edificio SIMPLE de ciudad (pocos verts -> muchos edificios + culling = rinde)
 static void buildCityBldg(TexVertex *buf, int &i, float cx, float cz,
@@ -523,6 +524,8 @@ static void buildSolidWorld() {
     // Recinto chico con suelo, TECHO y muros; 4 masas separadas forman pasillos en cruz.
     // Las paredes OCLUYEN -> en un pasillo solo se pinta ese pasillo (el fill es el cuello).
     buildSectorCollision();             // llena g_city con los volumenes solidos (colision)
+    // lo que sobresale al pasillo TAMBIEN frena al jugador y a la camara
+    g_cityCount += archCollisionBoxes(g_city + g_cityCount, 256 - g_cityCount);
     g_floorCount = 0;
     g_ledgeStart = i;
     buildSectorFloorCeil(g_solidWorld, i);   // suelo + techo (textura de piedra, sin cull)
@@ -531,6 +534,7 @@ static void buildSolidWorld() {
     buildSectorWalls(g_solidWorld, i);       // masas + muros + arcada gotica (industrial, cull ON)
     buildVault(g_solidWorld, i);             // boveda del techo (mismo winding: va con cull ON)
     buildTracery(g_solidWorld, i);           // marco gotico de los 24 ventanales
+    buildArchDetail(g_solidWorld, i);        // relieve gotico sobre las caras de las masas
     g_wallEnd = i;
     g_srangeCount = 0;
     g_winTailStart = g_winVerts;
