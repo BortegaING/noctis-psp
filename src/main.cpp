@@ -346,7 +346,7 @@ static void addPinnacle(TexVertex *buf, int &i, float cx, float baseY, float cz,
 
 // niebla por ALTURA: las estructuras se disuelven en la bruma del cielo al subir
 static unsigned int heightHaze(unsigned int base, float y) {
-    float t = y / 190.0f; if (t < 0.0f) t = 0.0f; if (t > 0.90f) t = 0.90f;   // puntas de aguja se disuelven casi del todo en el horizonte (sin pop)
+    float t = (y - 34.0f) / 230.0f; if (t < 0.0f) t = 0.0f; if (t > 0.94f) t = 0.94f;   // puntas de aguja se disuelven casi del todo en el horizonte (sin pop)
     int br = base & 0xFF,  bg = (base >> 8) & 0xFF,  bb = (base >> 16) & 0xFF;
     int cr = HAZE & 0xFF,  cg = (HAZE >> 8) & 0xFF,  cb = (HAZE >> 16) & 0xFF;
     int r  = br + (int)((cr - br) * t);
@@ -1318,7 +1318,7 @@ int main(void) {
 #else
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
-        sceGumPerspective(66.0f, 16.0f / 9.0f, 1.0f, 320.0f); // alcanza el telon de agujas (r 120..190) visto desde el lado opuesto del recinto
+        sceGumPerspective(66.0f, 16.0f / 9.0f, 1.0f, 420.0f); // alcanza el telon de agujas (r 120..190) visto desde el lado opuesto del recinto
 
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
