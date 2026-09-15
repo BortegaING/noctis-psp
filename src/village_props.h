@@ -9,18 +9,35 @@
 //
 //   corte de una crujia (mirando a lo largo)      planta de media crujia
 //   techo y=60 ============================        masa  |brasero   estatua |  masa
-//      |cadena|             |cadena|             lat 9 ->|  o 7.0    o 8.1  |
+//      |cadena|             |cadena|             lat 9 ->|  o 7.0   o 7.75  |
 //      arco 18.6..27.3      arco 18.6..27.3              |   COLUMNA        |
 //   masa |COL|  CENTRO LIBRE  |COL| masa         --------+-- centro libre --+-------
 //   suelo y=0 =============================
 //
-// REGLAS DE COLOCACION (derivadas de sector.h, verificadas una a una):
+// REGLAS DE COLOCACION (medidas LEIDAS de sector.h y arch_detail.h, no de memoria):
 //   * |lat| <= 8.8 SIEMPRE -> nada entra jamas en una masa (las masas empiezan en 9.0).
 //   * |lat| >= 4.65 SIEMPRE -> el centro del pasillo queda libre para caminar.
-//   * columnas en lat=+-7, t = 16k (k=-2..2), huella 3.6 con capitel -> los props
-//     van entre columnas o corridos 2.85 en t: no se tapa ninguna.
-//   * contrafuertes de las masas: sobresalen a lat 6.6..9.0 en las bandas
-//     t = +-(14.7..17.7), +-(25.5..28.5), +-(36.3..39.3) -> ningun prop cae ahi.
+//   * columnas en lat=+-7, t = 16k (k=-2..2), huella 3.3 -> los props van entre
+//     columnas o corridos 2.85 en t: no se tapa ninguna.
+//   * CADA CARA DE MASA (|t| de 9 a 45) esta casi toda comida por relieve SOLIDO que
+//     vuela al pasillo. Bandas de |t| que YA tienen caja en g_city, con su vuelo:
+//        9.30..13.10  contrafuerte de arch_detail (AD_BT_O 15.8 +- 1.9)  2.5 -> lat 6.5
+//       14.35..17.70  columna exenta (t=16) + contrafuerte de sector (10.8 +- 1.5) 2.4
+//       23.10..30.90  PORTAL de arch_detail (AD_PT_HALF 3.9)             2.3 -> lat 6.7
+//                     (dentro de esa banda va tambien el contrafuerte CENTRAL de
+//                      sector.h, 25.50..28.50: no abre hueco nuevo, lo tapa el portal)
+//       30.35..33.65  columna exenta (t=32)
+//       36.30..39.30  contrafuerte de sector
+//       40.90..44.70  contrafuerte de arch_detail
+//     -> el UNICO hueco ancho pegado al muro es |t| 17.70..23.10 (5.4 de luz, centro
+//        20.40 = VP_BAY) y SOLO CABE UN PROP. Hay 8 caras y 8 props de muro: uno cada.
+//   * blocked() infla cada caja con el radio 1.1 del jugador -> todo prop deja >= 1.1
+//     hasta el borde de la caja mas cercana, o se choca con un muro invisible.
+//   * en ese hueco hay relieve que NO colisiona: la arcada ciega (|t| 17.95..23.05,
+//     y 3.40..12.50), cuya columnilla vuela 0.42 -> la estatua se planta en lat 7.75
+//     en vez de 8.10 (hombros a 0.73 de la pared) o se la comeria.
+//   * escombros y columna rota NO caben en ningun hueco de cara: bajan a la BOCA del
+//     cruce (|t| < 8.2), al pie del pilar de esquina, que es de donde se cayeron.
 //   * arcos ojivales entre columnas: ocupan lat 5.54..8.46 entre y=18.6 y y=27.3
 //     -> las cadenas cuelgan por DENTRO (lat 4.8..5.0) y fuera de esa banda.
 // Determinista: hash entero + tablas fijas (SIN rand, SIN heap, C++17). 2196 verts.
@@ -30,6 +47,11 @@ static const float VP_CEIL     = 60.0f;   // SEC_CEIL     : techo del sector
 static const float VP_STEP     = 16.0f;   // SEC_COL_STEP : separacion entre columnas
 static const float VP_LAT_COL  =  7.0f;   // SEC_COL_OFF  : eje de las columnas exentas
 static const float VP_LAT_WALL =  8.10f;  // arrimado a la cara de la masa (que esta en 9.0)
+static const float VP_LAT_STAT =  7.75f;  // estatua: 0.50 de aire tras el pedestal y 0.73 tras
+                                          // los hombros -> libra la columnilla de la arcada
+                                          // ciega de arch_detail (vuela 0.42 desde y=3.40)
+static const float VP_BAY      = 20.40f;  // centro del UNICO tramo libre de cada cara:
+                                          // |t| 17.70 (contrafuerte + columna) .. 23.10 (portal)
 
 // --- hash entero determinista (mismo mezclador que winPick): variacion sin rand ---
 static unsigned int vpHash(unsigned int x) {
@@ -192,26 +214,36 @@ static int buildVillageProps(LineVertex *buf) {
         }
 
     // ---- 2. ESTATUAS (4 x 102 = 408) : arrimadas a la cara de la masa, en molinete --
-    // t=+-24 cae entre las columnas (16 y 32) y entre los contrafuertes (17.7 y 25.5).
+    // t=+-24 las metia ENTERAS en la caja del portal de arch_detail (|t| 23.10..30.90,
+    // vuelo 2.3, 10.5 de alto): no se veian, y el jugador topaba con un bloque de 10.5
+    // donde hay una figura de 5.35. Ahora van al centro del hueco (VP_BAY = 20.40): el
+    // pedestal ocupa |t| 19.59..21.21, o sea 1.89 de aire a cada lado.
     for (int a = 0; a < 2; ++a)
         for (int sI = 0; sI < 2; ++sI) {
             const float s = sI ? -1.0f : 1.0f;
-            float x, z; vpMap(a, s, 24.0f * s, VP_LAT_WALL, x, z);
+            float x, z; vpMap(a, s, VP_BAY * s, VP_LAT_STAT, x, z);
             vpStatue(buf, i, a, x, z, (unsigned int)(a * 97 + sI * 41 + 13));
         }
 
-    // ---- 3. SARCOFAGOS / BANCOS (4 x 60 = 240) : molinete opuesto, t=-+23 ----------
+    // ---- 3. SARCOFAGOS / BANCOS (4 x 60 = 240) : molinete opuesto, en las otras 4 caras
+    // t=-+23 dejaba la tapa en |t| 21.53..24.47 y el portal empieza en 23.10: 1.37 de sus
+    // 2.94 (47%) enterrados. Centrada en VP_BAY ocupa |t| 18.93..21.87 -> 1.23 por lado.
+    // La lat NO cambia: mide 0.86 de alto y pasa por debajo de la arcada (que abre en 3.40).
     for (int a = 0; a < 2; ++a)
         for (int sI = 0; sI < 2; ++sI) {
             const float s = sI ? -1.0f : 1.0f;
-            float x, z; vpMap(a, s, -23.0f * s, VP_LAT_WALL + 0.05f, x, z);
+            float x, z; vpMap(a, s, -VP_BAY * s, VP_LAT_WALL + 0.05f, x, z);
             vpTomb(buf, i, a, x, z, (unsigned int)(a * 131 + sI * 67 + 7));
         }
 
-    // ---- 4. ESCOMBROS (2 x 60 + 90 = 210) : cerca del cruce, contra los bordes -----
-    vpRubble   (buf, i, 0,  -7.55f,  10.50f,  3u);   // crujia +Z, lado -X
-    vpRubble   (buf, i, 1, -10.50f,   7.55f, 19u);   // crujia -X, lado +Z
-    vpBrokenCol(buf, i, 1,  12.00f,  -7.40f, 37u);   // crujia +X, lado -Z (entre columnas 0 y 16)
+    // ---- 4. ESCOMBROS (2 x 60 + 90 = 210) : en la BOCA del cruce, al pie de la esquina
+    // Los tres estaban ENTERRADOS dentro de un contrafuerte de arch_detail (|t| 9.30..13.10,
+    // vuelo 2.5, macizo de y=0 a 30.4): no se veia ninguno. En una cara no cabe ninguno (su
+    // unico hueco, |t| 17.70..23.10, ya lo ocupa la estatua o el sarcofago), asi que bajan al
+    // cruce, DELANTE del pilar de esquina -> a >= 1.2 de las dos cajas que lo forman.
+    vpRubble   (buf, i, 0,  -7.30f,   4.60f,  3u);   // esquina -X/+Z, mirando al pasillo +Z
+    vpRubble   (buf, i, 1,  -5.60f,   7.30f, 19u);   // misma esquina, mirando al pasillo -X
+    vpBrokenCol(buf, i, 1,   4.70f,  -7.40f, 37u);   // boca +X, lado -Z (sigue entre las columnas 0 y 16)
 
     // ---- 5. CADENAS DEL TECHO (3 x 42 = 126) --------------------------------------
     // lat 4.8 = por DENTRO del arco (que empieza en 5.54) y fuera del centro pisable;
