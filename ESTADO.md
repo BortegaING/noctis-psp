@@ -209,3 +209,22 @@ La auditoria de color pidio `fadeToVoid` a=45,b=380 para que el pasillo no quede
 niebla. NO se aplico: el telon de agujas calibro sus 5 bandas de profundidad contra los
 valores actuales (a=20,b=140) y cambiarlos sin re-derivar `spireFog` deja el fondo plano.
 Si se toca uno, hay que recalcular el otro EN EL MISMO PASO, y validarlo mirando.
+
+## QUE PROBAR CUANDO POR FIN SE VEA (lista para Benjamin)
+Todo lo de abajo entro SIN que nadie lo viera funcionando: compila y cada agente verifico lo
+suyo, pero nadie lo jugo. Probar EN ESTE ORDEN y parar en el primero que falle: asi se sabe
+que capa lo rompio, en vez de adivinar entre veinte.
+
+1. ARRANCA y se ve el pasillo. Anotar el FPS (es el unico dato que no puedo medir yo).
+2. EL SUELO se ve claro y con losas, hasta los pies. (Historial: fallo muchas veces.)
+3. MIRAR ARRIBA: se ve la boveda con nervios, y el FARO colgando en el cruce.
+4. MIRAR A UN VENTANAL: se ve el arco ojival y, detras, el bosque de agujas en niebla.
+5. CAMINAR: el personaje da pasos (no se desliza), no se ve cuadrado, lleva sable curvo.
+6. SONIDO: hay viento de fondo, se oyen pisadas. (Si no hay nada, revisar que enlazo pspaudio.)
+7. TRIANGULO mirando una pared: la gravedad cambia HACIA esa pared y la camara acompaña.
+   Truco que el propio diseño asume: conviene SALTAR y cambiar en el aire, no parado.
+8. SUBIR: capitel -> techo de masa -> techo. Al tocar un ancla deberia autoguardar.
+9. GARGOLAS: acercarse a una posada; deberia abrir el ojo y despegarse. Huir a >58 la suelta.
+10. SALIR Y VOLVER A ENTRAR: deberia continuar donde estabas (guardado automatico).
+
+Si algo de esto falla, decir CUAL numero: cada uno apunta a un archivo distinto.
