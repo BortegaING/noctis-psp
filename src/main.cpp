@@ -234,6 +234,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "cand/wraith.h"
 #include "atmosphere.h"   // Vacio/Abismo (ruinas suspendidas) + siluetas colosales lejanas
 #include "weapons_fx.h"   // FX/comportamiento distinto por arma a distancia (10)
+#include "savedata.h"    // 5 ranuras con checksum, escritura segura y recuperacion
 #include "audio.h"       // atmosfera sonora procedural (viento, pisadas, campana, eco)
 #include "objective.h"   // BUCLE DE JUEGO: anclas, materiales y faro (ruta de escalada)
 #include "anim.h"        // ciclo de caminata procedural del hunter
@@ -1035,6 +1036,28 @@ int main(void) {
     const int   SHOT_LIFE = 55;
     // ---- gravedad (Triangulo cicla 6 direcciones) ----
     int   gravG = 0, prevTri = 0;
+    // ===== PARTIDA GUARDADA: volcar el estado y continuar donde quedaste =====
+    NoctisSave sv; saveClear(&sv);
+    auto snap = [&]() {
+        sv.px = playerX; sv.py = playerY; sv.pz = playerZ;
+        sv.camYaw = camYaw; sv.camPitch = camPitch; sv.gravG = gravG;
+        sv.en = en; sv.enMax = EN_MAX;
+        sv.objActive = objActiveAnchor(); sv.objAnchorSeen = objAnchorSeenMask();
+        sv.objMatTaken = objMatTakenMask(); sv.objGoal = objGoalDone();
+        sv.curRanged = curRanged; sv.curMelee = curMelee;
+        for (int k = 0; k < 16 && k < kRangedCount; ++k) sv.ammoMag[k] = ammoMag[k];
+    };
+    {   // carga: autoguardado y, si esta corrupto, cae solo a la ranura de recuperacion
+        NoctisSave ld; saveClear(&ld);
+        if (saveLoadAutoOrRecovery(&ld)) {
+            playerX = ld.px; playerY = ld.py; playerZ = ld.pz;
+            camYaw = ld.camYaw; camPitch = ld.camPitch; gravG = ld.gravG;
+            en = ld.en; EN_MAX = ld.enMax;
+            objRestore(ld.objActive, ld.objAnchorSeen, ld.objMatTaken, ld.objGoal);
+            curRanged = ld.curRanged; curMelee = ld.curMelee;
+            for (int k = 0; k < 16 && k < kRangedCount; ++k) ammoMag[k] = ld.ammoMag[k];
+        }
+    }
     float gvr = 0.0f, gvf = 0.0f, gvg = 0.0f;   // vel en el plano (right,fwd) + a lo largo de la gravedad
     static const char *kGravName[6] = { "ABAJO", "ARRIBA", "+X", "-X", "+Z", "-Z" };
 
@@ -1261,7 +1284,7 @@ int main(void) {
             // ===== RED DE SEGURIDAD: si el jugador se fue al VACIO, reset al spawn =====
             // (evita "caer al vacio por siempre" al cambiar de gravedad sin superficie)
             // ===== BUCLE DE JUEGO: anclas, materiales, faro y caida =====
-            objAnchorTouch(playerX, playerY, playerZ);        // tocar un ancla la activa
+            if (objAnchorTouch(playerX, playerY, playerZ) >= 0) { snap(); saveAuto(sv); }  // ancla NUEVA = autoguardado
             objMaterialTouch(playerX, playerY, playerZ);      // recoger sube la EN maxima
             EN_MAX = objEnergyMax();
             objGoalReached(playerX, playerY, playerZ);
@@ -1579,6 +1602,7 @@ int main(void) {
         sceGuSwapBuffers();
     }
 
+    snap(); saveAuto(sv);   // guardado de emergencia al salir
     sceGuTerm();
     sceKernelExitGame();
     return 0;

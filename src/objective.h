@@ -270,6 +270,20 @@ static int objGoalReached(float px, float py, float pz)
 }
 static int objGoalDone() { return g_objGoal; }
 
+// --- restaurar estado desde una partida guardada (savedata.h) ---
+// popcount a mano: no hay builtins garantizados en este toolchain.
+static void objRestore(int active, int anchorSeen, int matTaken, int goal) {
+    g_objActive     = active;
+    g_objAnchorSeen = anchorSeen;
+    g_objMatTaken   = matTaken;
+    g_objGoal       = goal;
+    int n = 0;
+    for (unsigned int m = (unsigned int)matTaken; m; m &= m - 1) ++n;
+    g_objMatCount = n;
+}
+static int objAnchorSeenMask() { return g_objAnchorSeen; }
+static int objMatTakenMask()   { return g_objMatTaken; }
+
 // ============================ 4) GEOMETRIA ===================================
 // OJO: este buffer se dibuja en el pase CON back-face culling (el de g_bridges /
 // g_spire). Por eso SOLO se usan addSolidBox y addPyramid, que tienen el winding
