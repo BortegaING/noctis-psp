@@ -234,7 +234,11 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "cand/wraith.h"
 #include "atmosphere.h"   // Vacio/Abismo (ruinas suspendidas) + siluetas colosales lejanas
 #include "weapons_fx.h"   // FX/comportamiento distinto por arma a distancia (10)
-#include "gargoyles.h"   // enemigos: 3 siluetas + maquina de estados con territorio
+// gargoyles.h QUITADO del juego (Benjamin, en la PSP: "se ven mal, borralas, se ven
+// cuadradas"). El archivo sigue en src/ sin incluirse: la maquina de estados (posada ->
+// alerta -> persigue -> ataca, territorio, linea de vista) es reutilizable; lo que no
+// servia eran los modelos. Si vuelve un enemigo, se reaprovecha esa logica con siluetas
+// nuevas. Al no incluirse no cuesta ni un byte en el binario.
 #include "savedata.h"    // 5 ranuras con checksum, escritura segura y recuperacion
 #include "audio.h"       // atmosfera sonora procedural (viento, pisadas, campana, eco)
 #include "objective.h"   // BUCLE DE JUEGO: anclas, materiales y faro (ruta de escalada)
@@ -986,7 +990,6 @@ int main(void) {
     buildCandidates();
 #endif
     buildNpcs();
-    gargInit();
     dlgInit();      // los 6 robots dejan de ser estatuas mudas
     // buildChains();   // cadenas QUITADAS (cosas entremedio que bajan FPS); g_chainVerts=0
     buildEnv();
@@ -1138,13 +1141,18 @@ int main(void) {
                 wishX = (ax / mag) * k;   // derecha = +X
                 wishZ = (ay / mag) * k;   // arriba (ay<0) = adelante (-Z)
             }
-            if (gravG == 0) {   // ===== PRIMERA PERSONA: nub gira+camina; D-pad strafe(izq/der)+mirar(arr/aba) =====
-            // -- girar (yaw) con nub X, suavizado (curva cuadratica: preciso al centro) --
-            float turnIn = 0.0f;
-            if (ax > DEADZONE || ax < -DEADZONE) {
-                float k = (ax < 0.0f ? -ax : ax); k = (k - DEADZONE) / (1.0f - DEADZONE); if (k > 1.0f) k = 1.0f;
-                turnIn = (ax < 0.0f ? -(k * k) : (k * k));
-            }
+            if (gravG == 0) {   // ===== TERCERA PERSONA: el nub MUEVE, el personaje GIRA hacia donde va =====
+            // Por que cambio el esquema: antes el nub X giraba la camara y luego se hacia
+            // heroYaw = camYaw. Como la camara va detras EN ESE MISMO ANGULO, el personaje
+            // quedaba clavado de espaldas y NUNCA giraba en pantalla: solo se deslizaba de
+            // lado. Se podia caminar perfectamente y aun asi "el movimiento se ve mal".
+            // Ahora el nub da una DIRECCION en el plano (relativa a la camara), el
+            // personaje encara esa direccion girando suave, y la camara se orbita aparte
+            // con el D-pad izq/der, que estaba ocupado por un strafe que ya no hace falta
+            // cuando el personaje gira de verdad.
+            // -- orbitar la camara (yaw) con D-pad izq/der --
+            float turnIn = ((pad.Buttons & PSP_CTRL_RIGHT) ? 1.0f : 0.0f)
+                         - ((pad.Buttons & PSP_CTRL_LEFT)  ? 1.0f : 0.0f);
             yawRate += (turnIn * TURN_MAX - yawRate) * LOOK_SMOOTH;
             camYaw  += yawRate;
             // -- mirar arriba/abajo (pitch) con D-pad; vuelve al centro al soltar; clamp --
@@ -1154,20 +1162,17 @@ int main(void) {
             if (!lookU && !lookD) camPitch += (-0.12f - camPitch) * 0.10f;   // reposo levemente HACIA ABAJO: se ve el borde del balcon y el abismo (vertigo)
             if (camPitch >  PITCH_CLAMP) camPitch =  PITCH_CLAMP;
             if (camPitch < -PITCH_CLAMP) camPitch = -PITCH_CLAMP;
-            // -- avanzar/retroceder (nub Y) + strafe (D-pad izq/der), relativo a la MIRADA --
-            float fwdIn = 0.0f;
-            if (ay > DEADZONE || ay < -DEADZONE) {
-                float k = (ay < 0.0f ? -ay : ay); k = (k - DEADZONE) / (1.0f - DEADZONE); if (k > 1.0f) k = 1.0f;
-                fwdIn = (ay < 0.0f ? k : -k);   // nub arriba (ay<0) = adelante
-            }
-            float strafeIn = ((pad.Buttons & PSP_CTRL_RIGHT) ? 1.0f : 0.0f) - ((pad.Buttons & PSP_CTRL_LEFT) ? 1.0f : 0.0f);
-            float fX = sinf(camYaw), fZ = -cosf(camYaw);     // adelante (horizontal)
-            float rX = cosf(camYaw), rZ = sinf(camYaw);      // derecha
-            float wvx = (fX * fwdIn + rX * strafeIn * STRAFE_SIGN) * FP_SPEED;
-            float wvz = (fZ * fwdIn + rZ * strafeIn * STRAFE_SIGN) * FP_SPEED;
-            velX += (wvx - velX) * FP_ACCEL;
-            velZ += (wvz - velZ) * FP_ACCEL;
-            if (fwdIn == 0.0f && strafeIn == 0.0f && grounded) { velX -= velX * FP_STOP; velZ -= velZ * FP_STOP; }
+            // -- el nub da una DIRECCION en el plano, relativa a la camara --
+            // wishX/wishZ ya vienen del nub con zona muerta aplicada, arriba.
+            const float fX = sinf(camYaw), fZ = -cosf(camYaw);     // adelante de la camara
+            const float rX = cosf(camYaw), rZ = sinf(camYaw);      // derecha de la camara
+            const float mvX = fX * (-wishZ) + rX * wishX;          // nub arriba (wishZ<0) = adelante
+            const float mvZ = fZ * (-wishZ) + rZ * wishX;
+            const float mvLen = sqrtf(mvX * mvX + mvZ * mvZ);
+            velX += (mvX * FP_SPEED - velX) * FP_ACCEL;
+            velZ += (mvZ * FP_SPEED - velZ) * FP_ACCEL;
+            if (mvLen < 0.001f && grounded) { velX -= velX * FP_STOP; velZ -= velZ * FP_STOP; }
+            const float strafeIn = 0.0f;   // ya no hay strafe: el personaje encara lo que camina
             // -- colision por ejes separados (desliza por muros) --
             float nx = playerX + velX; if (!blocked(nx, playerZ, playerY)) playerX = nx; else velX = 0.0f;
             float nz = playerZ + velZ; if (!blocked(playerX, nz, playerY)) playerZ = nz; else velZ = 0.0f;
@@ -1181,7 +1186,17 @@ int main(void) {
             if (playerX < -COURT) playerX = -COURT;
             if (playerZ >  COURT) playerZ =  COURT;
             if (playerZ < -COURT) playerZ = -COURT;
-            heroYaw = camYaw;   // disparo/melee usan heroYaw = hacia donde miras
+            // -- EL PERSONAJE GIRA HACIA DONDE CAMINA. Esto es lo que faltaba: antes
+            // aqui habia heroYaw = camYaw, o sea que encaraba SIEMPRE el mismo angulo que
+            // la camara y por eso no se le veia girar jamas. El giro va suavizado para que
+            // se lea como que el cuerpo acompaña, no como un salto instantaneo.
+            if (mvLen > 0.01f) {
+                const float want = atan2f(mvX, -mvZ);   // misma convencion: f = (sin, -cos)
+                float d = want - heroYaw;
+                while (d >  3.14159265f) d -= 6.28318531f;
+                while (d < -3.14159265f) d += 6.28318531f;
+                heroYaw += d * 0.22f;
+            }
             // -- head-bob por velocidad --
             float spd = sqrtf(velX * velX + velZ * velZ);
             if (spd > 0.008f) bobPhase += 0.30f + 0.9f * (spd / FP_SPEED);
@@ -1219,8 +1234,12 @@ int main(void) {
               prevTri = tri; }   // GRAVEDAD: Triangulo cicla 6 direcciones
 
             aiming = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
-            if (aiming) {   // al apuntar, el personaje encara al frente (-Z)
-                float dA = 0.0f - heroYaw;
+            if (aiming) {
+                // Al apuntar, el personaje encara HACIA DONDE MIRA LA CAMARA. Antes
+                // encaraba el eje -Z del MUNDO (dA = 0 - heroYaw), resto de cuando la
+                // camara era fija: girabas la camara, apuntabas, y el personaje se daba
+                // la vuelta a un rumbo que no tenia nada que ver con lo que veias.
+                float dA = camYaw - heroYaw;
                 while (dA >  3.14159265f) dA -= 6.28318531f;
                 while (dA < -3.14159265f) dA += 6.28318531f;
                 heroYaw += dA * 0.35f;
@@ -1256,13 +1275,10 @@ int main(void) {
             // --- melee (Circulo): golpe en arco al frente ---
             if ((pad.Buttons & PSP_CTRL_CIRCLE) && !prevCircle && meleeCD == 0) {
                 meleeCD = kMelee[curMelee].speedMs / 16; meleeFx = 8;
-                float reach = kMelee[curMelee].reach * 0.20f;
-                {   // barrido de sable delante del jugador
-                    const float mfx = sinf(heroYaw), mfz = -cosf(heroYaw);
-                    gargDamage(playerX + mfx * reach * 0.6f, playerY + 1.0f, playerZ + mfz * reach * 0.6f,
-                               reach * 0.8f, kMelee[curMelee].damage);
-                }
-                // (los robots ya NO son blancos: son los habitantes del sector)
+                // El barrido de sable ya no hiere a nadie: no quedan enemigos en el
+                // sector. El golpe se sigue lanzando (cadencia, destello y sonido) para
+                // que el arma no se sienta muerta y para tener donde enganchar el dano
+                // cuando vuelva un enemigo. Los robots NO son blancos: son habitantes.
             }
             prevCircle = (pad.Buttons & PSP_CTRL_CIRCLE) ? 1 : 0;   // flanco: un golpe por pulsacion, no uno por frame
             if (gravG == 0) {
@@ -1349,17 +1365,17 @@ int main(void) {
                 idleT += 0.05f;
             }
 
-            // ===== BUCLE DE JUEGO: gargolas, anclas, materiales, faro y caida =====
-            gargUpdate(playerX, playerY, playerZ, gravG);
-            {   // las gargolas que te alcanzan hacen dano; al morir, vuelves al ultimo ancla
-                const int nHit = gargHitPlayer(playerX, playerY, playerZ, 1.0f);
-                if (nHit > 0) { hp -= (float)(nHit * GARG_TOUCH_DMG); hurtFlash = 12; dlgNotifyHurt(); }
-                if (hp <= 0.0f) {
-                    objRespawn(&playerX, &playerY, &playerZ);
-                    gravG = objRespawnGrav();
-                    velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f;
-                    grounded = 1; hp = HP_MAX;
-                }
+            // ===== BUCLE DE JUEGO: anclas, materiales, faro y caida =====
+            // (sin enemigos por ahora: las gargolas se quitaron a peticion de Benjamin.
+            //  hp y hurtFlash se quedan cableados y listos para el proximo enemigo.)
+            // Muerte por vida a cero: sin enemigos no puede dispararse hoy, pero se deja
+            // cableada porque es el unico sitio donde se reaparece por dano, y asi el
+            // proximo enemigo solo tiene que restar vida.
+            if (hp <= 0.0f) {
+                objRespawn(&playerX, &playerY, &playerZ);
+                gravG = objRespawnGrav();
+                velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f;
+                grounded = 1; hp = HP_MAX;
             }
             if (hurtFlash > 0) --hurtFlash;
             if (objAnchorTouch(playerX, playerY, playerZ) >= 0) { snap(); saveAuto(sv); }  // ancla NUEVA = autoguardado
@@ -1403,24 +1419,24 @@ int main(void) {
             }
             if (pickTimer > 0) pickTimer--;
 
-            // ===== balas: mover, chocar con muros, herir gargolas =====
+            // ===== balas: mover, caducar y reventar contra la piedra =====
+            // Sin enemigos, la bala solo choca con el mundo. Cuando vuelva un enemigo, el
+            // enganche va justo donde esta la chispa: una sola comprobacion de impacto,
+            // NO una por frame (ese fue un bug real: dano continuo mientras pasaba cerca).
             for (int s = 0; s < 24; ++s) {
                 if (g_shots[s].life <= 0) continue;
                 g_shots[s].x += g_shots[s].vx;
                 g_shots[s].y += g_shots[s].vy;
                 g_shots[s].z += g_shots[s].vz;
                 if (--g_shots[s].life <= 0) continue;
-                if (blocked(g_shots[s].x, g_shots[s].z, g_shots[s].y)) { g_shots[s].life = 0; continue; }
-                // UN impacto, no dano por frame: gargDamage devuelve a cuantas hirio.
-                // Si acerto, la bala revienta y deja chispa (salvo que perfore).
-                if (gargDamage(g_shots[s].x, g_shots[s].y, g_shots[s].z, 1.6f, 34) > 0) {
-                    for (int q = 0; q < 12; ++q) if (g_sparks[q].life <= 0) {
+                if (blocked(g_shots[s].x, g_shots[s].z, g_shots[s].y)) {
+                    for (int q = 0; q < 12; ++q) if (g_sparks[q].life <= 0) {   // chispa contra el muro
                         g_sparks[q].x = g_shots[s].x; g_sparks[q].y = g_shots[s].y;
                         g_sparks[q].z = g_shots[s].z; g_sparks[q].life = 16; break;
                     }
-                    if (!g_shots[s].pierce) g_shots[s].life = 0;
+                    g_shots[s].life = 0;
                 }
-                // los robots ya NO son blancos: son los habitantes del sector
+                // los robots NO son blancos: son los habitantes del sector
             }
             for (int q = 0; q < 12; ++q) if (g_sparks[q].life > 0) g_sparks[q].life--;
         }
@@ -1548,12 +1564,10 @@ int main(void) {
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_ledgeEnd - g_ledgeStart, 0, g_solidWorld + g_ledgeStart);
         sceGuDisable(GU_TEXTURE_2D);
 
-        // 3) SIN textura. Con cull: objetivo, gargolas, telon de agujas y props (cajas).
+        // 3) SIN textura. Con cull: objetivo, telon de agujas y props (cajas).
         sceGuEnable(GU_CULL_FACE);
         g_objMarkVerts = objBuildMarkers(g_objMark, idleT);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_objMarkVerts, 0, g_objMark);
-        g_gargVerts = gargBuildAll(g_gargVB, idleT);
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_gargVerts, 0, g_gargVB);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_spireVerts, 0, g_spire);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);
         // Sin cull: robots y braseros usan addLimb/addBall, cuyo winding es el OPUESTO.
