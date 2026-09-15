@@ -182,3 +182,30 @@ el **ESPACIO JUGABLE**. Se junta asi: el recinto tiene **aberturas/ventanales** 
 un **telon de agujas fogueadas** (impostores baratos, casi color niebla). El jugador camina por
 pasillos (barato, ocluido) pero **cada abertura enmarca la vista de la referencia**. Al subir
 arriba de una masa, se abre la panoramica completa: ese es el momento "postal".
+
+## TANDA DE PULIDO (15 agentes, commits 1f934ab..8046f4a)
+Integrado y compilado pieza por pieza: sector cerrado de pasillos con boveda de crucería y
+VENTANALES con traceria gotica; muro de silleria y suelo de catedral; 12 braseros, estatuas,
+sarcofagos y cadenas; 6 robots habitantes; telon de 106 agujas en 5 anillos; cielo de
+sobrecast calido 4x mas barato; hunter organico (una sola caja en todo el modelo) con sable
+curvo; ciclo de caminata real; gravedad DIRIGIDA a la cara que miras + colision generalizada.
+
+### El hallazgo que explica anos de "se ve gris"
+La piedra del sector era **azul dominante** (134,147,172). Multiplicada por la textura parda
+daba un pixel final gris NEUTRO muerto: por mas textura gotica que se pusiera, el juego nunca
+se iba a ver como la referencia calida. Arreglado igualando luminancia pero con r>g>b.
+
+### Bugs que encontraron los agentes entre ellos (no repetirlos)
+- `addLimb` tiene el winding OPUESTO al de `addSolidBox`: cilindros y elipsoides DESAPARECEN
+  en un pase con back-face culling. Robots y hunter van en el pase SIN culling.
+- Las cajas del motor (`addSolidBoxT`) NO traen cara inferior: para algo que se mira desde
+  abajo (boveda) hay que emitir el intrados a mano.
+- El bloque de animacion viejo inclinaba al personaje hacia ATRAS y aplicaba el pitch en el
+  eje del MUNDO (corriendo de lado parecia volcar).
+- La camara mira 11.75 grados hacia abajo: el horizonte cae en pantalla y=92, no en el centro.
+
+### DECISION DEFERIDA (a proposito)
+La auditoria de color pidio `fadeToVoid` a=45,b=380 para que el pasillo no quede lavado de
+niebla. NO se aplico: el telon de agujas calibro sus 5 bandas de profundidad contra los
+valores actuales (a=20,b=140) y cambiarlos sin re-derivar `spireFog` deja el fondo plano.
+Si se toca uno, hay que recalcular el otro EN EL MISMO PASO, y validarlo mirando.
