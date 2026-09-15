@@ -234,6 +234,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "cand/wraith.h"
 #include "atmosphere.h"   // Vacio/Abismo (ruinas suspendidas) + siluetas colosales lejanas
 #include "weapons_fx.h"   // FX/comportamiento distinto por arma a distancia (10)
+#include "objective.h"   // BUCLE DE JUEGO: anclas, materiales y faro (ruta de escalada)
 #include "anim.h"        // ciclo de caminata procedural del hunter
 #include "weapons_geo.h" // buildMeleeWeapon(): las 10 armas melee con forma propia (lista para cablear al cambio de arma)
 #include "viewmodel.h"    // arma en 1ra persona (pistola de chispa) + spec de movimiento
@@ -988,7 +989,7 @@ int main(void) {
     float velY = 0.0f, velX = 0.0f, velZ = 0.0f;
     int   coyote = 0, prevJump = 0, jumpBuf = 0;
     float en = 780.0f;
-    const float EN_MAX = 780.0f;
+    float EN_MAX = 780.0f;   // sube con cada material recogido (objEnergyMax)
     // constantes de movilidad (diseno del agente)
     const float DEADZONE = 0.18f, RUN_SPEED = 0.22f, ACCEL_GND = 0.20f, ACCEL_AIR = 0.09f, STOP_FRIC = 0.22f, CAM_SPEED = 0.03f;
     const float GRAVITY = 0.020f, JUMP_VEL = 0.55f, SHORTHOP = 0.50f;
@@ -1254,11 +1255,16 @@ int main(void) {
 
             // ===== RED DE SEGURIDAD: si el jugador se fue al VACIO, reset al spawn =====
             // (evita "caer al vacio por siempre" al cambiar de gravedad sin superficie)
-            if (playerY < -30.0f || playerY > 400.0f ||
-                playerX * playerX + playerZ * playerZ > 200.0f * 200.0f) {
-                playerX = 0.0f; playerY = 0.0f; playerZ = 118.0f;   // vuelve al BALCON
+            // ===== BUCLE DE JUEGO: anclas, materiales, faro y caida =====
+            objAnchorTouch(playerX, playerY, playerZ);        // tocar un ancla la activa
+            objMaterialTouch(playerX, playerY, playerZ);      // recoger sube la EN maxima
+            EN_MAX = objEnergyMax();
+            objGoalReached(playerX, playerY, playerZ);
+            if (objFallCheck(playerX, playerY, playerZ, gravG, grounded)) {
+                objRespawn(&playerX, &playerY, &playerZ);     // vuelve al ULTIMO ancla...
+                gravG = objRespawnGrav();                     // ...con SU gravedad (si no, caes 60)
                 velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f;
-                gravG = 0; grounded = 1;
+                grounded = 1;
             }
 
             // recoleccion de recursos por proximidad
@@ -1424,6 +1430,8 @@ int main(void) {
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidVerts,   0, g_void);     // (plaza vieja, apagado)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_bridgesVerts,   0, g_bridges);   // EL POZO: puentes/megavigas cruzando el abismo
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidShaftVerts, 0, g_voidShaft); // EL POZO: abismo sin fondo (arriba y abajo)
+        g_objMarkVerts = objBuildMarkers(g_objMark, (float)fps * 0.0f + idleT);   // anclas, materiales y faro
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_objMarkVerts, 0, g_objMark);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_spireVerts, 0, g_spire);     // MAR DENSO de agujas (el look de la referencia)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);   // props del pueblo
         // cables + robots + ambiente (braseros) sin textura
