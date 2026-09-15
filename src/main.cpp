@@ -234,6 +234,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "cand/wraith.h"
 #include "atmosphere.h"   // Vacio/Abismo (ruinas suspendidas) + siluetas colosales lejanas
 #include "weapons_fx.h"   // FX/comportamiento distinto por arma a distancia (10)
+#include "audio.h"       // atmosfera sonora procedural (viento, pisadas, campana, eco)
 #include "objective.h"   // BUCLE DE JUEGO: anclas, materiales y faro (ruta de escalada)
 #include "anim.h"        // ciclo de caminata procedural del hunter
 #include "weapons_geo.h" // buildMeleeWeapon(): las 10 armas melee con forma propia (lista para cablear al cambio de arma)
@@ -983,6 +984,7 @@ int main(void) {
     buildFontAtlas();
     scePowerSetClockFrequency(333, 333, 166);   // MAXIMO de la PSP (por defecto corre a 222/111): +50% CPU y bus
     initGu();
+    audioInit();          // si el canal de audio falla, todo queda en no-op y el juego sigue
 
     SceCtrlData pad; memset(&pad, 0, sizeof(pad));   // sin basura en el 1er frame (registraba un Triangulo fantasma -> gravedad arrancaba en -Z)
     float playerX = 0.0f, playerY = 0.0f, playerZ = 0.0f;   // BLAME: spawn al centro, monolitos lejos
@@ -1634,6 +1636,7 @@ int main(void) {
 
         sceGuFinish();
         sceGuSync(0, 0);
+        audioFrame(bobPhase, gravG);   // pisadas atadas al reloj de audio: suenan igual a 60 o a 18 fps
         sceDisplayWaitVblankStart();
         sceGuSwapBuffers();
     }

@@ -23,6 +23,7 @@ target_link_libraries(${PROJECT_NAME}
     pspge
     pspctrl
     psppower
+    pspaudio
 )
 
 # Genera EBOOT.PBP ejecutable en PSP / PPSSPP
