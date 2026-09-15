@@ -22,13 +22,15 @@
 //     picaduras.  Nada de esto es simetrico: el ojo no lee la tesela como un sello limpio.
 // Determinista (hash entero, sin rand, sin heap; sin dependencia real de <math.h>).
 // FUNCION EXACTA de (x mod W, y mod W) -> TESELA PERFECTA en ambos ejes (ver NOTA final).
-// Brillo pensado para GU_TFX_MODULATE contra un color de vertice YA ACLARADO:
-//   piedra media ~110-150 | juntas, llagas y recesos ~70-90 | fondo del nicho y cabeza
-//   fria del vano ~58-75 | cornisa/imposta/alfeizar/figura iluminados ~140-155 | AMBAR
-//   hasta ~208.  El GRUESO queda MEDIO (nunca bajo ~90): el pasillo no se va a negro.
-//   Piedra CALIDA parda (r > g > b); el musgo es la unica nota verde.  OJO 16 BITS: la
-//   textura se trunca a RGB565 (5/6/5 bits), asi que no hay degradados suaves largos:
-//   contraste CLARO por escalones y ruido fino de +-4 (que ademas hace de dither).
+// Brillo pensado para GU_TFX_MODULATE contra un color de vertice YA ACLARADO (medido
+// sobre la tesela generada): piedra media 110-150 (mediana 128, solo el 6% cae bajo 80)
+//   | tendeles y llagas ~74-95 | hueco de la arqueria ~70-90 | fondo del nicho ~72 y
+//   cabeza fria del vano ~56 | cornisa/imposta/alfeizar/canecillos/figura ~140-165 |
+//   AMBAR 190-207.  El GRUESO queda MEDIO: el pasillo NO se va a negro.
+//   Piedra CALIDA parda: r = lum+9, g = lum-2, b = lum-19 (r > g > b); el musgo es la
+//   unica nota verde (baja r y b mas que g).  OJO 16 BITS: la textura se trunca a RGB565
+//   (5/6/5 bits) SIN dither, asi que no hay degradados suaves largos: todo el relieve es
+//   por ESCALONES y el grano fino es de +-4 (cruza el escalon de 5 bits -> hace de dither).
 static void genIndustrial(unsigned int *t, int W) {
     // ---- geometria del modulo (derivada de W; comentarios = valores exactos con W=128) ----
     const int NC = 9;                                        // hiladas de silleria
@@ -128,19 +130,19 @@ static void genIndustrial(unsigned int *t, int W) {
             const int bId = H(course * 13 + 5, bj * 7 + 3);   // identidad del bloque 0..255
 
             // ---- 1) PIEDRA: tono por bloque + grano + moteado + picaduras ----
-            int lum = 126 + (bId % 15) - 7;                   // piedra MEDIA (para el MODULATE)
+            int lum = 131 + (bId % 17) - 8;                   // piedra MEDIA (para el MODULATE)
             lum += (H(x, y) % 9) - 4;                         // grano fino (hace de dither en 565)
             lum += (H(x >> 2, y >> 2) % 7) - 3;               // moteado de la caliza
-            if      (bId < 30)  lum -= 18;                    // spolia ahollinada (bloque oscuro)
-            else if (bId > 228) lum += 14;                    // piedra fresca (bloque claro)
+            if      (bId < 30)  lum -= 19;                    // spolia ahollinada (bloque oscuro)
+            else if (bId > 228) lum += 15;                    // piedra fresca (bloque claro)
             { int n = H(x * 3 + 1, y * 5 + 2);
               if (n < 10) lum -= 14; else if (n > 248) lum += 9; }   // picaduras / cuarzo
 
             // ---- 2) JUNTAS: tendel y llaga hondos, de profundidad VARIABLE ----
-            if      (hj == 0)      lum -= 36 + (H(course * 5 + 1, 200) % 10);   // tendel
+            if      (hj == 0)      lum -= 41 + (H(course * 5 + 1, 200) % 10);   // tendel
             else if (hj == 1)      lum += 8;                                    // labio iluminado
             else if (hj == ch - 1) lum -= 12;                                   // sombra del canto
-            if      (vj == 0)      lum -= 32 + (H(bj * 11 + 2, course * 17 + 9) % 9);  // llaga
+            if      (vj == 0)      lum -= 36 + (H(bj * 11 + 2, course * 17 + 9) % 9);  // llaga
             else if (vj == 1)      lum += 6;
             else if (vj == bw - 1) lum -= 10;
             // ESQUINAS DESPORTILLADAS: ~18% pierde la arista alta-izq, ~15% la baja-der
@@ -215,7 +217,7 @@ static void genIndustrial(unsigned int *t, int W) {
 
             // ---- color de PIEDRA: calida/parda (r > g > b), nunca casi-negra ----
             lum = C(lum, 54, 176);
-            int r = lum + 5, g = lum - 2, b = lum - 13;
+            int r = lum + 9, g = lum - 2, b = lum - 19;
 
             // ---- 7) MUSGO / humedad verdosa (juntas y bandas que escurren) ----
             {
@@ -239,13 +241,13 @@ static void genIndustrial(unsigned int *t, int W) {
                 if (hS >= 0 && adx <= hS) {
                     int v = 98 - (hS - adx) * 2 + ((dxs < 0) ? 14 : 0);// se hunde hacia el vano
                     if (y > wSill) v = 128;                            // losa del alfeizar
-                    r = v + 5; g = v - 2; b = v - 13;
+                    r = v + 9; g = v - 2; b = v - 19;
                 }
                 int hF = ogive(y, wHW + 2, wHW, wSpr, wRise, wSill);   // JAMBA / baqueton de piedra
                 if (hF >= 0 && adx <= hF) {
                     int v = 118 + ((dxs < 0) ? 16 : -12) + (H(x, y) % 5 - 2);
                     if (y >= wSill - 1) v = 142;                       // nariz del alfeizar
-                    r = v + 5; g = v - 2; b = v - 13;
+                    r = v + 9; g = v - 2; b = v - 19;
                 }
                 int hI = ogive(y, wHW, wHW, wSpr, wRise, wSill);       // VANO
                 if (hI >= 0 && adx <= hI) {
@@ -267,22 +269,23 @@ static void genIndustrial(unsigned int *t, int W) {
                 if (y >= nTop - 4 && y <= nBot + 3 && adn <= nHW + 3) {
                     if (y < nTop) {                                    // DOSEL
                         int v = (y == nTop - 4) ? 96 : ((y == nTop - 1) ? 74 : 144);
-                        r = v + 5; g = v - 2; b = v - 13;
+                        r = v + 9; g = v - 2; b = v - 19;
                     } else if (y > nBot) {                             // PEANA
                         int v = (y == nBot + 1) ? 146 : 92;
-                        r = v + 5; g = v - 2; b = v - 13;
+                        r = v + 9; g = v - 2; b = v - 19;
                     } else {
                         int hwN = nHW, dh = (nTop + nHW) - y;          // cabeza redondeada del nicho
                         if (dh > 0) { int rr = nHW * nHW; hwN = nHW - (nHW * dh * dh + rr / 2) / rr; }
                         if (adn <= hwN) {
-                            bool body = (adn <= 2 && y >= nTop + nHW + 2 && y <= nBot - 2);
                             bool head = (adn <= 1 && y >= nTop + nHW - 2 && y <  nTop + nHW + 2);
-                            if (body || head) {                        // figura de piedra PALIDA
+                            bool body = (adn <= 2 && y >= nTop + nHW + 2 && y <= nBot - 2);
+                            bool robe = (adn <= 3 && y >= nBot - 9     && y <= nBot - 2);  // manto que se abre
+                            if (body || head || robe) {                // figura de piedra PALIDA
                                 int v = 148 - ((dxn > 0) ? 22 : 0) - (((y & 3) == 0) ? 7 : 0);
-                                r = v + 4; g = v - 3; b = v - 14;
+                                r = v + 7; g = v - 3; b = v - 20;
                             } else {                                   // fondo hundido del nicho
                                 int v = 62 + ((dxn < 0) ? 10 : 0);
-                                r = v + 3; g = v - 1; b = v - 8;
+                                r = v + 5; g = v - 1; b = v - 12;
                             }
                         } else if (adn == hwN + 1) { r = 150; g = 143; b = 130; }  // arista del nicho
                     }
@@ -302,11 +305,12 @@ static void genIndustrial(unsigned int *t, int W) {
 //   abaco, plinto y columnillas; VENTANA OJIVAL profunda (derrame+jamba+alfeizar) con el
 //   vano oscuro y frio arriba y resplandor AMBAR abajo; NICHO con figura palida bajo
 //   dosel; y desgaste asimetrico: chorreras, musgo en juntas bajas, 4 fisuras, picaduras.
-// Brillo (MODULATE): piedra media ~110-150 (clamp de lum a 54..176 -> el grueso nunca cae
-//   bajo ~90 por el desgaste); tendeles/llagas/hueco ciego ~72-92; nicho y cabeza fria del
-//   vano ~58-75; cornisa/imposta/alfeizar/figura ~140-155; AMBAR hasta (208,153,93).
-//   Piedra parda r>g>b, unico verde = musgo (g cae menos que r y b).  Ruido +-4 = dither
-//   contra el bandeo de RGB565; todo el relieve es por escalones, sin degradados largos.
+// Brillo (MODULATE), medido sobre la tesela: piedra 110-150 (mediana 128; clamp de lum a
+//   54..176, solo 6% del mapa bajo 80 y siempre en juntas/recesos); tendeles y llagas
+//   ~74-95; hueco de la arqueria ~70-90; nicho ~72 y cabeza fria del vano ~56; cornisa,
+//   imposta, alfeizar, canecillos y figura ~140-165; AMBAR hasta (207,152,93).  Piedra
+//   parda r>g>b (+9/-2/-19), unico verde = musgo.  Ruido +-4 = dither contra el bandeo de
+//   RGB565; todo el relieve va por ESCALONES, sin degradados suaves largos.
 // TESELA (ambos ejes, potencia de 2, GU_REPEAT):
 //   - Todo es funcion exacta de (x mod W, y mod W): hiladas courseY[] empiezan en 0 y la
 //     ultima termina en W; las 4 llagas jx[] dependen solo de la hilada y el BLOQUE QUE

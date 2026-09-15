@@ -446,6 +446,10 @@ static void addRailing(TexVertex *buf, int &i, float x0, float z0,
 struct CityBldg { float x, z, w, d, h; unsigned int color; };
 static CityBldg g_city[256];
 static int g_cityCount = 0;
+// Fase 2 de gravity.h: colision y suelo GENERALIZADOS a las 6 gravedades. Va aqui
+// porque necesita g_city/g_cityCount, declarados recien arriba.
+#define NOCTIS_GRAVITY_WORLD
+#include "gravity.h"
 #include "city.h"          // buildCity() llena g_city (16 edificios espaciados, plaza al centro)
 #include "gothic_bldg.h"   // buildGothicBldg(): edificio gotico (legacy, sin uso)
 #include "cathedral.h"     // buildCathedral(): catedral Yharnam ornamentada (legacy)
@@ -489,7 +493,7 @@ static void buildCityBldg(TexVertex *buf, int &i, float cx, float cz,
 static void buildApron() {
     int i = 0;
     const float HALF = 20.0f;                       // ±20: al borde de la plataforma (r72) el apron no se sale al vacio
-    const int   N    = 24;                          // 24x24 celdas ~1.7u (<2.6u -> el hueco cae fuera de pantalla)
+    const int   N    = 14;                          // 14x14 celdas de 2.86u (3ra persona: el ojo va a 4.5, el primer piso visible a ~4.5u -> sigue sin cruzar la camara) (<2.6u -> el hueco cae fuera de pantalla)
     const float CELL = (2.0f * HALF) / (float)N;    // 2.5u
     const float invUV = 1.0f / 12.0f;
     const unsigned int fcol = RGBA(240, 230, 214, 255);   // REPLACE ignora el color
@@ -525,6 +529,7 @@ static void buildSolidWorld() {
     g_spireStart = i; g_spireEnd = i;
     g_tailStart = i;
     g_metalVerts = 0;
+    if (i > 36000) i = 36000;     // red de seguridad: g_solidWorld[36000]
     g_solidVerts = i;
 }
 
@@ -904,13 +909,16 @@ static void setupCallbacks() {
 static void *g_fbp0, *g_fbp1, *g_zbp;
 
 static void initGu() {
-    g_fbp0 = guGetStaticVramBuffer(BUF_WIDTH, SCR_HEIGHT, GU_PSM_8888);
-    g_fbp1 = guGetStaticVramBuffer(BUF_WIDTH, SCR_HEIGHT, GU_PSM_8888);
+    // 16 BITS: el fill es ancho de banda. A 8888 cada pixel escribe 4 bytes (y lee
+    // otros 4 si hay mezcla); a 5650 escribe 2. Mismo truco que dio resultado en las
+    // texturas. Ademas libera ~560 KB de VRAM.
+    g_fbp0 = guGetStaticVramBuffer(BUF_WIDTH, SCR_HEIGHT, GU_PSM_5650);
+    g_fbp1 = guGetStaticVramBuffer(BUF_WIDTH, SCR_HEIGHT, GU_PSM_5650);
     g_zbp  = guGetStaticVramBuffer(BUF_WIDTH, SCR_HEIGHT, GU_PSM_4444);
 
     sceGuInit();
     sceGuStart(GU_DIRECT, g_list);
-    sceGuDrawBuffer(GU_PSM_8888, g_fbp0, BUF_WIDTH);
+    sceGuDrawBuffer(GU_PSM_5650, g_fbp0, BUF_WIDTH);
     sceGuDispBuffer(SCR_WIDTH, SCR_HEIGHT, g_fbp1, BUF_WIDTH);
     sceGuDepthBuffer(g_zbp, BUF_WIDTH);
     sceGuOffset(2048 - (SCR_WIDTH / 2), 2048 - (SCR_HEIGHT / 2));
@@ -925,6 +933,11 @@ static void initGu() {
                                  // (paredes/piso/agujas SI; ventanas/hero/braseros NO -> winding no probado).
     sceGuDisable(GU_TEXTURE_2D);
     sceGuShadeModel(GU_SMOOTH);
+    {   // dither: disimula el bandeado de los degradados a 16 bits. Coste cero.
+        static const ScePspIMatrix4 kDither = { {-4,0,-3,1}, {2,-2,3,-1}, {-3,1,-4,0}, {3,-1,2,-2} };
+        sceGuSetDither((ScePspIMatrix4*)&kDither);
+        sceGuEnable(GU_DITHER);
+    }
     sceGuFinish();
     sceGuSync(0, 0);
     sceDisplayWaitVblankStart();
@@ -959,7 +972,7 @@ int main(void) {
     g_voidShaftVerts = 0;
     // El fondo de la PLAZA vieja (agujas r90+, ruinas/siluetas exteriores, props y robots
     // de plaza) quedaria FLOTANDO dentro del pozo o detras de sus muros -> apagado.
-    g_spireVerts = 0; g_vpropsVerts = 0; g_voidVerts = 0; g_farSilVerts = 0; g_npcVerts = 0; g_chainVerts = 0;
+    g_voidVerts = 0; g_farSilVerts = 0; g_chainVerts = 0;   // capas del mundo viejo (sin uso)
     g_vpropsVerts = buildVillageProps(g_vprops);
     g_spireVerts  = buildSpirescape(g_spire);
     buildFontAtlas();
@@ -1092,7 +1105,17 @@ int main(void) {
             // Triangulo cicla la DIRECCION de gravedad (0=abajo .. 5=-Z)
             // GRAVEDAD (Triangulo) DESHABILITADA en 1ra persona por ahora: se reintroduce
             // con camara gravedad-consciente en una tanda dedicada. gravG queda en 0.
-            { int tri = (pad.Buttons & PSP_CTRL_TRIANGLE) ? 1 : 0; if (tri && !prevTri) { gravG = (gravG + 1) % 6; velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f; } prevTri = tri; }   // GRAVEDAD: Triangulo cicla 6 direcciones
+            { int tri = (pad.Buttons & PSP_CTRL_TRIANGLE) ? 1 : 0;
+              if (tri && !prevTri && en >= GRAV_EN_MIN) {      // GRAVEDAD DIRIGIDA: a la cara que miras
+                  const float cp2 = cosf(camPitch), sp2 = sinf(camPitch);
+                  const int tg = gravPickTarget(playerX, playerY + EYE_H, playerZ,
+                                                sinf(camYaw) * cp2, sp2, -cosf(camYaw) * cp2);
+                  if (tg >= 0 && tg != gravG) {
+                      gravG = tg; en -= GRAV_EN_SWITCH;        // cuesta energia: obliga a planear la ruta
+                      velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f; grounded = 0;
+                  }
+              }
+              prevTri = tri; }   // GRAVEDAD: Triangulo cicla 6 direcciones
 
             aiming = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
             if (aiming) {   // al apuntar, el personaje encara al frente (-Z)
@@ -1199,13 +1222,20 @@ int main(void) {
                 float vY = ry * gvr + ffy * gvf + gy * gvg;
                 float vZ = rz * gvr + ffz * gvf + gz * gvg;
                 grounded = 0;
+                // colision GENERALIZADA (gravBlocked): los muros frenan igual caminando por una pared
                 float nX = playerX + vX;
-                if (nX > -140.0f && nX < 140.0f && !blocked(nX, playerZ, playerY)) playerX = nX; else if (gx != 0.0f) { grounded = 1; gvg = 0.0f; }
+                if (!gravBlocked(gravG, nX, playerY, playerZ, 1.1f)) playerX = nX; else if (gx != 0.0f) { grounded = 1; gvg = 0.0f; }
                 float nZ = playerZ + vZ;
-                if (nZ > -140.0f && nZ < 140.0f && !blocked(playerX, nZ, playerY)) playerZ = nZ; else if (gz != 0.0f) { grounded = 1; gvg = 0.0f; }
+                if (!gravBlocked(gravG, playerX, playerY, nZ, 1.1f)) playerZ = nZ; else if (gz != 0.0f) { grounded = 1; gvg = 0.0f; }
                 float nY = playerY + vY;
-                if (nY < 0.0f) { nY = 0.0f; if (gy < 0.0f) { grounded = 1; gvg = 0.0f; } }
-                if (!blocked(playerX, playerZ, nY)) playerY = nY; else if (gy != 0.0f) { grounded = 1; gvg = 0.0f; }
+                if (!gravBlocked(gravG, playerX, nY, playerZ, 1.1f)) playerY = nY; else if (gy != 0.0f) { grounded = 1; gvg = 0.0f; }
+                // APOYO a lo largo del eje de la gravedad: la cara de la caja se vuelve el suelo
+                {
+                    const float f  = gravGroundAlong(gravG, playerX, playerY, playerZ);
+                    const float sg = (gx + gy + gz);                 // signo del eje de gravedad
+                    float *pa = (gx != 0.0f) ? &playerX : ((gy != 0.0f) ? &playerY : &playerZ);
+                    if ((*pa - f) * sg >= 0.0f) { *pa = f; gvg = 0.0f; grounded = 1; }
+                }
                 if (grounded && en < EN_MAX) en += EN_REGEN;
                 if (en > EN_MAX) en = EN_MAX; if (en < 0.0f) en = 0.0f;
                 if (gvr * gvr + gvf * gvf > 0.004f) heroYaw = atan2f(gvr, gvf);   // encara el avance en el plano
@@ -1389,8 +1419,9 @@ int main(void) {
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);   // props del pueblo
         // cables + robots + ambiente (braseros) sin textura
         sceGumDrawArray(GU_LINES, LINE_FLAGS, g_chainVerts, 0, g_chains);
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
-        sceGuDisable(GU_CULL_FACE);  // braseros (g_env) + HUNTER + balas: winding NO verificado -> culling OFF (seguro)
+        sceGuDisable(GU_CULL_FACE);  // de aqui en adelante SIN culling: addLimb/addBall (robots, hunter)
+                                     // tienen el winding OPUESTO al de las cajas y desapareceria todo.
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);   // habitantes roboticos
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_envVerts, 0, g_env);
 
         // ---- 3RA PERSONA: el HUNTER encara heroYaw (=camYaw), leve balanceo al caminar ----
@@ -1473,29 +1504,20 @@ int main(void) {
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
         }
 
-        // ---- ARMA en 1ra persona (viewmodel): pase propio, ENCIMA del mundo ----
-        sceGuClear(GU_DEPTH_BUFFER_BIT);            // el arma no la ocluyen los muros
+        // ---- viewmodel: APAGADO en 3ra persona ----
+        // Costaba un borrado del buffer de profundidad a pantalla completa + 3 matrices
+        // + generar 640 verts por CPU cada frame, todo para un dibujado "if (0)".
+        // Cuando vuelva la 1ra persona, recuperar el bloque del historial de git.
         sceGuDisable(GU_TEXTURE_2D);
-        sceGumMatrixMode(GU_PROJECTION);
-        sceGumLoadIdentity();
-        sceGumPerspective(70.0f, 16.0f / 9.0f, 0.05f, 50.0f);   // near muy corto: el arma esta pegada a la camara
-        sceGumMatrixMode(GU_VIEW);
-        sceGumLoadIdentity();
-        sceGumMatrixMode(GU_MODEL);
-        sceGumLoadIdentity();
-        { ScePspFVector3 zf = { 1.0f, 1.0f, -1.0f }; sceGumScale(&zf); }   // arma autorada con adelante +Z -> escena -Z
-        {
-            int vmV = buildViewmodel(g_vm, vmSway, vmBob);
-            sceGuDisable(GU_CULL_FACE);
-            if (0) sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vmV, 0, g_vm);   // 3ra persona: sin viewmodel
-        }
 
         // ---------- HUD (2D) ----------
         sceGuDisable(GU_DEPTH_TEST);
         sceGuEnable(GU_BLEND);
         sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
         sceGuDisable(GU_TEXTURE_2D);
-        drawVignette();   // bordes oscuros cinematograficos (sobre el 3D, bajo el HUD)
+        // La viñeta completa costaba ~59.500 px MEZCLADOS (leer+mezclar+escribir por
+        // pixel) = casi una pantalla entera de trabajo. Queda solo la banda superior.
+        gradQuad(0, 32, RGBA(0, 0, 0, 105), RGBA(0, 0, 0, 0));
 
         // paneles + barras (rectangulos)
         const int barX = 44, barW = 118;
