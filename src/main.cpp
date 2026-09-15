@@ -610,7 +610,7 @@ static int g_chUpperV = 0, g_chHeadV = 0, g_chLegV = 0, g_chArmV = 0, g_chSwordV
 // PERSONAJE DEL JUEGO: el HUNTER (encapuchado gotico, elegido por Benjamin).
 // Construido con las primitivas organicas (cilindros conicos + elipsoides +
 // abrigo hasta la rodilla con piernas a la vista), NO cubos.
-static LineVertex __attribute__((aligned(16))) g_hero[3200];
+static LineVertex __attribute__((aligned(16))) g_hero[4096];
 static LineVertex __attribute__((aligned(16))) g_vm[640];   // viewmodel del arma (1ra persona)
 static int g_heroV = 0;
 static void buildHero() {

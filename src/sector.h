@@ -23,9 +23,16 @@ static const float SEC_COL_OFF  =  7.0f;  // a 2u de la cara de la masa: no qued
 static const float SEC_COL_STEP = 16.0f;  // separacion entre columnas
 static const float SEC_COL_W    =  3.3f;  // lado del fuste (colision)
 static const float SEC_COL_H    = 18.6f;  // alto total con capitel
-static const int   SEC_COL_SEG  =  5;     // el fuste va en TRAMOS: un quad de 16u de alto
-                                          // cruza el plano de la camara al pasar cerca y el
-                                          // hardware lo DESCARTA entero -> la columna "se borra".
+static const int   SEC_COL_SEG  =  5;     // (historico: el fuste iba en tramos porque un quad
+                                          // de 16u cruzaba el plano de camara y el hardware lo
+                                          // descartaba entero. Ya se habilito GU_CLIP_PLANES.)
+// --- CAPILLAS: lo que hay HOY en los bordes del pasillo, en lugar de las columnas ---
+static const float SEC_CH_W    = 5.2f;               // frente, a lo largo del pasillo
+static const float SEC_CH_D    = 3.4f;               // fondo, hacia la masa
+static const float SEC_CH_TER  = SEC_COL_H;          // 18.6: CUBIERTA PISABLE. No tocar:
+                                                     // el ancla A1 y los materiales M6 y M7
+                                                     // del bucle de juego estan justo encima.
+static const float SEC_CH_CORN = SEC_CH_TER - 1.8f;  // 16.8: arranque de la cornisa
 // --- CORONACION de la masa (cuerpo + cornisa + remate): se dibuja Y se choca ---
 // El techo REAL de una masa es la CORNISA (31.6), no el cuerpo (30): el que sube
 // a una masa se para ahi. Las medidas viven aca para que el dibujo (buildSectorWalls)
@@ -69,15 +76,20 @@ static void buildSectorCollision() {
     g_city[n++] = {  0.0f, -wc, 2.0f * (SEC_HALF + wt), wt, SEC_CEIL, c };  // muro -Z
     g_city[n++] = {  wc,  0.0f, wt, 2.0f * (SEC_HALF + wt), SEC_CEIL, c };  // muro +X
     g_city[n++] = { -wc,  0.0f, wt, 2.0f * (SEC_HALF + wt), SEC_CEIL, c };  // muro -X
-    // COLUMNAS de la arcada: antes eran solo adorno y se atravesaban. Ahora son solidas
-    // (y sus capiteles quedan pisables, util para la escalada con gravedad).
+    // CAPILLAS: solidas hasta su cubierta, que asi queda PISABLE. Eso no es un extra
+    // estetico: el ancla A1 y los materiales M6 y M7 estan justo encima, a 18.6.
+    // Una sola caja por capilla, con la huella de la cornisa (que es lo que mas vuela)
+    // y el fondo de los contrafuertes. El pretil y los pinaculos NO llevan caja: son
+    // relieve, y darsela convertiria la plataforma en una trampa de la que no se sale.
     for (int a = 0; a < 2; ++a)
         for (int s = -1; s <= 1; s += 2)
-            for (int k = -2; k <= 2; ++k) {
-                float t = (float)k * SEC_COL_STEP;
-                float x = (a == 0) ? (SEC_COL_OFF * s) : t;
-                float z = (a == 0) ? t : (SEC_COL_OFF * s);
-                g_city[n++] = { x, z, SEC_COL_W, SEC_COL_W, SEC_COL_H, c };
+            for (int k = -1; k <= 1; k += 2) {
+                const float t = (float)k * SEC_COL_STEP;
+                const float x = (a == 0) ? (SEC_COL_OFF * (float)s) : t;
+                const float z = (a == 0) ? t : (SEC_COL_OFF * (float)s);
+                const float along = SEC_CH_W + 1.3f, lat = SEC_CH_D + 1.5f;
+                g_city[n++] = { x, z, (a == 0) ? lat : along, (a == 0) ? along : lat,
+                                SEC_CH_TER, c };
             }
     // CONTRAFUERTES: pilares de piedra de 24.6 de alto que vuelan 2.4 al pasillo
     // (ocupan de 6.6 a 9.0 en la coordenada perpendicular). Se dibujaban desde el
@@ -98,8 +110,8 @@ static void buildSectorCollision() {
                             SEC_BUT_D, SEC_BUT_W, SEC_BUT_H, c };
         }
     }
-    g_cityCount = n;   // 4 masas + 4 remates + 4 muros + 20 columnas + 24 contrafuertes = 56
-                       // (+38 de arch_detail.h = 94 de las 256 de g_city)
+    g_cityCount = n;   // 4 masas + 4 remates + 4 muros + 8 capillas + 24 contrafuertes = 44
+                       // (+38 de arch_detail.h = 82 de las 256 de g_city)
 }
 
 // --- SUELO y TECHO (teselados finos: la camara nunca cruza un triangulo grande) ---
@@ -143,7 +155,96 @@ static void addArchT(TexVertex *buf, int &i, float cx, float cz, float span,
     addSolidBoxT(buf, i, cx, baseY + rise * 0.90f, cz, th * 1.3f, th * 1.3f, rise * 0.34f, brighten(col, 1.12f)); // clave
 }
 
-// --- estructura: masas separadas + muros + arcada de columnas en los pasillos ---
+// =================================================================================
+// CAPILLA GOTICA EXENTA (702 verts). Sustituye a las columnas de la arcada.
+//
+// Para que lea como EDIFICIO y no como pilar decorado: basamento que sobresale,
+// cuerpo por hiladas, contrafuertes en los costados, hornacina ojival hundida en el
+// frente con gablete encima, cornisa volada y pinaculos en las esquinas.
+//
+// LA ALTURA DE LA CUBIERTA NO SE PUEDE TOCAR. La terraza queda a SEC_COL_H (18.6)
+// porque el bucle de juego la usa como PLATAFORMA: el ancla A1 esta en (7, 18.6, 16)
+// y los materiales M6 y M7 en (-7, 18.6, 16) y (16, 18.6, -7). Los tres caen en
+// |t| = SEC_COL_STEP, que es justo donde van las ocho capillas. Si alguien baja o
+// sube esta cubierta, esas tres cosas quedan en el aire y el juego deja de poder
+// terminarse. Por eso los pinaculos van en las ESQUINAS: el centro de la terraza
+// tiene que quedar libre para pararse y saltar.
+//
+// a = eje del pasillo (0 = corre en Z, lateral = X; 1 = corre en X, lateral = Z).
+// s = lado del pasillo. "dLat" positivo mueve HACIA el centro del pasillo.
+// =================================================================================
+static inline void chPos(int a, float s, float cx, float cz, float dLat, float dAlong,
+                         float &ox, float &oz) {
+    if (a == 0) { ox = cx - s * dLat; oz = cz + dAlong; }
+    else        { ox = cx + dAlong;   oz = cz - s * dLat; }
+}
+static inline void chBox(TexVertex *buf, int &i, int a, float cx, float y, float cz,
+                         float along, float lat, float h, unsigned int col) {
+    if (a == 0) addSolidBoxT(buf, i, cx, y, cz, lat, along, h, col);
+    else        addSolidBoxT(buf, i, cx, y, cz, along, lat, h, col);
+}
+static inline void chPyr(TexVertex *buf, int &i, int a, float cx, float y, float cz,
+                         float along, float lat, float ah, unsigned int col) {
+    if (a == 0) addPyramidT(buf, i, cx, y, cz, lat, along, ah, col);
+    else        addPyramidT(buf, i, cx, y, cz, along, lat, ah, col);
+}
+static void buildChapel(TexVertex *buf, int &i, int a, float s, float cx, float cz,
+                        unsigned int stone, unsigned int dark)
+{
+    const float W = SEC_CH_W, D = SEC_CH_D, TER = SEC_CH_TER, CORN = SEC_CH_CORN;
+    float px, pz, qx, qz;
+
+    chPos(a, s, cx, cz, 0.0f, 0.0f, px, pz);
+    chBox(buf, i, a, px, 0.0f, pz, W + 0.9f, D + 0.9f, 1.1f, dark);                 // basamento
+    const float course = (CORN - 1.1f) / 3.0f;                                       // 3 hiladas
+    for (int g = 0; g < 3; ++g)
+        chBox(buf, i, a, px, 1.1f + course * (float)g, pz, W, D, course,
+              (g & 1) ? brighten(stone, 0.93f) : stone);
+
+    // CONTRAFUERTES en los dos costados, en dos tramos con retranqueo (el de arriba
+    // vuela menos): es lo que da el perfil escalonado de una capilla de verdad.
+    for (int e = -1; e <= 1; e += 2) {
+        chPos(a, s, cx, cz, 0.0f, (float)e * (W * 0.5f - 0.30f), qx, qz);
+        chBox(buf, i, a, qx,  1.1f, qz, 1.2f, D + 1.5f,  9.0f, dark);
+        chBox(buf, i, a, qx, 10.1f, qz, 1.0f, D + 0.9f,  6.7f, brighten(dark, 1.10f));
+    }
+
+    chBox(buf, i, a, px, CORN,        pz, W + 1.3f, D + 1.3f, 0.9f, dark);          // cornisa
+    chBox(buf, i, a, px, CORN + 0.9f, pz, W + 1.3f, D + 1.3f, 0.9f, stone);         // terraza -> 18.6
+
+    // PRETIL del borde. A proposito SIN caja de colision: desde aqui se salta, y un
+    // pretil solido de 1.0 convertiria la plataforma en una trampa.
+    for (int e = -1; e <= 1; e += 2) {
+        chPos(a, s, cx, cz, 0.0f, (float)e * (W * 0.5f + 0.45f), qx, qz);
+        chBox(buf, i, a, qx, TER, qz, 0.4f, D + 1.3f, 1.0f, dark);
+        chPos(a, s, cx, cz, (float)e * (D * 0.5f + 0.45f), 0.0f, qx, qz);
+        chBox(buf, i, a, qx, TER, qz, W + 1.3f, 0.4f, 1.0f, dark);
+    }
+
+    // HORNACINA OJIVAL. El pano oscuro se lee HUNDIDO porque las jambas sobresalen
+    // por delante de el: mas barato que vaciar el muro y se lee igual de lejos.
+    chPos(a, s, cx, cz, D * 0.5f + 0.05f, 0.0f, px, pz);
+    chBox(buf, i, a, px, 1.1f, pz, 2.3f, 0.10f, 8.6f, brighten(dark, 0.62f));
+    chPos(a, s, cx, cz, D * 0.5f + 0.16f, 0.0f, px, pz);
+    chPyr(buf, i, a, px, 9.7f, pz, 2.3f, 0.32f, 2.2f, brighten(dark, 0.62f));       // cabeza ojival
+    for (int e = -1; e <= 1; e += 2) {
+        chPos(a, s, cx, cz, D * 0.5f + 0.22f, (float)e * 1.55f, qx, qz);
+        chBox(buf, i, a, qx, 1.1f, qz, 0.8f, 0.45f, 9.2f, brighten(stone, 1.08f));  // jambas
+    }
+    chPos(a, s, cx, cz, D * 0.5f + 0.18f, 0.0f, px, pz);
+    chPyr(buf, i, a, px, 12.1f, pz, 4.2f, 0.36f, 3.1f, brighten(stone, 1.14f));     // gablete
+
+    // PINACULOS en las cuatro esquinas: rematan la silueta y dejan el centro de la
+    // terraza libre, que es por donde pasa la ruta de escalada.
+    for (int e = -1; e <= 1; e += 2)
+        for (int f = -1; f <= 1; f += 2) {
+            chPos(a, s, cx, cz, (float)f * (D * 0.5f + 0.30f), (float)e * (W * 0.5f + 0.30f), qx, qz);
+            chBox(buf, i, a, qx, TER + 1.0f, qz, 0.9f, 0.9f, 2.2f, stone);
+            chPyr(buf, i, a, qx, TER + 3.2f, qz, 0.9f, 0.9f, 2.4f, brighten(stone, 1.20f));
+        }
+}
+
+// --- estructura: masas separadas + muros + capillas en los pasillos ---
 static void buildSectorWalls(TexVertex *buf, int &i) {
     const unsigned int stone = brighten(RGBA(69, 65, 58, 255), 2.1f);
     const unsigned int dark  = brighten(RGBA(46, 41, 36, 255), 2.0f);
@@ -195,28 +296,17 @@ static void buildSectorWalls(TexVertex *buf, int &i) {
         }
     }
 
-    // ARCADA de los pasillos en cruz: columnas SEPARADAS + arcos ojivales entre ellas.
-    // Van en los bordes del pasillo (|x|=9 y |z|=9), dejando el centro libre para caminar.
-    const float colH = 16.0f, colR = 1.5f;
-    const float segH = colH / (float)SEC_COL_SEG;    // tramos cortos (ver SEC_COL_SEG)
-    for (int a = 0; a < 2; ++a) {                    // a=0 pasillo en Z, a=1 pasillo en X
-        for (int s = -1; s <= 1; s += 2) {           // los dos lados del pasillo
-            for (int k = -2; k <= 2; ++k) {          // 5 columnas por lado
-                float t = (float)k * SEC_COL_STEP;
-                float x = (a == 0) ? (SEC_COL_OFF * s) : t;
-                float z = (a == 0) ? t : (SEC_COL_OFF * s);
-                addSolidBoxT(buf, i, x, 0.0f, z, colR * 2.2f, colR * 2.2f, 1.2f, dark);    // basa
-                for (int g = 0; g < SEC_COL_SEG; ++g)   // FUSTE EN TRAMOS (no un bloque de 16)
-                    addSolidBoxT(buf, i, x, 1.2f + segH * (float)g, z,
-                                 colR * 1.6f, colR * 1.6f, segH, (g & 1) ? stone : brighten(stone, 0.94f));
-                addSolidBoxT(buf, i, x, 1.2f + colH, z, colR * 2.4f, colR * 2.4f, 1.4f, dark); // capitel
-                if (k < 2) {   // arco ojival hacia la columna siguiente
-                    float ax = (a == 0) ? x : t + SEC_COL_STEP * 0.5f;
-                    float az = (a == 0) ? t + SEC_COL_STEP * 0.5f : z;
-                    addArchT(buf, i, ax, az, SEC_COL_STEP * 0.5f, 1.2f + colH + 1.4f, 7.0f,
-                             colR * 1.5f, (a == 0) ? 1 : 0, stone);
-                }
+    // CAPILLAS en los bordes del pasillo en cruz, donde antes habia 20 columnas con
+    // arcos. Benjamin, probandolo en la consola: "borra columnas, hay muchas, y no
+    // quiero que sean columnas, tienen que ser como iglesias o algo gotico".
+    // Son OCHO, solo en |t| = SEC_COL_STEP, y esa posicion no es decorativa: el bucle de
+    // juego usa su cubierta como plataforma (ver buildChapel).
+    for (int a = 0; a < 2; ++a)                      // a=0 pasillo en Z, a=1 pasillo en X
+        for (int s = -1; s <= 1; s += 2)             // los dos lados del pasillo
+            for (int k = -1; k <= 1; k += 2) {       // solo t = -16 y +16
+                const float t = (float)k * SEC_COL_STEP;
+                const float x = (a == 0) ? (SEC_COL_OFF * (float)s) : t;
+                const float z = (a == 0) ? t : (SEC_COL_OFF * (float)s);
+                buildChapel(buf, i, a, (float)s, x, z, stone, dark);
             }
-        }
-    }
 }

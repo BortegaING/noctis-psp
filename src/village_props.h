@@ -206,7 +206,7 @@ static int buildVillageProps(LineVertex *buf) {
         for (int sI = 0; sI < 2; ++sI) {
             const float s = sI ? -1.0f : 1.0f;
             for (int n = 0; n < 3; ++n) {
-                const int   k  = (n - 1) * 2;                              // -2, 0, +2
+                const int   k  = (n - 1);                                  // -1, 0, +1 -> t = -16, 0, +16
                 const float dt = (k == 0) ? (2.85f * s) : ((k < 0) ? -2.85f : 2.85f);
                 float x, z; vpMap(a, s, (float)k * VP_STEP + dt, VP_LAT_COL, x, z);
                 vpBrazier(buf, i, x, z, (unsigned int)(a * 53 + sI * 29 + n * 7 + 1));

@@ -82,12 +82,12 @@ static int build_hunter(LineVertex *buf)
     //    articulados, nunca hay dos aristas paralelas seguidas.
     //    Izquierda plantada, derecha atrasada => postura de acecho.
     // =====================================================================
-    hn_limb(buf,i, -0.095f,0.950f, 0.020f, -0.112f,0.470f,-0.030f, 0.105f,0.082f, 3, coatDk,  coat);    // muslo (tapado por el abrigo)
+    hn_limb(buf,i, -0.095f,0.950f, 0.020f, -0.112f,0.470f,-0.030f, 0.105f,0.082f, 6, coatDk, coat);    // muslo (tapado por el abrigo)
     hn_limb(buf,i, -0.112f,0.470f,-0.030f, -0.108f,0.088f, 0.012f, 0.100f,0.058f, 6, bootLit, bootDk);  // cana de la bota (r0 ancho = vuelta)
-    hn_limb(buf,i, -0.108f,0.088f, 0.012f, -0.108f,0.052f,-0.185f, 0.062f,0.042f, 4, bootDk,  boot);    // pie
-    hn_limb(buf,i,  0.095f,0.950f, 0.038f,  0.125f,0.478f, 0.058f, 0.105f,0.082f, 3, coatDk,  coat);
+    hn_limb(buf,i, -0.108f,0.088f, 0.012f, -0.108f,0.052f,-0.185f, 0.062f,0.042f, 6, bootDk, boot);    // pie
+    hn_limb(buf,i,  0.095f,0.950f, 0.038f,  0.125f,0.478f, 0.058f, 0.105f,0.082f, 6, coatDk, coat);
     hn_limb(buf,i,  0.125f,0.478f, 0.058f,  0.118f,0.092f, 0.088f, 0.100f,0.058f, 6, bootLit, bootDk);
-    hn_limb(buf,i,  0.118f,0.092f, 0.088f,  0.118f,0.052f,-0.098f, 0.062f,0.042f, 4, bootDk,  boot);
+    hn_limb(buf,i,  0.118f,0.092f, 0.088f,  0.118f,0.052f,-0.098f, 0.062f,0.042f, 6, bootDk, boot);
 
     // =====================================================================
     // 2) FALDON DEL ABRIGO - loft de 4 anillos que se ENSANCHA hacia abajo
@@ -102,13 +102,13 @@ static int build_hunter(LineVertex *buf)
     }
     // jirones del dobladillo: conos que AFINAN A CERO => el borde no cierra en
     // un circulo perfecto ni en una arista recta.
-    hn_limb(buf,i,  0.020f,0.478f, 0.330f,  0.048f,0.288f, 0.412f, 0.086f,0.0f, 3, coatDk, hemDk);
-    hn_limb(buf,i, -0.238f,0.470f, 0.252f, -0.298f,0.322f, 0.310f, 0.076f,0.0f, 3, coatDk, hemDk);
-    hn_limb(buf,i,  0.316f,0.474f, 0.048f,  0.378f,0.306f, 0.052f, 0.076f,0.0f, 3, coatDk, hemDk);
-    hn_limb(buf,i, -0.214f,0.468f,-0.212f, -0.266f,0.344f,-0.278f, 0.070f,0.0f, 3, coatDk, hemDk);
+    hn_limb(buf,i,  0.020f,0.478f, 0.330f,  0.048f,0.288f, 0.412f, 0.086f,0.0f, 6, coatDk, hemDk);
+    hn_limb(buf,i, -0.238f,0.470f, 0.252f, -0.298f,0.322f, 0.310f, 0.076f,0.0f, 6, coatDk, hemDk);
+    hn_limb(buf,i,  0.316f,0.474f, 0.048f,  0.378f,0.306f, 0.052f, 0.076f,0.0f, 6, coatDk, hemDk);
+    hn_limb(buf,i, -0.214f,0.468f,-0.212f, -0.266f,0.344f,-0.278f, 0.070f,0.0f, 6, coatDk, hemDk);
     // vivos rojos bajando por los cantos traseros del abrigo
-    hn_limb(buf,i, -0.148f,1.400f, 0.120f, -0.220f,0.520f, 0.262f, 0.016f,0.013f, 3, red, redDk);
-    hn_limb(buf,i,  0.148f,1.400f, 0.120f,  0.220f,0.520f, 0.262f, 0.016f,0.013f, 3, red, redDk);
+    hn_limb(buf,i, -0.148f,1.400f, 0.120f, -0.220f,0.520f, 0.262f, 0.016f,0.013f, 6, red, redDk);
+    hn_limb(buf,i,  0.148f,1.400f, 0.120f,  0.220f,0.520f, 0.262f, 0.016f,0.013f, 6, red, redDk);
 
     // =====================================================================
     // 3) TORSO - segundo loft, corrido a -Z respecto del faldon: el tronco va
@@ -137,8 +137,8 @@ static int build_hunter(LineVertex *buf)
     hn_ball(buf,i, -0.172f,1.448f,-0.028f, 0.088f,0.078f,0.092f, 2,6, coatLit);   // hombro izq redondeado
     hn_ball(buf,i,  0.172f,1.448f,-0.028f, 0.088f,0.078f,0.092f, 2,6, coatLit);   // hombro der redondeado
     // correas rojas cruzadas en la ESPALDA (es lo que mira la camara)
-    hn_limb(buf,i, -0.150f,1.428f, 0.105f,  0.152f,1.070f, 0.165f, 0.028f,0.026f, 3, red, redDk);
-    hn_limb(buf,i,  0.150f,1.428f, 0.105f, -0.152f,1.070f, 0.165f, 0.028f,0.026f, 3, red, redDk);
+    hn_limb(buf,i, -0.150f,1.428f, 0.105f,  0.152f,1.070f, 0.165f, 0.028f,0.026f, 6, red, redDk);
+    hn_limb(buf,i,  0.150f,1.428f, 0.105f, -0.152f,1.070f, 0.165f, 0.028f,0.026f, 6, red, redDk);
     // unica caja del modelo: hebilla plana donde cruzan las correas
     hn_box(buf,i, 0.000f,1.225f, 0.140f, 0.070f,0.030f,0.048f, brass);
 
@@ -153,8 +153,8 @@ static int build_hunter(LineVertex *buf)
     hn_limb(buf,i,  0.255f,1.140f,-0.060f,  0.262f,0.878f,-0.158f, 0.060f,0.042f, 5, coatDk, coat);    // antebrazo der
     hn_ball(buf,i,  0.262f,0.843f,-0.178f, 0.052f,0.058f,0.052f, 2,5, skin);                           // mano der
     // dos dedos cerrados cruzando la empunadura: la mano AGARRA, no flota
-    hn_limb(buf,i,  0.226f,0.872f,-0.170f,  0.300f,0.856f,-0.186f, 0.021f,0.017f, 3, skin, skinDk);
-    hn_limb(buf,i,  0.232f,0.832f,-0.184f,  0.303f,0.818f,-0.200f, 0.019f,0.015f, 3, skin, skinDk);
+    hn_limb(buf,i,  0.226f,0.872f,-0.170f,  0.300f,0.856f,-0.186f, 0.021f,0.017f, 6, skin, skinDk);
+    hn_limb(buf,i,  0.232f,0.832f,-0.184f,  0.303f,0.818f,-0.200f, 0.019f,0.015f, 6, skin, skinDk);
 
     // =====================================================================
     // 6) CUELLO + CUELLO ALTO + CABEZA + CAPUCHA
@@ -162,18 +162,18 @@ static int build_hunter(LineVertex *buf)
     //    la capucha es un elipsoide corrido a +Z con una visera conica a -Z,
     //    asi la cara asoma por la abertura en vez de quedar tapada.
     // =====================================================================
-    hn_limb(buf,i, 0.000f,1.400f,-0.055f, 0.000f,1.575f,-0.075f, 0.062f,0.055f, 3, coatDk, skinDk);
+    hn_limb(buf,i, 0.000f,1.400f,-0.055f, 0.000f,1.575f,-0.075f, 0.062f,0.055f, 6, coatDk, skinDk);
     {
         const float ys[2] = { 1.395f, 1.600f };
         const float rs[2] = { 0.150f, 0.182f };
         hn_loft(buf,i, 0.000f,-0.055f, ys, rs, 2, 8, coat, coatDk);
     }
     hn_ball(buf,i, 0.000f,1.672f,-0.078f, 0.092f,0.113f,0.098f, 3,6, skinDk);            // cabeza (cara en sombra)
-    hn_limb(buf,i, -0.060f,1.565f, 0.085f, -0.085f,1.430f, 0.130f, 0.045f,0.018f, 3, hair, hairDk); // mechon izq
-    hn_limb(buf,i,  0.060f,1.565f, 0.085f,  0.085f,1.430f, 0.130f, 0.045f,0.018f, 3, hair, hairDk); // mechon der
+    hn_limb(buf,i, -0.060f,1.565f, 0.085f, -0.085f,1.430f, 0.130f, 0.045f,0.018f, 6, hair, hairDk); // mechon izq
+    hn_limb(buf,i,  0.060f,1.565f, 0.085f,  0.085f,1.430f, 0.130f, 0.045f,0.018f, 6, hair, hairDk); // mechon der
     hn_ball(buf,i, 0.000f,1.700f, 0.005f, 0.138f,0.148f,0.148f, 4,6, coat);              // masa de la capucha
-    hn_limb(buf,i, 0.000f,1.715f,-0.085f, 0.000f,1.598f,-0.242f, 0.090f,0.012f, 4, coat,   coatDk); // visera (pico a -Z)
-    hn_limb(buf,i, 0.000f,1.700f, 0.105f, 0.020f,1.455f, 0.190f, 0.120f,0.050f, 4, coatDk, hemDk);  // tela cayendo por la espalda
+    hn_limb(buf,i, 0.000f,1.715f,-0.085f, 0.000f,1.598f,-0.242f, 0.090f,0.012f, 6, coat, coatDk); // visera (pico a -Z)
+    hn_limb(buf,i, 0.000f,1.700f, 0.105f, 0.020f,1.455f, 0.190f, 0.120f,0.050f, 6, coatDk, hemDk);  // tela cayendo por la espalda
 
     // =====================================================================
     // 7) SABLE - mano derecha, punta abajo y adelante. Nada de prismas grises:
@@ -187,8 +187,8 @@ static int build_hunter(LineVertex *buf)
     // =====================================================================
     hn_ball(buf,i, 0.242f,0.934f,-0.120f, 0.036f,0.040f,0.036f, 2,5, brass);                            // pomo
     hn_limb(buf,i, 0.246f,0.923f,-0.128f, 0.279f,0.793f,-0.223f, 0.026f,0.034f, 6, grip,  gripLit);     // empunadura (ensancha a la mano)
-    hn_limb(buf,i, 0.199f,0.798f,-0.220f, 0.369f,0.766f,-0.252f, 0.020f,0.012f, 4, brass, brassDk);     // quillon 1
-    hn_limb(buf,i, 0.266f,0.810f,-0.318f, 0.302f,0.753f,-0.156f, 0.018f,0.011f, 4, brass, brassDk);     // quillon 2 (cruzado)
+    hn_limb(buf,i, 0.199f,0.798f,-0.220f, 0.369f,0.766f,-0.252f, 0.020f,0.012f, 6, brass, brassDk);     // quillon 1
+    hn_limb(buf,i, 0.266f,0.810f,-0.318f, 0.302f,0.753f,-0.156f, 0.018f,0.011f, 6, brass, brassDk);     // quillon 2 (cruzado)
     {
         // hoja curva: la componente -Z crece tramo a tramo (-0.054, -0.070,
         // -0.096, -0.127) => barrido de sable, no una barra recta.
@@ -199,11 +199,11 @@ static int build_hunter(LineVertex *buf)
         for (int s = 0; s < 4; ++s) {
             unsigned int c0 = cp_lerp(spine, edge, (float)s * 0.25f);
             unsigned int c1 = cp_lerp(spine, edge, (float)(s + 1) * 0.25f);
-            hn_limb(buf,i, bX[s],bY[s],bZ[s], bX[s+1],bY[s+1],bZ[s+1], bR[s],bR[s+1], 4, c0, c1);
+            hn_limb(buf,i, bX[s],bY[s],bZ[s], bX[s+1],bY[s+1],bZ[s+1], bR[s],bR[s+1], 6, c0, c1);
         }
         // nervio de FILO: hilo brillante pegado al canto de corte (adelante-abajo)
         hn_limb(buf,i, 0.285f,0.791f,-0.269f, 0.302f,0.453f,-0.392f, 0.013f,0.011f, 3, cp_lerp(spine,edge,0.5f), edge);
-        hn_limb(buf,i, 0.302f,0.453f,-0.392f, 0.308f,0.150f,-0.590f, 0.011f,0.002f, 3, edge, edge);
+        hn_limb(buf,i, 0.302f,0.453f,-0.392f, 0.308f,0.150f,-0.590f, 0.011f,0.002f, 6, edge, edge);
     }
 
     return i;
