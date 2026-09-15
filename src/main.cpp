@@ -984,7 +984,7 @@ int main(void) {
     // arranca en n = 0 y lo sobreescribe entero. Nunca existieron.
     buildIndTex();  // textura industrial del pozo (antes de renderizar)
     buildSolidWorld();
-    buildApron();   // (legacy; no se dibuja en EL POZO)
+    // buildApron() quitado con su dibujado (ver el pase de render)
     buildHero();
 #if VIEWER_MODE
     buildCandidates();
@@ -1025,7 +1025,13 @@ int main(void) {
     const float DEADZONE = 0.18f, RUN_SPEED = 0.22f, ACCEL_GND = 0.20f, ACCEL_AIR = 0.09f, STOP_FRIC = 0.22f, CAM_SPEED = 0.03f;
     const float GRAVITY = 0.020f, JUMP_VEL = 0.55f, SHORTHOP = 0.50f, FALL_CAP = 0.80f;
     const int   COYOTE_MAX = 6, JUMPBUF_MAX = 6;
-    const float FLOAT_LIFT = 0.030f, FLOAT_GRAV = 0.006f, FLOAT_UPCAP = 0.12f, FLOAT_FALLCAP = -0.09f, EN_FLOAT = 6.0f, EN_REGEN = 5.0f;
+    // LEVITACION. Ya no es un planeo de adorno: es el unico medio de subir desde que
+    // se quito la gravedad dirigida, asi que sube mas rapido (0.12 -> 0.20) y cuesta
+    // menos por frame (6.0 -> 3.5). Con la energia de arranque eso da unas 44 unidades
+    // de altura; el faro esta a 60, asi que hasta que no recojas materiales (cada uno
+    // sube el techo de energia) no llegas: la progresion del juego sigue en pie, solo
+    // que ahora se mide en altura alcanzable y no en elegir la cara correcta.
+    const float FLOAT_LIFT = 0.030f, FLOAT_GRAV = 0.006f, FLOAT_UPCAP = 0.20f, FLOAT_FALLCAP = -0.09f, EN_FLOAT = 3.5f, EN_REGEN = 5.0f;
     int   grounded = 1;
     float camYaw = 0.7f;    // mirada inicial: a un hueco NE (borde de plataforma + vacio + megaestructura + catedrales de reojo)
     float heroYaw = 0.0f;   // hacia donde encara el modelo (gira al avanzar)
@@ -1103,7 +1109,8 @@ int main(void) {
             camYaw = ld.camYaw; camPitch = ld.camPitch;
             // El checksum protege contra bits corruptos, no contra un archivo escrito
             // por otra build. Todo lo que luego indexa un array se sanea aqui.
-            gravG = (ld.gravG < 0 || ld.gravG > 5) ? 0 : ld.gravG;          // kGravName[6]
+            gravG = 0;   // la gravedad dirigida se quito: una partida vieja podia traer
+                         // gravG != 0 guardado y te dejaba pegado a una pared al cargar.
             hp = (ld.hp > 0.0f && ld.hp <= ld.hpMax) ? ld.hp : HP_MAX;
             en = ld.en; EN_MAX = (ld.enMax > 0.0f) ? ld.enMax : objEnergyMax();
             if (en < 0.0f)    en = 0.0f;
@@ -1224,39 +1231,25 @@ int main(void) {
             // el cambio de arma se movera a un modificador (p.ej. mantener L) mas adelante.
             (void)dR; (void)dL; (void)dU; (void)dD;
             prevDR = dR; prevDL = dL; prevDU = dU; prevDD = dD;
-            // GRAVEDAD DIRIGIDA (Triangulo): salta a la cara que estas MIRANDO.
-            // El rayo se arma con la MISMA base que la camara. Antes se lanzaba con una
-            // direccion de mundo que daba por hecho que la gravedad iba hacia abajo
-            // (sin(camYaw), sin(camPitch), -cos(camYaw)) y el ojo en playerY + EYE_H: con
-            // la gravedad cambiada eso no apunta a lo que ves ni sale de donde tienes la
-            // cabeza, asi que elegias caras a ciegas.
-            { int tri = (pad.Buttons & PSP_CTRL_TRIANGLE) ? 1 : 0;
-              if (tri && !prevTri) {
-                  float grx, gry, grz, gfx, gfy, gfz, ggx, ggy, ggz;
-                  gravBasis (gravG, &grx, &gry, &grz, &gfx, &gfy, &gfz);
-                  gravDirVec(gravG, &ggx, &ggy, &ggz);
-                  const float cy2 = cosf(camYaw),   sy2 = sinf(camYaw);
-                  const float cp2 = cosf(camPitch), sp2 = sinf(camPitch);
-                  const float ux = -ggx, uy = -ggy, uz = -ggz;                 // "arriba" = contra-gravedad
-                  const float hx = gfx * cy2 + grx * sy2,                      // adelante en el plano
-                              hy = gfy * cy2 + gry * sy2,
-                              hz = gfz * cy2 + grz * sy2;
-                  const int tg = gravPickTarget(playerX + ux * EYE_H, playerY + uy * EYE_H, playerZ + uz * EYE_H,
-                                                hx * cp2 + ux * sp2, hy * cp2 + uy * sp2, hz * cp2 + uz * sp2);
-                  if (tg >= 0 && tg != gravG && en >= GRAV_EN_MIN) {
-                      gravG = tg; en -= GRAV_EN_SWITCH;        // cuesta energia: obliga a planear la ruta
-                      dlgNotifyGravity();                     // los robots cercanos lo comentan
-                      velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f; grounded = 0;
-                  } else if (tg < 0 && gravG != 0) {
-                      // SALIDA DE EMERGENCIA, y GRATIS. Si el rayo no engancha ninguna cara
-                      // estando pegado a una pared, sin esto no habria forma de volver: te
-                      // quedabas ahi para siempre y encima se guardaba asi al salir. Volver
-                      // al suelo no puede depender de que te quede energia.
-                      gravG = 0;
-                      velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f; grounded = 0;
-                  }
-              }
-              prevTri = tri; }
+            // GRAVEDAD DIRIGIDA: QUITADA (Benjamin, en la consola: "se bugea bastante,
+            // borra la gravedad, pero mantiene el poder levitar").
+            //
+            // Era la mecanica mas ambiciosa y la que mas bugs daba, y por una razon de
+            // fondo: caminar por paredes obliga a que TODO el juego -- camara, mirada,
+            // colision, animacion, apoyo, apuntado, respawn, guardado -- funcione en seis
+            // orientaciones. Cada sistema que se olvidaba de eso reaparecia como "me quedo
+            // pegado a una pared". Con gravG fijo en 0 esa familia entera de bugs
+            // desaparece de una vez.
+            //
+            // Lo VERTICAL no se pierde: pasa a la LEVITACION (Cuadrado), que ahora es el
+            // medio de subir y no un adorno. Sube de verdad, gasta energia mientras lo
+            // haces, y la energia se recarga en el suelo: lo que antes era "elegir la cara
+            // correcta" ahora es "administrar cuanta altura te alcanza".
+            //
+            // El codigo de wall-walk se queda en el archivo pero ya es inalcanzable: con
+            // gravG siempre 0 nunca se entra en esa rama. Se deja por si la mecanica
+            // vuelve mejor pensada, no porque haga falta.
+            (void)prevTri;
 
             aiming = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
             if (aiming) {
@@ -1590,13 +1583,13 @@ int main(void) {
         //    grueso de debajo se descarta en vez de repintarse.
         sceGuDisable(GU_CULL_FACE);
         sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);
-        {
-            ScePspFVector3 ap = { floorf(playerX / 10.0f + 0.5f) * 10.0f, 0.03f,
-                                  floorf(playerZ / 10.0f + 0.5f) * 10.0f };
-            sceGumTranslate(&ap);
-            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_apronCount, 0, g_apron);
-            sceGumLoadIdentity();
-        }
+        // APRON QUITADO. Era un parche de suelo de 40x40 que seguia al jugador, y existia
+        // por una sola razon: sin recorte contra el plano cercano, una celda de suelo con
+        // un vertice detras de la camara se descartaba entera y dejaba un agujero a los
+        // pies. Desde que se habilito GU_CLIP_PLANES eso no puede pasar, asi que el apron
+        // solo estaba rasterizando por segunda vez los mismos pixeles que el suelo bueno.
+        // Medido por la auditoria: media pantalla de relleno redundante, 1.176 vertices y
+        // un draw call por frame, para no mostrar nada nuevo.
         sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_ledgeEnd - g_ledgeStart, 0, g_solidWorld + g_ledgeStart);
         sceGuDisable(GU_TEXTURE_2D);
 

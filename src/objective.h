@@ -115,8 +115,9 @@ static const ObjAnchor kObjAnchors[OBJ_ANCHOR_N] = {
                                             //    (x=13 esta fuera del remate, que ocupa 17.1..36.9).
     { -13.0f,  30.0f, -27.0f,  0,  1.6f },  // A3 TECHO de la masa SO: el otro lado del mapa,
                                             //    es el que agarra quien va a buscar M3/M4/M5.
-    {   0.0f,  60.0f,   8.0f,  1,  0.0f },  // A4 TECHO DEL SECTOR, a 8 del faro. Se camina con
-                                            //    gravedad +Y: por eso su pilar CUELGA hacia abajo.
+    {  27.0f,  36.6f, -27.0f,  0,  0.0f },  // A4 REMATE de la masa SE: el ultimo descanso antes
+                                            //    del faro. Era el TECHO del sector con gravedad +Y,
+                                            //    inalcanzable desde que se quito esa mecanica.
 };
 
 // ------------------------------ MATERIALES ----------------------------------
@@ -157,18 +158,24 @@ static const ObjAnchor kObjAnchors[OBJ_ANCHOR_N] = {
 //  M9 (0, 60, -34) pegado al TECHO del sector.
 //      Solo existe para quien ya camina el techo con gravedad +Y, y esta lejos
 //      del faro: obliga a un rodeo por el techo antes de cobrar la meta.
+// REUBICADOS al quitarse la gravedad dirigida. Ocho de los diez estaban pegados a
+// CARAS VERTICALES o al techo (face != 0): solo existian para quien caminaba por las
+// paredes. Sin esa mecanica eran sencillamente inalcanzables, y el juego no se podia
+// terminar. Ahora los diez estan sobre superficies HORIZONTALES que se alcanzan
+// saltando y levitando, escalonados en altura para que la ruta siga teniendo forma:
+// suelo -> terraza de capilla (18.6) -> techo de masa (31.6) -> remate (36.6) -> faro.
 static const ObjMat kObjMats[OBJ_MAT_N] = {
     //  x        y       z    face
-    {   9.0f,  22.0f,  20.0f,  2 },  // M0 cara -X masa NE   (cruz)
-    {  20.0f,  26.0f,   9.0f,  4 },  // M1 cara -Z masa NE   (cruz)
-    {  45.0f,  24.0f, -20.0f,  3 },  // M2 cara +X masa SE   (perimetral)
-    { -20.0f,  27.0f, -45.0f,  4 },  // M3 cara -Z masa SO   (perimetral)
-    { -45.0f,  20.0f,  20.0f,  2 },  // M4 cara -X masa NO   (perimetral)
-    {  -9.0f,  28.0f,  20.0f,  3 },  // M5 cara +X masa NO   (cruz)
-    {  -7.0f,  18.6f,  16.0f,  0 },  // M6 capitel (-7, 16)
-    {  16.0f,  18.6f,  -7.0f,  0 },  // M7 capitel (16, -7)
-    {  54.0f,  42.0f,  27.0f,  2 },  // M8 muro +X por encima de los ventanales
-    {   0.0f,  60.0f, -34.0f,  1 },  // M9 bajo el TECHO
+    {  49.5f,   0.0f,  20.0f,  0 },  // M0 suelo del pasillo perimetral (+X): invita a rodear
+    { -49.5f,   0.0f, -20.0f,  0 },  // M1 el perimetral opuesto
+    {   7.0f,  18.6f, -16.0f,  0 },  // M2 terraza de capilla
+    {  -7.0f,  18.6f, -16.0f,  0 },  // M3 terraza de capilla
+    {  -7.0f,  18.6f,  16.0f,  0 },  // M4 terraza de capilla
+    {  16.0f,  18.6f,   7.0f,  0 },  // M5 terraza de capilla
+    { -16.0f,  18.6f,  -7.0f,  0 },  // M6 terraza de capilla
+    {  20.0f,  31.6f,  20.0f,  0 },  // M7 techo de la masa NE
+    { -20.0f,  31.6f, -20.0f,  0 },  // M8 techo de la masa SO (el otro extremo del mapa)
+    {  27.0f,  36.6f,  27.0f,  0 },  // M9 remate de la masa NE: lo mas alto que se pisa
 };
 
 // ============================ ESTADO =========================================
@@ -216,7 +223,9 @@ static void objRespawn(float *x, float *y, float *z)
 
 // IMPRESCINDIBLE: el ancla del TECHO se pisa con gravedad +Y. Si main.cpp
 // reaparece ahi sin poner gravG = 1, el jugador se cae 60 unidades al instante.
-static int objRespawnGrav() { return kObjAnchors[g_objActive].face; }
+// Siempre 0: la gravedad dirigida se quito. Antes devolvia la cara del ancla, asi que
+// reaparecer en A4 te dejaba caminando por el techo, que ya no existe como estado.
+static int objRespawnGrav() { return 0; }
 
 // "Te caiste": 1 = hay que reaparecer. El recinto es CERRADO (suelo y techo),
 // asi que caer al vacio no existe; lo que cuenta como caida es VOLVER AL SUELO
