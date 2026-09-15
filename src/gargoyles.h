@@ -54,10 +54,10 @@ static const float GG_HALF  = 54.0f;   // cara interior de los muros
 static const float GG_CEIL  = 60.0f;   // techo del sector
 
 // margenes de vuelo: la gargola no se mete en la piedra ni atraviesa el muro
-static const float GG_CLR     = 1.60f;   // holgura al esquivar una masa
-static const float GG_LIM_XZ  = 51.5f;   // limite de vuelo en XZ
-static const float GG_LIM_LO  =  1.20f;  // no roza el suelo
-static const float GG_LIM_HI  = 58.60f;  // no roza el techo
+static const float GG_CLR     = 1.60f;            // holgura al esquivar una masa
+static const float GG_LIM_XZ  = GG_HALF - 2.5f;   // limite de vuelo en XZ (51.5)
+static const float GG_LIM_LO  = 1.20f;            // no roza el suelo
+static const float GG_LIM_HI  = GG_CEIL - 1.4f;   // no roza el techo (58.6)
 
 // ============================ PALETA ========================================
 // Piedra + metal + luz interior. La luz es lo UNICO saturado: de noche, en un
@@ -99,7 +99,7 @@ static inline void gW(const GFrame &F, float pr, float pu, float pf,
                       float *x, float *y, float *z) {
     *x = F.cx + F.rx * pr + F.ux * pu + F.fx * pf;
     *y = F.cy + F.ry * pr + F.uy * pu + F.fy * pf;
-    *z = F.cz + F.rz * pr + F.uz * pr * 0.0f + F.uz * pu + F.fz * pf;
+    *z = F.cz + F.rz * pr + F.uz * pu + F.fz * pf;
 }
 
 // CAJA centrada en el punto local. sL = ancho, sU = alto, sF = fondo. 30 verts
@@ -188,28 +188,32 @@ static void gargFlyer(LineVertex *buf, int &i, const GFrame &F,
                       float phase, float open, float eye) {
     const float sp   = 0.25f + 0.75f * open;        // envergadura (plegada <-> abierta)
     const float beat = sinf(phase) * open;          // aleteo: solo si esta volando
+    // AGAZAPADA al posarse: sin esto el cuerpo (que en vuelo va a 0.95 del
+    // anclaje) flotaria medio metro por encima del capitel. Con el crouch, las
+    // alas plegadas y la panza APOYAN en la piedra; al desplegarse se levanta.
+    const float cr = 0.45f * (1.0f - open);
     // cuerpo delgado, alargado en el eje de la mirada
-    gBox(buf, i, F,  0.00f, 0.95f,  0.05f, 0.72f, 0.70f, 2.05f, GG_STONE);
+    gBox(buf, i, F,  0.00f, 0.95f - cr,  0.05f, 0.72f, 0.70f, 2.05f, GG_STONE);
     // craneo alargado
-    gBox(buf, i, F,  0.00f, 1.06f,  1.34f, 0.54f, 0.48f, 0.88f, GG_DARK);
+    gBox(buf, i, F,  0.00f, 1.06f - cr,  1.34f, 0.54f, 0.48f, 0.88f, GG_DARK);
     // GRIETA LUMINOSA que le cruza la cara (la luz interior, aqui fria)
-    gBox(buf, i, F,  0.00f, 1.10f,  1.74f, 0.46f, 0.13f, 0.16f, gGlow(GG_COLD, eye));
+    gBox(buf, i, F,  0.00f, 1.10f - cr,  1.74f, 0.46f, 0.13f, 0.16f, gGlow(GG_COLD, eye));
     // ala interna (bate poco)
     {
-        const float aU = 1.12f + 0.46f * beat;
+        const float aU = 1.12f - cr + 0.46f * beat;
         gBox(buf, i, F, -1.02f * sp, aU, 0.18f, 0.25f + 1.45f * sp, 0.17f, 1.08f, GG_METAL);
         gBox(buf, i, F,  1.02f * sp, aU, 0.18f, 0.25f + 1.45f * sp, 0.17f, 1.08f, GG_METAL);
     }
     // ala externa (bate el doble -> el ala se dobla)
     {
-        const float bU = 1.12f + 1.02f * beat;
+        const float bU = 1.12f - cr + 1.02f * beat;
         gBox(buf, i, F, -2.30f * sp, bU, -0.06f, 0.20f + 1.40f * sp, 0.14f, 0.84f, GG_STONE);
         gBox(buf, i, F,  2.30f * sp, bU, -0.06f, 0.20f + 1.40f * sp, 0.14f, 0.84f, GG_STONE);
     }
     // cola larga (contrapeso visual: es lo que la hace leer como "voladora")
-    gBox(buf, i, F,  0.00f, 0.86f - 0.10f * beat, -1.85f, 0.30f, 0.30f, 1.80f, GG_DARK);
+    gBox(buf, i, F,  0.00f, 0.86f - cr - 0.10f * beat, -1.85f, 0.30f, 0.30f, 1.80f, GG_DARK);
     // cresta metalica
-    gPyr(buf, i, F,  0.00f, 1.26f, 1.06f, 0.22f, 0.22f, 0.44f, 0.58f, GG_METAL);
+    gPyr(buf, i, F,  0.00f, 1.26f - cr, 1.06f, 0.22f, 0.22f, 0.44f, 0.58f, GG_METAL);
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +306,10 @@ static const float GG_SPD[3] = { 0.190f, 0.260f, 0.130f }; // crucero (RUN_SPEED
 static const float GG_LUN[3] = { 0.420f, 0.520f, 0.460f }; // embestida
 static const float GG_RAD[3] = { 1.10f, 1.00f, 1.55f };    // radio de colision
 static const float GG_TRN[3] = { 0.090f, 0.140f, 0.060f }; // agilidad de giro (lerp de velocidad)
+// Altura del CENTRO del cuerpo sobre el anclaje. El anclaje (g.x,g.y,g.z) son
+// las GARRAS -- es lo que hace que la pose posada calce exacta contra la piedra
+// --, pero la carne esta mas arriba: la colision tiene que mirar ahi.
+static const float GG_CEN[3] = { 1.30f, 1.05f, 0.95f };
 
 // --- tiempos (frames a ~60 fps) --------------------------------------------
 static const int   GG_T_ALERT = 26;   // despliegue antes de soltarse de la piedra
@@ -312,7 +320,12 @@ static const int   GG_T_CD    = 30;   // enfriamiento base entre embestidas
 
 // --- distancias -------------------------------------------------------------
 static const float GG_FAR_THINK = 60.0f;  // mas alla: NO piensa, solo cuenta
-static const float GG_GIVE_UP   = 96.0f;  // mas alla: vuelve al nido
+static const float GG_GIVE_UP   = 96.0f;  // mas alla del jugador: vuelve al nido
+// CORREA: cada gargola defiende un TERRITORIO alrededor de su nido. Sin esto,
+// en un recinto de 112x112 una vez despierta no te suelta jamas (siempre te
+// tiene a tiro) y el sector deja de tener zonas seguras. Con esto, huir de su
+// zona funciona: se da la vuelta, plana de regreso y se vuelve a petrificar.
+static const float GG_LEASH     = 58.0f;
 static const float GG_ATK_R     =  7.2f;  // entra en embestida
 static const float GG_HIGH      =  3.4f;  // apunta POR ENCIMA de ti (ataca desde lo alto)
 static const float GG_KNOCK     =  0.42f; // retroceso al ser herida
@@ -407,6 +420,21 @@ static void gargUpVec(int g, float *ux, float *uy, float *uz) {
     *ux = x; *uy = y; *uz = z;
 }
 
+// CENTRO del cuerpo de la gargola k (el anclaje son las garras, ver GG_CEN).
+// Se desplaza a lo largo de su "arriba", que al desplegarse pasa de ser la
+// normal de su cornisa a ser +Y del mundo (igual que el modelo en pantalla).
+static void gargCenter(int k, float *x, float *y, float *z) {
+    const Garg &g = g_garg[k];
+    float ux, uy, uz;
+    gargUpVec(kGargNests[k].face, &ux, &uy, &uz);
+    const float o = g_gargOpen[k];
+    ux *= (1.0f - o);
+    uy  = uy * (1.0f - o) + o;          // al volar se endereza
+    uz *= (1.0f - o);
+    const float c = GG_CEN[g.variant];
+    *x = g.x + ux * c; *y = g.y + uy * c; *z = g.z + uz * c;
+}
+
 // LINEA DE VISTA SIMPLE: 3 muestras del segmento contra las 4 masas. No mira
 // columnas ni contrafuertes a proposito (son finos: que una gargola te vea por
 // el hueco de una columna es correcto). ~36 operaciones, y solo se llama 1 de
@@ -426,17 +454,26 @@ static int gargLOS(float ax, float ay, float az, float bx, float by, float bz) {
     return 1;
 }
 
-// ESQUIVA: si el punto quedo dentro de una masa, lo saca por la salida mas
-// corta (X, Z o por arriba) y mata la velocidad en ese eje para que no insista.
-// Solo cuesta algo cuando de verdad choco.
-static void gargAvoid(Garg &g) {
-    // muros / suelo / techo del sector
+// Limites del recinto: suelo, techo y muros. Se aplica SIEMPRE.
+static void gargClampSector(Garg &g) {
     if (g.x >  GG_LIM_XZ) { g.x =  GG_LIM_XZ; if (g.vx > 0.0f) g.vx = 0.0f; }
     if (g.x < -GG_LIM_XZ) { g.x = -GG_LIM_XZ; if (g.vx < 0.0f) g.vx = 0.0f; }
     if (g.z >  GG_LIM_XZ) { g.z =  GG_LIM_XZ; if (g.vz > 0.0f) g.vz = 0.0f; }
     if (g.z < -GG_LIM_XZ) { g.z = -GG_LIM_XZ; if (g.vz < 0.0f) g.vz = 0.0f; }
     if (g.y <  GG_LIM_LO) { g.y =  GG_LIM_LO; if (g.vy < 0.0f) g.vy = 0.0f; }
     if (g.y >  GG_LIM_HI) { g.y =  GG_LIM_HI; if (g.vy > 0.0f) g.vy = 0.0f; }
+}
+
+// ESQUIVA: si el punto quedo dentro de una masa, lo saca por la salida mas
+// corta (X, Z o por arriba) y mata la velocidad en ese eje para que no insista.
+// Solo cuesta algo cuando de verdad choco.
+//
+// OJO: deja una holgura GG_CLR (1.6) ALREDEDOR de la piedra, asi que NO se
+// puede usar mientras vuelve al nido: media colonia vive PEGADA a la piedra
+// (capitel a 0.4 del borde de la holgura, y G4/G5 directamente sobre una cara)
+// y la esquiva las dejaria flotando a 1.6 de su cornisa para siempre.
+static void gargAvoid(Garg &g) {
+    gargClampSector(g);
 
     // las 4 masas: |x| y |z| ambos en [9,45] y por debajo de 30
     if (g.y > GG_MTOP + GG_CLR) return;
@@ -519,13 +556,24 @@ static void gargUpdate(float px, float py, float pz, int gravG) {
         const float dx  = cx - g.x, dy = cy - g.y, dz = cz - g.z;
         const float d2  = dx * dx + dy * dy + dz * dz;
 
-        // ---- LEJOS Y TRANQUILA: no piensa, solo cuenta -----------------------
-        // (las que ya estan en juego siguen simulando aunque te alejes: son 2 o 3)
+        // ---- LEJOS, DORMIDA Y EN SU PIEDRA: no piensa, solo cuenta -----------
+        // Es el caso normal (casi siempre, casi todas). Cuesta una resta, tres
+        // cuadrados y una comparacion: ni raiz, ni linea de vista, ni maquina de
+        // estados. Las que ya estan en juego -- y las que van de vuelta al nido,
+        // que si no se quedarian congeladas en el aire -- siguen simulando.
         if (d2 > GG_FAR_THINK * GG_FAR_THINK && g.state <= GARG_ALERT) {
-            ++g.timer;
-            if (g_gargOpen[k] > 0.0f) g_gargOpen[k] -= 0.03f;   // se vuelve a plegar
-            else                      g_gargOpen[k]  = 0.0f;
-            continue;
+            const GargNest &nf = kGargNests[k];
+            const float hx = g.x - nf.x, hy = g.y - nf.y, hz = g.z - nf.z;
+            // epsilon MINIMO a proposito: el estado POSADA deja la posicion
+            // EXACTAMENTE en el nido, asi que esto solo es cierto cuando ya
+            // aterrizo. Si fuera holgado, una que vuelve se quedaria aparcada
+            // a medio metro de su cornisa (y ahi congelada) para siempre.
+            if (hx * hx + hy * hy + hz * hz < 0.0025f) {        // ya esta posada
+                ++g.timer;
+                g_gargOpen[k] -= 0.03f;                          // se vuelve a plegar
+                if (g_gargOpen[k] < 0.0f) g_gargOpen[k] = 0.0f;
+                continue;
+            }
         }
 
         // ---- despliegue suave (mueve el modelo y la luz interior) ------------
@@ -549,13 +597,14 @@ static void gargUpdate(float px, float py, float pz, int gravG) {
             const GargNest &n = kGargNests[k];
             const float ndx = n.x - g.x, ndy = n.y - g.y, ndz = n.z - g.z;
             const float nd2 = ndx * ndx + ndy * ndy + ndz * ndz;
-            if (nd2 > 0.36f) {                              // regreso planeando
-                const float inv = GG_SPD[v] * 0.9f / sqrtf(nd2);
+            const float step = GG_SPD[v] * 0.9f;
+            if (nd2 > step * step) {                        // regreso planeando
+                const float inv = step / sqrtf(nd2);
                 g.vx = ndx * inv; g.vy = ndy * inv; g.vz = ndz * inv;
                 g.x += g.vx; g.y += g.vy; g.z += g.vz;
-                gargAvoid(g);
-            } else {                                        // posada de verdad
-                g.x = n.x; g.y = n.y; g.z = n.z;
+                gargClampSector(g);                         // sin esquiva: ver gargAvoid
+            } else {                                        // ya llego: se petrifica
+                g.x = n.x; g.y = n.y; g.z = n.z;            // encaje EXACTO en la piedra
                 g.vx = g.vy = g.vz = 0.0f;
             }
             ++g.timer;
@@ -614,7 +663,12 @@ static void gargUpdate(float px, float py, float pz, int gravG) {
             g.x += g.vx; g.y += g.vy; g.z += g.vz;
             gargAvoid(g);
 
-            if (d2 > GG_GIVE_UP * GG_GIVE_UP) {               // te perdio
+            // abandona si te vas muy lejos (p.ej. al reaparecer en un ancla) o
+            // si ella misma se ha alejado demasiado de su territorio
+            const GargNest &nn = kGargNests[k];
+            const float lx = g.x - nn.x, ly = g.y - nn.y, lz = g.z - nn.z;
+            const float l2 = lx * lx + ly * ly + lz * lz;
+            if (d2 > GG_GIVE_UP * GG_GIVE_UP || l2 > GG_LEASH * GG_LEASH) {
                 g.state = GARG_PERCHED; g.timer = 0;
             } else if (g.timer <= 0 && d2 < GG_ATK_R * GG_ATK_R && g_gargLos[k]) {
                 g.state = GARG_ATTACK;                        // EMBISTE
@@ -686,8 +740,8 @@ static int gargBuildAll(LineVertex *buf, float t) {
         const float dd2 = ddx * ddx + ddy * ddy + ddz * ddz;
         if (dd2 > GG_LOD_CULL * GG_LOD_CULL) continue;                 // la niebla la tapa
 
-        const int  far  = (dd2 > GG_LOD_FAR * GG_LOD_FAR);
-        const int  cost = far ? GG_FAR_VERTS : GG_VERTS[v];
+        const int  lejos = (dd2 > GG_LOD_FAR * GG_LOD_FAR);
+        const int  cost  = lejos ? GG_FAR_VERTS : GG_VERTS[v];
         if (i + cost > GARG_VMAX) break;                               // tope duro
 
         // ---- marco del nido -------------------------------------------------
@@ -752,7 +806,7 @@ static int gargBuildAll(LineVertex *buf, float t) {
         if (g.state == GARG_HURT) eye = 1.0f;
         eye *= 0.84f + 0.16f * sinf(t * 3.1f + (float)k * 1.9f);
 
-        if (far) {
+        if (lejos) {
             gargFarBlob(buf, i, F, v, eye);
         } else {
             // aleteo: ritmo propio por variante y desfase propio por bicho
@@ -783,7 +837,9 @@ static int gargHitPlayer(float px, float py, float pz, float r) {
         if (g.state != GARG_ATTACK) continue;
         if (g.timer <= GG_T_BACK)   continue;   // ya se esta retirando: no golpea
         if (g_gargHit[k])           continue;   // este envite ya conecto
-        const float dx = g.x - cx, dy = g.y - cy, dz = g.z - cz;
+        float gx, gy, gz;
+        gargCenter(k, &gx, &gy, &gz);
+        const float dx = gx - cx, dy = gy - cy, dz = gz - cz;
         const float rr = r + GG_RAD[g.variant];
         if (dx * dx + dy * dy + dz * dz < rr * rr) { g_gargHit[k] = 1; ++hits; }
     }
@@ -802,7 +858,9 @@ static void gargDamage(float x, float y, float z, float r, int dmg) {
     for (int k = 0; k < GARG_N; ++k) {
         Garg &g = g_garg[k];
         if (g.state == GARG_DEAD) continue;
-        const float dx = g.x - x, dy = g.y - y, dz = g.z - z;
+        float gx, gy, gz;
+        gargCenter(k, &gx, &gy, &gz);
+        const float dx = gx - x, dy = gy - y, dz = gz - z;
         const float d2 = dx * dx + dy * dy + dz * dz;
         const float rr = r + GG_RAD[g.variant];
         if (d2 > rr * rr) continue;
@@ -836,7 +894,9 @@ static void gargDamage(float x, float y, float z, float r, int dmg) {
 //   ALERTA -(26 frames)-> PERSIGUE -(a menos de 7.2 y sin enfriamiento)->
 //   ATACA -(28 frames: 12 de embestida + 16 de retirada)-> PERSIGUE.
 //   gargDamage manda a HERIDA (16 frames) y de ahi vuelve a PERSIGUE, o a
-//   MUERTA si hp<=0. PERSIGUE a mas de 96 vuelve a POSADA (planea a su nido).
+//   MUERTA si hp<=0. Vuelve a POSADA (planeando hasta su nido, donde se
+//   repliega y se apaga) si te alejas a mas de 96 o si ella se separa mas de 58
+//   de su nido: cada gargola defiende un TERRITORIO, huir de su zona funciona.
 // VERTICES. POSADA 258, VOLADORA 252, PESADA 252, silueta lejana 60. Con 7
 //   gargolas el peor caso absoluto es 1782; tope duro GARG_VMAX = 2000.
 // POR FRAME, EN ESTE ORDEN:

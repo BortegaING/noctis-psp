@@ -234,6 +234,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "cand/wraith.h"
 #include "atmosphere.h"   // Vacio/Abismo (ruinas suspendidas) + siluetas colosales lejanas
 #include "weapons_fx.h"   // FX/comportamiento distinto por arma a distancia (10)
+#include "gargoyles.h"   // enemigos: 3 siluetas + maquina de estados con territorio
 #include "savedata.h"    // 5 ranuras con checksum, escritura segura y recuperacion
 #include "audio.h"       // atmosfera sonora procedural (viento, pisadas, campana, eco)
 #include "objective.h"   // BUCLE DE JUEGO: anclas, materiales y faro (ruta de escalada)
@@ -973,6 +974,7 @@ int main(void) {
     buildCandidates();
 #endif
     buildNpcs();
+    gargInit();
     // buildChains();   // cadenas QUITADAS (cosas entremedio que bajan FPS); g_chainVerts=0
     buildEnv();
     g_farSilVerts = buildFarSilhouettes(g_farSil);
@@ -995,6 +997,9 @@ int main(void) {
     float velY = 0.0f, velX = 0.0f, velZ = 0.0f;
     int   coyote = 0, prevJump = 0, jumpBuf = 0;
     float en = 780.0f;
+    const float HP_MAX = 100.0f;
+    float hp = HP_MAX;      // VIDA REAL: antes la barra era decorativa y el numero estaba escrito a mano
+    int   hurtFlash = 0;
     float EN_MAX = 780.0f;   // sube con cada material recogido (objEnergyMax)
     // constantes de movilidad (diseno del agente)
     const float DEADZONE = 0.18f, RUN_SPEED = 0.22f, ACCEL_GND = 0.20f, ACCEL_AIR = 0.09f, STOP_FRIC = 0.22f, CAM_SPEED = 0.03f;
@@ -1190,6 +1195,11 @@ int main(void) {
             if ((pad.Buttons & PSP_CTRL_CIRCLE) && !prevCircle && meleeCD == 0) {
                 meleeCD = kMelee[curMelee].speedMs / 16; meleeFx = 8;
                 float reach = kMelee[curMelee].reach * 0.20f;
+                {   // barrido de sable delante del jugador
+                    const float mfx = sinf(heroYaw), mfz = -cosf(heroYaw);
+                    gargDamage(playerX + mfx * reach * 0.6f, playerY + 1.0f, playerZ + mfz * reach * 0.6f,
+                               reach * 0.8f, kMelee[curMelee].damage);
+                }
                 float fx = sinf(heroYaw), fz = -cosf(heroYaw);
                 for (int n = 0; n < kNpcCount; ++n) {
                     if (g_npcKilled[n]) continue;
@@ -1284,6 +1294,18 @@ int main(void) {
             // ===== RED DE SEGURIDAD: si el jugador se fue al VACIO, reset al spawn =====
             // (evita "caer al vacio por siempre" al cambiar de gravedad sin superficie)
             // ===== BUCLE DE JUEGO: anclas, materiales, faro y caida =====
+            gargUpdate(playerX, playerY, playerZ, gravG);
+            {   // las gargolas que te alcanzan hacen daño; al morir, vuelves al ultimo ancla
+                const int nHit = gargHitPlayer(playerX, playerY, playerZ, 1.0f);
+                if (nHit > 0) { hp -= (float)(nHit * GARG_TOUCH_DMG); hurtFlash = 12; }
+                if (hp <= 0.0f) {
+                    objRespawn(&playerX, &playerY, &playerZ);
+                    gravG = objRespawnGrav();
+                    velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f;
+                    grounded = 1; hp = HP_MAX;
+                }
+            }
+            if (hurtFlash > 0) --hurtFlash;
             if (objAnchorTouch(playerX, playerY, playerZ) >= 0) { snap(); saveAuto(sv); }  // ancla NUEVA = autoguardado
             objMaterialTouch(playerX, playerY, playerZ);      // recoger sube la EN maxima
             EN_MAX = objEnergyMax();
@@ -1317,6 +1339,8 @@ int main(void) {
                 g_shots[s].z += g_shots[s].vz;
                 if (--g_shots[s].life <= 0) continue;
                 if (blocked(g_shots[s].x, g_shots[s].z, g_shots[s].y)) { g_shots[s].life = 0; continue; }
+                // la bala hiere GARGOLAS (los robots pasaron a ser habitantes del sector)
+                gargDamage(g_shots[s].x, g_shots[s].y, g_shots[s].z, 1.6f, 34);
                 for (int n = 0; n < kNpcCount; ++n) {
                     if (g_npcKilled[n]) continue;
                     float dx = g_shots[s].x - kNpcs[n].x, dz = g_shots[s].z - kNpcs[n].z;
@@ -1460,6 +1484,8 @@ int main(void) {
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_voidShaftVerts, 0, g_voidShaft); // EL POZO: abismo sin fondo (arriba y abajo)
         g_objMarkVerts = objBuildMarkers(g_objMark, (float)fps * 0.0f + idleT);   // anclas, materiales y faro
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_objMarkVerts, 0, g_objMark);
+        g_gargVerts = gargBuildAll(g_gargVB, idleT);
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_gargVerts, 0, g_gargVB);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_spireVerts, 0, g_spire);     // MAR DENSO de agujas (el look de la referencia)
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);   // props del pueblo
         // cables + robots + ambiente (braseros) sin textura
@@ -1574,7 +1600,7 @@ int main(void) {
         sceGuDisable(GU_TEXTURE_2D);
         {
             HudState st{};
-            st.hp = 100.0f; st.hpMax = 100.0f;           // aun no hay vida real en el juego
+            st.hp = hp; st.hpMax = HP_MAX;
             st.en = en;     st.enMax = EN_MAX;           // EN_MAX sube con cada material
             st.grv = 1.0f;  st.gravName = kGravName[gravG];
             st.px = playerX; st.pz = playerZ; st.yaw = heroYaw;
