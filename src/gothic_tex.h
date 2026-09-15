@@ -18,7 +18,7 @@ static void genGothicFacade(unsigned int *t, int W) {
 
     // deterministic integer hash -> 0..255 (no rand), same primitive as genGround
     auto H = [](int a, int b) -> int {
-        unsigned int h = (unsigned int)(a * 374761393 + b * 668265263 + 0x9E3779B9u);
+        unsigned int h = (unsigned int)a * 374761393u + (unsigned int)b * 668265263u + 0x9E3779B9u;
         h = (h ^ (h >> 13)) * 1274126177u;
         h ^= (h >> 16);
         return (int)(h & 0xFFu);

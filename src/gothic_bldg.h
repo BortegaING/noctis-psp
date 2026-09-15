@@ -32,8 +32,8 @@ static void buildGothicBldg(TexVertex *buf, int &i, float cx, float cz,
     const bool  longX = (w >= d);                                         // eje LARGO (nave) = X? (E/O -> false)
 
     // ---- variacion determinista por edificio (hash de cx,cz,h; NADA de rand) ----
-    unsigned int hsh = (unsigned int)((int)cx * 374761393) + (unsigned int)((int)cz * 668265263)
-                     + (unsigned int)((int)h * (int)2654435761u);
+    unsigned int hsh = (unsigned int)(int)cx * 374761393u + (unsigned int)(int)cz * 668265263u
+                     + (unsigned int)(int)h * 2654435761u;
     hsh ^= hsh >> 15; hsh *= 2246822519u; hsh ^= hsh >> 13; hsh *= 3266489917u; hsh ^= hsh >> 16;
     const float v0 = (float)(hsh & 0xFFu)        * (1.0f / 255.0f);
     const float v1 = (float)((hsh >> 8)  & 0xFFu) * (1.0f / 255.0f);

@@ -19,7 +19,7 @@ static inline int noctis_clampi(int v) { return v < 0 ? 0 : (v > 255 ? 255 : v);
 
 // integer hash -> pseudo random 0..2^32, stable per (x,y)
 static inline unsigned int noctis_hash(int x, int y) {
-    unsigned int h = (unsigned int)(x * 374761393) + (unsigned int)(y * 668265263);
+    unsigned int h = (unsigned int)x * 374761393u + (unsigned int)y * 668265263u;
     h = (h ^ (h >> 13)) * 1274126177u;
     h ^= h >> 16;
     return h;
