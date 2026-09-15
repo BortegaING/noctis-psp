@@ -1141,27 +1141,34 @@ int main(void) {
                 wishX = (ax / mag) * k;   // derecha = +X
                 wishZ = (ay / mag) * k;   // arriba (ay<0) = adelante (-Z)
             }
+            // ===== MIRADA: SIEMPRE, con CUALQUIER gravedad =====
+            // Esto vivia DENTRO del bloque de gravedad normal, y ahi estaba el bug de
+            // quedarse pegado a una pared: al cambiar de gravedad, camYaw y camPitch
+            // dejaban de actualizarse. No se podia girar la vista, y como el rayo que
+            // elige la siguiente cara se lanza CON ESOS MISMOS ANGULOS, apuntaba siempre
+            // al mismo sitio y devolvia siempre la cara en la que ya estabas. Sin vuelta
+            // atras, y encima se autoguardaba asi al salir.
+            {
+                // -- orbitar la camara con D-pad izq/der --
+                const float turnIn = ((pad.Buttons & PSP_CTRL_RIGHT) ? 1.0f : 0.0f)
+                                   - ((pad.Buttons & PSP_CTRL_LEFT)  ? 1.0f : 0.0f);
+                yawRate += (turnIn * TURN_MAX - yawRate) * LOOK_SMOOTH;
+                camYaw  += yawRate;
+                // -- mirar arriba/abajo con D-pad; vuelve al centro al soltar; clamp --
+                const int lookU = (pad.Buttons & PSP_CTRL_UP) ? 1 : 0;
+                const int lookD = (pad.Buttons & PSP_CTRL_DOWN) ? 1 : 0;
+                pitchRate += (((lookU ? PITCH_SPD : 0.0f) - (lookD ? PITCH_SPD : 0.0f)) - pitchRate) * LOOK_SMOOTH;
+                camPitch  += pitchRate;
+                if (!lookU && !lookD) camPitch += (-0.12f - camPitch) * 0.10f;   // reposo levemente hacia abajo
+                if (camPitch >  PITCH_CLAMP) camPitch =  PITCH_CLAMP;
+                if (camPitch < -PITCH_CLAMP) camPitch = -PITCH_CLAMP;
+            }
+
             if (gravG == 0) {   // ===== TERCERA PERSONA: el nub MUEVE, el personaje GIRA hacia donde va =====
-            // Por que cambio el esquema: antes el nub X giraba la camara y luego se hacia
-            // heroYaw = camYaw. Como la camara va detras EN ESE MISMO ANGULO, el personaje
-            // quedaba clavado de espaldas y NUNCA giraba en pantalla: solo se deslizaba de
-            // lado. Se podia caminar perfectamente y aun asi "el movimiento se ve mal".
-            // Ahora el nub da una DIRECCION en el plano (relativa a la camara), el
-            // personaje encara esa direccion girando suave, y la camara se orbita aparte
-            // con el D-pad izq/der, que estaba ocupado por un strafe que ya no hace falta
-            // cuando el personaje gira de verdad.
-            // -- orbitar la camara (yaw) con D-pad izq/der --
-            float turnIn = ((pad.Buttons & PSP_CTRL_RIGHT) ? 1.0f : 0.0f)
-                         - ((pad.Buttons & PSP_CTRL_LEFT)  ? 1.0f : 0.0f);
-            yawRate += (turnIn * TURN_MAX - yawRate) * LOOK_SMOOTH;
-            camYaw  += yawRate;
-            // -- mirar arriba/abajo (pitch) con D-pad; vuelve al centro al soltar; clamp --
-            int lookU = (pad.Buttons & PSP_CTRL_UP) ? 1 : 0, lookD = (pad.Buttons & PSP_CTRL_DOWN) ? 1 : 0;
-            pitchRate += (((lookU ? PITCH_SPD : 0.0f) - (lookD ? PITCH_SPD : 0.0f)) - pitchRate) * LOOK_SMOOTH;
-            camPitch  += pitchRate;
-            if (!lookU && !lookD) camPitch += (-0.12f - camPitch) * 0.10f;   // reposo levemente HACIA ABAJO: se ve el borde del balcon y el abismo (vertigo)
-            if (camPitch >  PITCH_CLAMP) camPitch =  PITCH_CLAMP;
-            if (camPitch < -PITCH_CLAMP) camPitch = -PITCH_CLAMP;
+            // El nub da una DIRECCION en el plano (relativa a la camara) y el personaje
+            // encara esa direccion girando suave. Antes el nub X giraba la camara y se
+            // hacia heroYaw = camYaw: como la camara va detras EN ESE MISMO ANGULO, el
+            // personaje quedaba clavado de espaldas y no giraba en pantalla nunca.
             // -- el nub da una DIRECCION en el plano, relativa a la camara --
             // wishX/wishZ ya vienen del nub con zona muerta aplicada, arriba.
             const float fX = sinf(camYaw), fZ = -cosf(camYaw);     // adelante de la camara
@@ -1217,21 +1224,39 @@ int main(void) {
             // el cambio de arma se movera a un modificador (p.ej. mantener L) mas adelante.
             (void)dR; (void)dL; (void)dU; (void)dD;
             prevDR = dR; prevDL = dL; prevDU = dU; prevDD = dD;
-            // Triangulo cicla la DIRECCION de gravedad (0=abajo .. 5=-Z)
-            // GRAVEDAD (Triangulo) DESHABILITADA en 1ra persona por ahora: se reintroduce
-            // con camara gravedad-consciente en una tanda dedicada. gravG queda en 0.
+            // GRAVEDAD DIRIGIDA (Triangulo): salta a la cara que estas MIRANDO.
+            // El rayo se arma con la MISMA base que la camara. Antes se lanzaba con una
+            // direccion de mundo que daba por hecho que la gravedad iba hacia abajo
+            // (sin(camYaw), sin(camPitch), -cos(camYaw)) y el ojo en playerY + EYE_H: con
+            // la gravedad cambiada eso no apunta a lo que ves ni sale de donde tienes la
+            // cabeza, asi que elegias caras a ciegas.
             { int tri = (pad.Buttons & PSP_CTRL_TRIANGLE) ? 1 : 0;
-              if (tri && !prevTri && en >= GRAV_EN_MIN) {      // GRAVEDAD DIRIGIDA: a la cara que miras
+              if (tri && !prevTri) {
+                  float grx, gry, grz, gfx, gfy, gfz, ggx, ggy, ggz;
+                  gravBasis (gravG, &grx, &gry, &grz, &gfx, &gfy, &gfz);
+                  gravDirVec(gravG, &ggx, &ggy, &ggz);
+                  const float cy2 = cosf(camYaw),   sy2 = sinf(camYaw);
                   const float cp2 = cosf(camPitch), sp2 = sinf(camPitch);
-                  const int tg = gravPickTarget(playerX, playerY + EYE_H, playerZ,
-                                                sinf(camYaw) * cp2, sp2, -cosf(camYaw) * cp2);
-                  if (tg >= 0 && tg != gravG) {
+                  const float ux = -ggx, uy = -ggy, uz = -ggz;                 // "arriba" = contra-gravedad
+                  const float hx = gfx * cy2 + grx * sy2,                      // adelante en el plano
+                              hy = gfy * cy2 + gry * sy2,
+                              hz = gfz * cy2 + grz * sy2;
+                  const int tg = gravPickTarget(playerX + ux * EYE_H, playerY + uy * EYE_H, playerZ + uz * EYE_H,
+                                                hx * cp2 + ux * sp2, hy * cp2 + uy * sp2, hz * cp2 + uz * sp2);
+                  if (tg >= 0 && tg != gravG && en >= GRAV_EN_MIN) {
                       gravG = tg; en -= GRAV_EN_SWITCH;        // cuesta energia: obliga a planear la ruta
                       dlgNotifyGravity();                     // los robots cercanos lo comentan
                       velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f; grounded = 0;
+                  } else if (tg < 0 && gravG != 0) {
+                      // SALIDA DE EMERGENCIA, y GRATIS. Si el rayo no engancha ninguna cara
+                      // estando pegado a una pared, sin esto no habria forma de volver: te
+                      // quedabas ahi para siempre y encima se guardaba asi al salir. Volver
+                      // al suelo no puede depender de que te quede energia.
+                      gravG = 0;
+                      velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f; grounded = 0;
                   }
               }
-              prevTri = tri; }   // GRAVEDAD: Triangulo cicla 6 direcciones
+              prevTri = tri; }
 
             aiming = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
             if (aiming) {
@@ -1322,7 +1347,13 @@ int main(void) {
                 gravBasis(gravG, &rx, &ry, &rz, &ffx, &ffy, &ffz);
                 gravDirVec(gravG, &gx, &gy, &gz);
                 float ctrlg = grounded ? ACCEL_GND : ACCEL_AIR;
-                float wr = wishX * RUN_SPEED, wf2 = (-wishZ) * RUN_SPEED;   // wishZ: arriba(ay<0)=adelante
+                // El nub va RELATIVO A LA CAMARA tambien aqui. Antes se mapeaba crudo al
+                // plano (right, fwd) de la gravedad: como la camara ya se orbita con
+                // camYaw, empujar "arriba" te mandaba a un lado en vez de hacia donde
+                // estabas mirando. Se compone el deseo con camYaw, igual que en el suelo.
+                const float cy = cosf(camYaw), sy = sinf(camYaw);
+                const float wf2 = ((-wishZ) * cy - wishX * sy) * RUN_SPEED;   // a lo largo de fwd
+                const float wr  = ((-wishZ) * sy + wishX * cy) * RUN_SPEED;   // a lo largo de right
                 gvr += (wr  - gvr) * ctrlg;
                 gvf += (wf2 - gvf) * ctrlg;
                 if (grounded && wishX == 0.0f && wishZ == 0.0f) { gvr -= gvr * STOP_FRIC; gvf -= gvf * STOP_FRIC; }
@@ -1484,7 +1515,12 @@ int main(void) {
             (void)bobX; (void)bobY; (void)EYE_H;
             float gx, gy, gz, rx, ry, rz, fx, fy, fz;
             gravDirVec(gravG, &gx, &gy, &gz); gravBasis(gravG, &rx, &ry, &rz, &fx, &fy, &fz);
-            float s = (gravG == 0) ? sinf(camYaw) : 0.0f, c = (gravG == 0) ? cosf(camYaw) : 1.0f;
+            // camYaw SIEMPRE, con cualquier gravedad. Antes se anulaba fuera de la
+            // gravedad normal (s=0, c=1) y la camara quedaba SOLDADA al eje del mundo:
+            // caminando por una pared no se podia mirar alrededor. La base de gravBasis
+            // es ortonormal en las 6 direcciones, asi que componer con camYaw es valido
+            // en todas.
+            const float s = sinf(camYaw), c = cosf(camYaw);
             float fX = fx * c + rx * s, fY = fy * c + ry * s, fZ = fz * c + rz * s;
             float uX = -gx, uY = -gy, uZ = -gz;
             // COLISION DE CAMARA: iba 9 unidades atras a ciegas y se metia DENTRO de los
