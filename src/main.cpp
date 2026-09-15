@@ -845,6 +845,8 @@ static void fontTexOn() {
     sceGuTexFilter(GU_NEAREST, GU_NEAREST);
 }
 
+#include "hud.h"         // HUD nuevo: minimapa del sector REAL (usa drawRect/drawText/fontTexOn)
+
 #if VIEWER_MODE
 // dibuja los 4 candidatos en fila sobre un turntable, sobre un piso oscuro.
 static void drawCandidates() {
@@ -886,6 +888,7 @@ static void drawCandidates() {
     sceGuDisable(GU_DEPTH_TEST);
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+
     fontTexOn();
     drawText(196, 10, 1.0f, RGBA(215, 205, 230, 255), "CANDIDATOS DE PERSONAJE");
     const int lblX[4] = { 74, 150, 286, 356 };
@@ -1546,89 +1549,24 @@ int main(void) {
         sceGuEnable(GU_BLEND);
         sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
         sceGuDisable(GU_TEXTURE_2D);
-        // La viñeta completa costaba ~59.500 px MEZCLADOS (leer+mezclar+escribir por
-        // pixel) = casi una pantalla entera de trabajo. Queda solo la banda superior.
-        gradQuad(0, 32, RGBA(0, 0, 0, 105), RGBA(0, 0, 0, 0));
-
-        // paneles + barras (rectangulos)
-        const int barX = 44, barW = 118;
-        drawRect(6, 6, 182, 46, RGBA(8, 8, 14, 150));         // panel stats
-        drawRect(barX, 12, barW, 6, RGBA(40, 20, 24, 220));   // HP fondo
-        drawRect(barX, 12, barW, 6, RGBA(205, 55, 65, 255));  // HP lleno
-        drawRect(barX, 24, barW, 6, RGBA(20, 28, 40, 220));   // EN fondo
-        drawRect(barX, 24, (int)(barW * en / EN_MAX), 6, RGBA(65, 140, 220, 255)); // EN
-        drawRect(barX, 36, barW, 6, RGBA(30, 20, 40, 220));   // GRV fondo
-        drawRect(barX, 36, barW, 6, RGBA(160, 120, 215, 255));// GRV lleno
-        drawRect(298, 234, 176, 32, RGBA(8, 8, 14, 165));     // panel arma
-
-        // minimapa (arriba der): estructuras como puntos + jugador
-        const int mmX = 362, mmY = 10, mmS = 100;
-        drawRect(mmX - 3, mmY - 3, mmS + 6, mmS + 6, RGBA(160, 175, 215, 255)); // borde
-        drawRect(mmX, mmY, mmS, mmS, RGBA(20, 24, 38, 255));                    // fondo opaco
-        for (int s = 0; s < kStructureCount; ++s) {
-            int sx = mmX + (int)((kStructures[s].x + 50.0f) * mmS / 100.0f);
-            int sy = mmY + (int)((kStructures[s].z + 50.0f) * mmS / 100.0f);
-            if (sx >= mmX && sx < mmX + mmS - 2 && sy >= mmY && sy < mmY + mmS - 2)
-                drawRect(sx, sy, 3, 3, RGBA(140, 155, 205, 255));
-        }
         {
-            int pxm = mmX + (int)((playerX + 50.0f) * mmS / 100.0f);
-            int pym = mmY + (int)((playerZ + 50.0f) * mmS / 100.0f);
-            if (pxm >= mmX && pxm < mmX + mmS && pym >= mmY && pym < mmY + mmS)
-                drawRect(pxm - 2, pym - 2, 4, 4, RGBA(245, 140, 95, 255));
+            HudState st{};
+            st.hp = 100.0f; st.hpMax = 100.0f;           // aun no hay vida real en el juego
+            st.en = en;     st.enMax = EN_MAX;           // EN_MAX sube con cada material
+            st.grv = 1.0f;  st.gravName = kGravName[gravG];
+            st.px = playerX; st.pz = playerZ; st.yaw = heroYaw;
+            st.district = "CAMPANARIO";
+            st.matTaken = objMaterialsTaken(); st.matTotal = objMaterialCount();
+            st.pickTimer = pickTimer;
+            st.pickName = (pickedType >= 0 && pickedType < kMaterialCount) ? kMaterials[pickedType].name : 0;
+            st.weaponName = kRanged[curRanged].name;
+            st.ammo = ammoMag[curRanged]; st.ammoMax = kRanged[curRanged].magazine;
+            st.reloading = (reloadCD > 0);
+            st.fps = fps;
+            st.aiming = (aiming != 0);
+            st.paused = (paused != 0);
+            hudDraw(st);
         }
-
-        // mira (crosshair) al apuntar con L
-        if (aiming) {
-            unsigned int rc = RGBA(255, 90, 80, 235);
-            drawRect(239, 127, 2, 7, rc);   // arriba
-            drawRect(239, 139, 2, 7, rc);   // abajo
-            drawRect(231, 135, 7, 2, rc);   // izq
-            drawRect(243, 135, 7, 2, rc);   // der
-            drawRect(239, 135, 2, 2, RGBA(255, 255, 255, 255)); // centro
-        }
-
-        if (paused) drawRect(150, 88, 180, 64, RGBA(10, 10, 16, 205)); // panel pausa
-
-        // texto
-        fontTexOn();
-        drawText(10, 11, 1.0f, RGBA(230, 120, 130, 255), "HP");
-        drawText(10, 23, 1.0f, RGBA(120, 170, 230, 255), "EN");
-        drawText(10, 35, 1.0f, RGBA(185, 150, 230, 255), "GRV");
-        drawText(barX + barW + 4, 11, 1.0f, RGBA(220, 220, 230, 255), "1200");
-        snprintf(hud, sizeof(hud), "%d", (int)en);
-        drawText(barX + barW + 4, 23, 1.0f, RGBA(220, 220, 230, 255), hud);
-        drawText(barX + barW + 4, 35, 1.0f, RGBA(220, 220, 230, 255), kGravName[gravG]);   // direccion de gravedad
-
-        snprintf(hud, sizeof(hud), "DISTRITO: Campanario    FPS %d", fps);
-        drawText(8, 58, 1.0f, RGBA(150, 160, 190, 255), hud);
-
-        drawText(304, 226, 1.0f, RGBA(170, 205, 165, 255), kMelee[curMelee].name);    // melee (Circulo)
-        drawText(304, 239, 1.0f, RGBA(222, 210, 188, 255), kRanged[curRanged].name);  // arma a distancia (R)
-        if (reloadCD > 0) {
-            drawText(304, 252, 1.0f, RGBA(235, 180, 90, 255), "RECARGANDO...");
-        } else {
-            snprintf(hud, sizeof(hud), "%d / %d", ammoMag[curRanged], kRanged[curRanged].magazine);
-            drawText(304, 252, 1.0f, aiming ? RGBA(255, 120, 110, 255) : RGBA(150, 175, 215, 255), hud);
-        }
-
-        // aviso de objeto obtenido + contador de materiales
-        if (pickTimer > 0) {
-            snprintf(hud, sizeof(hud), "OBJETO OBTENIDO: %s", kMaterials[pickedType].name);
-            drawText(8, 150, 1.0f, RGBA(120, 220, 150, 255), hud);
-        }
-        snprintf(hud, sizeof(hud), "MATERIALES: %d", collectedCount);
-        drawText(8, 200, 1.0f, RGBA(150, 200, 170, 255), hud);
-
-        snprintf(hud, sizeof(hud), "X %d  Z %d  Y %d", (int)playerX, (int)playerZ, (int)playerY);
-        drawText(8, 230, 1.0f, RGBA(110, 130, 160, 255), hud);
-        drawText(8, 244, 1.0f, RGBA(110, 130, 160, 255),
-                 "X salto  Cuad planeo  L/R arma  Dpad cambia  O melee  Tri GRAVEDAD");
-        if (paused) {
-            drawText(206, 104, 2.0f, RGBA(232, 222, 242, 255), "PAUSA");
-            drawText(163, 130, 1.0f, RGBA(165, 175, 205, 255), "START continuar   HOME salir");
-        }
-
         sceGuDisable(GU_TEXTURE_2D);
         sceGuDisable(GU_BLEND);
         sceGuEnable(GU_DEPTH_TEST);
