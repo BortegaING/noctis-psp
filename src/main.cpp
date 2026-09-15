@@ -1007,7 +1007,7 @@ int main(void) {
     float EN_MAX = 780.0f;   // sube con cada material recogido (objEnergyMax)
     // constantes de movilidad (diseno del agente)
     const float DEADZONE = 0.18f, RUN_SPEED = 0.22f, ACCEL_GND = 0.20f, ACCEL_AIR = 0.09f, STOP_FRIC = 0.22f, CAM_SPEED = 0.03f;
-    const float GRAVITY = 0.020f, JUMP_VEL = 0.55f, SHORTHOP = 0.50f;
+    const float GRAVITY = 0.020f, JUMP_VEL = 0.55f, SHORTHOP = 0.50f, FALL_CAP = 0.80f;
     const int   COYOTE_MAX = 6, JUMPBUF_MAX = 6;
     const float FLOAT_LIFT = 0.030f, FLOAT_GRAV = 0.006f, FLOAT_UPCAP = 0.12f, FLOAT_FALLCAP = -0.09f, EN_FLOAT = 6.0f, EN_REGEN = 5.0f;
     int   grounded = 1;
@@ -1204,8 +1204,149 @@ int main(void) {
                     gargDamage(playerX + mfx * reach * 0.6f, playerY + 1.0f, playerZ + mfz * reach * 0.6f,
                                reach * 0.8f, kMelee[curMelee].damage);
                 }
-                float fx = sinf(heroYaw), fz = -cosf(heroYaw);
                 // (los robots ya NO son blancos: son los habitantes del sector)
+            }
+            prevCircle = (pad.Buttons & PSP_CTRL_CIRCLE) ? 1 : 0;   // flanco: un golpe por pulsacion, no uno por frame
+            if (gravG == 0) {
+            // ===== salto: coyote time + buffer + salto variable =====
+            if (grounded) coyote = COYOTE_MAX; else if (coyote > 0) coyote--;
+            int jumpNow = (pad.Buttons & PSP_CTRL_CROSS) ? 1 : 0;
+            if (jumpNow && !prevJump) jumpBuf = JUMPBUF_MAX; else if (jumpBuf > 0) jumpBuf--;
+            if (jumpBuf > 0 && coyote > 0) { velY = JUMP_VEL; grounded = 0; coyote = 0; jumpBuf = 0; }
+            if (!jumpNow && velY > 0.0f) velY *= SHORTHOP;
+            prevJump = jumpNow;
+            // ===== gravedad / PLANEO (CUADRADO gasta EN; L apunta) =====
+            if ((pad.Buttons & PSP_CTRL_SQUARE) && en > 0.0f) {
+                velY += FLOAT_LIFT; if (velY > FLOAT_UPCAP)   velY = FLOAT_UPCAP;
+                velY -= FLOAT_GRAV; if (velY < FLOAT_FALLCAP) velY = FLOAT_FALLCAP;
+                en -= EN_FLOAT; grounded = 0;
+            } else {
+                velY -= GRAVITY;
+            }
+            // VELOCIDAD TERMINAL. Sin esto, cayendo desde el techo (60) se llega a ~1.55
+            // por frame, y la colision se prueba UNA vez por frame: el jugador atraviesa
+            // cualquier repisa mas fina que su paso. El pretil mas fino del mundo mide
+            // 1.45, asi que el tope va por debajo de eso.
+            if (velY < -FALL_CAP) velY = -FALL_CAP;
+            // ===== integra vertical + suelo/azoteas =====
+            playerY += velY;
+            float gh = groundHeight(playerX, playerZ, playerY);
+            if (playerY <= gh) { playerY = gh; velY = 0.0f; grounded = 1; } else grounded = 0;
+            // ===== energia (EN) =====
+            if (grounded && en < EN_MAX) en += EN_REGEN;
+            if (en > EN_MAX) en = EN_MAX;
+            if (en < 0.0f) en = 0.0f;
+            // ===== animacion (segun velocidad real) =====
+            speed01 = sqrtf(velX * velX + velZ * velZ) / RUN_SPEED;
+            if (speed01 > 1.0f) speed01 = 1.0f;
+            moving = (velX * velX + velZ * velZ > 0.002f) ? 1 : 0;
+            if (moving) walkPhase += 0.17f;   // ritmo de paso acorde al RUN_SPEED bajo
+            idleT += 0.05f;
+            } else {
+                // ===== GRAVEDAD NO-ABAJO: caer/mover/saltar segun gravDir (wall-walk) =====
+                float rx, ry, rz, ffx, ffy, ffz, gx, gy, gz;
+                gravBasis(gravG, &rx, &ry, &rz, &ffx, &ffy, &ffz);
+                gravDirVec(gravG, &gx, &gy, &gz);
+                float ctrlg = grounded ? ACCEL_GND : ACCEL_AIR;
+                float wr = wishX * RUN_SPEED, wf2 = (-wishZ) * RUN_SPEED;   // wishZ: arriba(ay<0)=adelante
+                gvr += (wr  - gvr) * ctrlg;
+                gvf += (wf2 - gvf) * ctrlg;
+                if (grounded && wishX == 0.0f && wishZ == 0.0f) { gvr -= gvr * STOP_FRIC; gvf -= gvf * STOP_FRIC; }
+                int jn = (pad.Buttons & PSP_CTRL_CROSS) ? 1 : 0;
+                if (jn && !prevJump && grounded) { gvg = -JUMP_VEL; grounded = 0; }
+                if (!jn && gvg < 0.0f) gvg *= SHORTHOP;
+                prevJump = jn;
+                if ((pad.Buttons & PSP_CTRL_SQUARE) && en > 0.0f) {       // planeo a lo largo de gravDir
+                    gvg -= FLOAT_LIFT; if (gvg < -FLOAT_UPCAP) gvg = -FLOAT_UPCAP;
+                    en -= EN_FLOAT; grounded = 0;
+                } else {
+                    gvg += GRAVITY;
+                }
+                if (gvg > FALL_CAP) gvg = FALL_CAP;   // misma velocidad terminal, caminando por muros
+                float vX = rx * gvr + ffx * gvf + gx * gvg;
+                float vY = ry * gvr + ffy * gvf + gy * gvg;
+                float vZ = rz * gvr + ffz * gvf + gz * gvg;
+                grounded = 0;
+                // colision GENERALIZADA (gravBlocked): los muros frenan igual caminando por una pared
+                float nX = playerX + vX;
+                if (!gravBlocked(gravG, nX, playerY, playerZ, 1.1f)) playerX = nX; else if (gx != 0.0f) { grounded = 1; gvg = 0.0f; }
+                float nZ = playerZ + vZ;
+                if (!gravBlocked(gravG, playerX, playerY, nZ, 1.1f)) playerZ = nZ; else if (gz != 0.0f) { grounded = 1; gvg = 0.0f; }
+                float nY = playerY + vY;
+                if (!gravBlocked(gravG, playerX, nY, playerZ, 1.1f)) playerY = nY; else if (gy != 0.0f) { grounded = 1; gvg = 0.0f; }
+                // APOYO a lo largo del eje de la gravedad: la cara de la caja se vuelve el suelo
+                {
+                    const float f  = gravGroundAlong(gravG, playerX, playerY, playerZ);
+                    const float sg = (gx + gy + gz);                 // signo del eje de gravedad
+                    float *pa = (gx != 0.0f) ? &playerX : ((gy != 0.0f) ? &playerY : &playerZ);
+                    if ((*pa - f) * sg >= 0.0f) { *pa = f; gvg = 0.0f; grounded = 1; }
+                }
+                if (grounded && en < EN_MAX) en += EN_REGEN;
+                if (en > EN_MAX) en = EN_MAX; if (en < 0.0f) en = 0.0f;
+                if (gvr * gvr + gvf * gvf > 0.004f) heroYaw = atan2f(gvr, gvf);   // encara el avance en el plano
+                speed01 = sqrtf(gvr * gvr + gvf * gvf) / RUN_SPEED;
+                if (speed01 > 1.0f) speed01 = 1.0f;
+                moving = (gvr * gvr + gvf * gvf > 0.002f) ? 1 : 0;
+                if (moving) walkPhase += 0.17f;   // las pisadas tambien suenan caminando por un muro
+                idleT += 0.05f;
+            }
+
+            // ===== BUCLE DE JUEGO: gargolas, anclas, materiales, faro y caida =====
+            gargUpdate(playerX, playerY, playerZ, gravG);
+            {   // las gargolas que te alcanzan hacen dano; al morir, vuelves al ultimo ancla
+                const int nHit = gargHitPlayer(playerX, playerY, playerZ, 1.0f);
+                if (nHit > 0) { hp -= (float)(nHit * GARG_TOUCH_DMG); hurtFlash = 12; }
+                if (hp <= 0.0f) {
+                    objRespawn(&playerX, &playerY, &playerZ);
+                    gravG = objRespawnGrav();
+                    velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f;
+                    grounded = 1; hp = HP_MAX;
+                }
+            }
+            if (hurtFlash > 0) --hurtFlash;
+            if (objAnchorTouch(playerX, playerY, playerZ) >= 0) { snap(); saveAuto(sv); }  // ancla NUEVA = autoguardado
+            objMaterialTouch(playerX, playerY, playerZ);      // recoger sube la EN maxima
+            EN_MAX = objEnergyMax();
+            objGoalReached(playerX, playerY, playerZ);
+            if (objFallCheck(playerX, playerY, playerZ, gravG, grounded)) {
+                objRespawn(&playerX, &playerY, &playerZ);     // vuelve al ULTIMO ancla...
+                gravG = objRespawnGrav();                     // ...con SU gravedad (si no, caes 60)
+                velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f;
+                grounded = 1;
+            }
+
+            // recoleccion de recursos por proximidad
+            for (int r = 0; r < kResourceCount && r < 64; ++r) {
+                if (collected[r]) continue;
+                float dx = kResources[r].x * WSCALE - playerX, dz = kResources[r].z * WSCALE - playerZ;
+                if (dx * dx + dz * dz < 2.6f * 2.6f) {
+                    collected[r] = 1;
+                    collectedCount++;
+                    pickedType = kResources[r].type;
+                    if (pickedType < 0 || pickedType >= kMaterialCount) pickedType = 0;
+                    pickTimer = 120;
+                }
+            }
+            if (pickTimer > 0) pickTimer--;
+
+            // ===== balas: mover, chocar con muros, herir gargolas =====
+            for (int s = 0; s < 24; ++s) {
+                if (g_shots[s].life <= 0) continue;
+                g_shots[s].x += g_shots[s].vx;
+                g_shots[s].y += g_shots[s].vy;
+                g_shots[s].z += g_shots[s].vz;
+                if (--g_shots[s].life <= 0) continue;
+                if (blocked(g_shots[s].x, g_shots[s].z, g_shots[s].y)) { g_shots[s].life = 0; continue; }
+                // UN impacto, no dano por frame: gargDamage devuelve a cuantas hirio.
+                // Si acerto, la bala revienta y deja chispa (salvo que perfore).
+                if (gargDamage(g_shots[s].x, g_shots[s].y, g_shots[s].z, 1.6f, 34) > 0) {
+                    for (int q = 0; q < 12; ++q) if (g_sparks[q].life <= 0) {
+                        g_sparks[q].x = g_shots[s].x; g_sparks[q].y = g_shots[s].y;
+                        g_sparks[q].z = g_shots[s].z; g_sparks[q].life = 16; break;
+                    }
+                    if (!g_shots[s].pierce) g_shots[s].life = 0;
+                }
+                // los robots ya NO son blancos: son los habitantes del sector
             }
             for (int q = 0; q < 12; ++q) if (g_sparks[q].life > 0) g_sparks[q].life--;
         }
@@ -1377,6 +1518,9 @@ int main(void) {
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
         }
 
+        // hacia donde encara el heroe: lo usan el fogonazo del canon y el arco de melee
+        const float fx = sinf(heroYaw), fz = -cosf(heroYaw);
+
         // ---- balas (tracer brillante) ----
         for (int s = 0; s < 24; ++s) {
             if (g_shots[s].life <= 0) continue;
@@ -1390,7 +1534,6 @@ int main(void) {
         }
         // ---- fogonazo del canon ----
         if (muzzle > 0) {
-            float fx = sinf(heroYaw), fz = -cosf(heroYaw);
             LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
             int vi = 0;
             addSolidBox(v, vi, playerX + fx * 0.7f, playerY + 1.5f - 0.12f, playerZ + fz * 0.7f,
@@ -1414,7 +1557,6 @@ int main(void) {
 
         // ---- arco de melee (Circulo): destello frontal al golpear ----
         if (meleeFx > 0) {
-            float fx = sinf(heroYaw), fz = -cosf(heroYaw);
             float reach = kMelee[curMelee].reach * 0.20f;
             LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
             int vi = 0;
