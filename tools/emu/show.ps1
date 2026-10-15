@@ -29,6 +29,14 @@ $exe   = "$repo\ppsspp\PPSSPPWindows64.exe"
 Get-Process PPSSPPWindows64 | Stop-Process -Force
 Start-Sleep -Milliseconds 400
 
+# Modo VISTA en el PC: GPU (D3D11) a 3x la resolucion de la PSP + filtrado lineal. Asi deja de
+# verse "pixelado" en una ventana grande. (hidden.ps1 vuelve al software 1x que psp_eye.py
+# necesita para leer la VRAM.) En la consola real no cambia nada: la PSP es 480x272 siempre.
+$ini = "$repo\ppsspp\memstick\PSP\SYSTEM\ppsspp.ini"
+$c = [IO.File]::ReadAllLines($ini)
+$c = $c -replace '^SoftwareRenderer = .*$', 'SoftwareRenderer = False' -replace '^InternalResolution = .*$', 'InternalResolution = 3' -replace '^TextureFiltering = .*$', 'TextureFiltering = 3'
+[IO.File]::WriteAllLines($ini, $c)
+
 if ($Build) {
   $b = wsl -d Ubuntu-24.04 -u root -- bash -c 'cd /mnt/c/Users/Usuario/Desktop/Proyectos_Claude/noctis-psp && bash tools/build.sh'
   if (($b -join "`n") -notmatch 'Built target noctis') { Write-Output "BUILD FAIL"; exit }

@@ -17,14 +17,14 @@
 //  - Fondo: colosos en un anillo lejano que SIGUE al jugador (como un skybox con volumen),
 //    color horneado hacia la bruma. Se construye una vez.
 //
-// Se incluye despues de hud.h: usa TexVertex/LineVertex, addSolidBoxT/addSolidBox,
-// gradQuad, g_city/g_cityCount/CityBldg, RGBA, g_groundTexS, STEX, TEX_FLAGS, LINE_FLAGS.
+// Se incluye despues de hud.h: usa LineVertex, addQuad, addLimb, brighten,
+// gradQuad, g_city/g_cityCount/CityBldg, RGBA, LINE_FLAGS.
 // ============================================================================
 
 static const float SW_C      = 48.0f;    // lado de celda
 static const int   SW_R      = 2;        // radio de celdas con malla (5x5)
 static const int   SW_POOL   = 40;       // ranuras de malla (25 + histeresis)
-static const int   SW_TV     = 900;      // vertices texturizados max por celda
+static const int   SW_TV     = 1000;     // vertices de losas/puentes/escalones max por celda
 static const int   SW_LV     = 1100;     // vertices de color max por celda
 static const float SW_RISE   = 0.75f;    // alto de escalon (< 0.8, lo que blocked() deja subir)
 static const float SW_TREAD  = 1.1f;     // huella de escalon
@@ -68,35 +68,46 @@ static bool swBridge(int cx, int cz, int axis) {
 
 // ---------------------------------------------------------------- salida (malla y/o colision)
 struct SwOut {
-    TexVertex *t; int tn, tCore;              // losas, puentes, escalones, pretiles, monolitos
+    LineVertex *t; int tn, tCore;             // losas, puentes, escalones, pretiles, monolitos
     LineVertex *l; int ln, lCore, lBoxEnd;    // pilares, torres, losas de abajo | faroles | anillos
     CityBldg *box; int bn, bmax;              // colision (null = no se pide)
 };
 
-// Caja con las 5 caras en sentido INVERTIDO respecto de addSolidBoxT/addSolidBox. Con
-// NOCTIS_FRONTFACE y cull ON, esas cajas se ven DESDE ADENTRO: la GE descarta las caras que
-// te miran y pinta el interior de las de atras. Primero se noto en los techos (losas sin
-// piso); despues Benjamin "veo dentro de las escaleras" = los costados, igual. Las cinco.
-template <typename V> static void swFlipQuads(V *buf, int t0, int quads) {
-    for (int q = 0; q < quads; ++q) {
-        V *f = buf + t0 + q * 6, tmp;
-        tmp = f[1]; f[1] = f[2]; f[2] = tmp;
-        tmp = f[4]; f[4] = f[5]; f[5] = tmp;
-    }
+// ---------------------------------------------------------------- caja ILUMINADA
+// Un SOL desde arriba-izquierda (como la referencia): cada cara tiene SU tono segun hacia
+// donde mira, en vez del 1.15/0.82/0.60 simetrico de addSolidBox (frente = atras, izq = der:
+// sin direccion de luz, se ve plano). Ademas cada costado va de su tono arriba a colBot
+// abajo: oclusion ambiental en el pie de cada muro, o la bruma subiendo en los colosos.
+// Sentido de las caras: el INVERSO de addSolidBox(T), que con NOCTIS_FRONTFACE y cull ON se
+// veia desde ADENTRO ("veo dentro de las escaleras").
+static const float SW_SUN_TOP = 1.10f, SW_SUN_W = 0.96f, SW_SUN_N = 0.80f, SW_SUN_S = 0.68f, SW_SUN_E = 0.54f;
+static void swQuadC(LineVertex *b, int &i, float ax, float ay, float az, unsigned int ca,
+                    float bx, float by, float bz, unsigned int cb, float cx_, float cy_, float cz_, unsigned int cc,
+                    float dx, float dy, float dz, unsigned int cd) {
+    b[i++] = { ca, ax, ay, az }; b[i++] = { cb, bx, by, bz }; b[i++] = { cc, cx_, cy_, cz_ };
+    b[i++] = { ca, ax, ay, az }; b[i++] = { cc, cx_, cy_, cz_ }; b[i++] = { cd, dx, dy, dz };
 }
-static void swBoxT(TexVertex *buf, int &i, float cx, float baseY, float cz, float w, float d, float h, unsigned int col) {
-    const int t0 = i;
-    addSolidBoxT(buf, i, cx, baseY, cz, w, d, h, col);
-    swFlipQuads(buf, t0, 5);
+static void swBoxLit(LineVertex *b, int &i, float cx, float y0, float cz, float w, float d, float h,
+                     unsigned int cTop, unsigned int cBot, bool withTop = true) {
+    const float x0 = cx - w * 0.5f, x1 = cx + w * 0.5f, z0 = cz - d * 0.5f, z1 = cz + d * 0.5f, y1 = y0 + h;
+    const unsigned int t  = brighten(cTop, SW_SUN_TOP);   // withTop=false: el techo lo ponen los paneles
+    const unsigned int nT = brighten(cTop, SW_SUN_N), nB = brighten(cBot, SW_SUN_N);
+    const unsigned int sT = brighten(cTop, SW_SUN_S), sB = brighten(cBot, SW_SUN_S);
+    const unsigned int wT = brighten(cTop, SW_SUN_W), wB = brighten(cBot, SW_SUN_W);
+    const unsigned int eT = brighten(cTop, SW_SUN_E), eB = brighten(cBot, SW_SUN_E);
+    if (withTop) swQuadC(b, i, x0, y1, z0, t,  x0, y1, z1, t,  x1, y1, z1, t,  x1, y1, z0, t);    // techo
+    swQuadC(b, i, x0, y0, z0, nB, x0, y1, z0, nT, x1, y1, z0, nT, x1, y0, z0, nB);   // -Z (norte)
+    swQuadC(b, i, x1, y0, z1, sB, x1, y1, z1, sT, x0, y1, z1, sT, x0, y0, z1, sB);   // +Z (sur)
+    swQuadC(b, i, x0, y0, z1, wB, x0, y1, z1, wT, x0, y1, z0, wT, x0, y0, z0, wB);   // -X (oeste)
+    swQuadC(b, i, x1, y0, z0, eB, x1, y1, z0, eT, x1, y1, z1, eT, x1, y0, z1, eB);   // +X (este)
 }
-static void swBoxL(LineVertex *buf, int &i, float cx, float baseY, float cz, float w, float d, float h, unsigned int col) {
-    const int t0 = i;
-    addSolidBox(buf, i, cx, baseY, cz, w, d, h, col);
-    swFlipQuads(buf, t0, 5);
+// caja comun: la base de cada muro un 28% mas oscura (contacto/oclusion)
+static void swBoxL(LineVertex *b, int &i, float cx, float y0, float cz, float w, float d, float h, unsigned int col) {
+    swBoxLit(b, i, cx, y0, cz, w, d, h, col, brighten(col, 0.72f));
 }
 
 static void swSolidT(SwOut &o, float x, float base, float z, float w, float d, float h, unsigned int col, bool collide) {
-    if (o.t && o.tn + 30 <= SW_TV) swBoxT(o.t, o.tn, x, base, z, w, d, h, col);
+    if (o.t && o.tn + 30 <= SW_TV) swBoxL(o.t, o.tn, x, base, z, w, d, h, col);
     if (o.box && collide && o.bn < o.bmax) o.box[o.bn++] = { x, z, w, d, base + h, col };
 }
 static void swSolidL(SwOut &o, float x, float base, float z, float w, float d, float h, unsigned int col, bool collide) {
@@ -175,7 +186,20 @@ static void swEmitCell(int cx, int cz, SwOut &o) {
     SwLayout L; swLayout(cx, cz, L);
     // ===== T nucleo: losa + puentes propios =====
     if (L.type == 1) {
-        swSolidT(o, L.x, L.top - 4.0f, L.z, L.w, L.d, 4.0f, SW_C_SLAB, true);
+        // losa: costados iluminados + techo en PANELES de hormigon con tono levemente distinto
+        // (las juntas del video). Teselar ademas reparte mejor la niebla por vertice.
+        const int nx = (int)(L.w / 8.0f + 0.5f), nz = (int)(L.d / 8.0f + 0.5f);
+        if (o.t && o.tn + 30 + 6 * nx * nz <= SW_TV) {
+            swBoxLit(o.t, o.tn, L.x, L.top - 4.0f, L.z, L.w, L.d, 4.0f, SW_C_SLAB, brighten(SW_C_SLAB, 0.72f), false);
+            const float x0 = L.x - L.w * 0.5f, z0 = L.z - L.d * 0.5f, pw = L.w / nx, pd = L.d / nz, y = L.top;
+            for (int a = 0; a < nx; ++a)
+                for (int c = 0; c < nz; ++c) {
+                    const unsigned int t = brighten(SW_C_SLAB, SW_SUN_TOP * (0.95f + 0.07f * swRand(cx * 16 + a, cz * 16 + c, 99)));
+                    const float px0 = x0 + a * pw, px1 = px0 + pw, pz0 = z0 + c * pd, pz1 = pz0 + pd;
+                    swQuadC(o.t, o.tn, px0, y, pz0, t, px0, y, pz1, t, px1, y, pz1, t, px1, y, pz0, t);
+                }
+        }
+        if (o.box && o.bn < o.bmax) o.box[o.bn++] = { L.x, L.z, L.w, L.d, L.top, SW_C_SLAB };
         if (swBridge(cx, cz, 0)) swEmitBridge(cx, cz, 0, o);
         if (swBridge(cx, cz, 1)) swEmitBridge(cx, cz, 1, o);
     }
@@ -245,7 +269,7 @@ static void swEmitCell(int cx, int cz, SwOut &o) {
 // ---------------------------------------------------------------- pool de celdas con malla
 struct SwCell { int cx, cz, used, tn, tCore, ln, lCore, lBoxEnd; };
 static SwCell g_swCell[SW_POOL];
-static TexVertex  __attribute__((aligned(16))) g_swT[SW_POOL][SW_TV];
+static LineVertex __attribute__((aligned(16))) g_swT[SW_POOL][SW_TV];
 static LineVertex __attribute__((aligned(16))) g_swL[SW_POOL][SW_LV];
 static int g_swPcx = 0x7FFFFFF, g_swPcz = 0x7FFFFFF;
 
@@ -259,7 +283,7 @@ static void swGenCell(int s, int cx, int cz) {
     SwCell &c = g_swCell[s];
     c.cx = cx; c.cz = cz; c.used = 1;
     c.tn = o.tn; c.tCore = o.tCore; c.ln = o.ln; c.lCore = o.lCore; c.lBoxEnd = o.lBoxEnd;
-    sceKernelDcacheWritebackRange(g_swT[s], sizeof(TexVertex) * o.tn);
+    sceKernelDcacheWritebackRange(g_swT[s], sizeof(LineVertex) * o.tn);
     sceKernelDcacheWritebackRange(g_swL[s], sizeof(LineVertex) * o.ln);
 }
 static int swFreeSlot(int pcx, int pcz) {
@@ -312,27 +336,7 @@ static unsigned int swFade(unsigned int base, float t) {    // hacia la bruma
     return RGBA(br + (int)((cr - br) * t), bg + (int)((cg - bg) * t), bb + (int)((cb - bb) * t), 255);
 }
 
-// caja con degradado VERTICAL: la base se pierde en la bruma y la cima queda oscura,
-// como las torres del video que salen de la niebla. Mismo winding que swBoxL.
-static void swQuadC(LineVertex *b, int &i, float ax, float ay, float az, unsigned int ca,
-                    float bx, float by, float bz, unsigned int cb, float cx_, float cy_, float cz_, unsigned int cc,
-                    float dx, float dy, float dz, unsigned int cd) {
-    b[i++] = { ca, ax, ay, az }; b[i++] = { cb, bx, by, bz }; b[i++] = { cc, cx_, cy_, cz_ };
-    b[i++] = { ca, ax, ay, az }; b[i++] = { cc, cx_, cy_, cz_ }; b[i++] = { cd, dx, dy, dz };
-}
-static void swBoxGrad(LineVertex *b, int &i, float cx, float y0, float cz, float w, float d, float h,
-                      unsigned int cTop, unsigned int cBot) {
-    const float x0 = cx - w * 0.5f, x1 = cx + w * 0.5f, z0 = cz - d * 0.5f, z1 = cz + d * 0.5f, y1 = y0 + h;
-    const unsigned int t = brighten(cTop, 1.15f);
-    const unsigned int aT = brighten(cTop, 0.82f), aB = brighten(cBot, 0.82f);
-    const unsigned int sT = brighten(cTop, 0.60f), sB = brighten(cBot, 0.60f);
-    // mismo sentido que swBoxL: cada cara es la de addSolidBox recorrida al reves (a,d,c,b)
-    swQuadC(b, i, x0, y1, z0, t, x0, y1, z1, t, x1, y1, z1, t, x1, y1, z0, t);              // techo
-    swQuadC(b, i, x0, y0, z0, aB, x0, y1, z0, aT, x1, y1, z0, aT, x1, y0, z0, aB);          // frente
-    swQuadC(b, i, x1, y0, z1, aB, x1, y1, z1, aT, x0, y1, z1, aT, x0, y0, z1, aB);          // atras
-    swQuadC(b, i, x0, y0, z1, sB, x0, y1, z1, sT, x0, y1, z0, sT, x0, y0, z0, sB);          // izq
-    swQuadC(b, i, x1, y0, z0, sB, x1, y1, z0, sT, x1, y1, z1, sT, x1, y0, z1, sB);          // der
-}
+// (los colosos usan swBoxLit con cBot = casi bruma: salen de la niebla, cima oscura)
 
 static void swBuildBackground() {
     int i = 0, j = 0;
@@ -354,9 +358,9 @@ static void swBuildBackground() {
             const float y0n = (float)t / tiers, y1n = (float)(t + 1) / tiers;
             const unsigned int cBot = swFade(dark, fade + (1.0f - fade) * 0.85f * (1.0f - y0n));
             const unsigned int cTop = swFade(dark, fade + (1.0f - fade) * 0.85f * (1.0f - y1n));
-            swBoxGrad(g_swBgBox, i, x, base, z, w, d, h, cTop, cBot);
-            swBoxGrad(g_swBgBox, i, x, base, z, w * 1.07f, 3.0f + 0.04f * d, h * 0.96f, cTop, cBot);   // nervadura X
-            swBoxGrad(g_swBgBox, i, x, base, z, 3.0f + 0.04f * w, d * 1.07f, h * 0.96f, cTop, cBot);   // nervadura Z
+            swBoxLit(g_swBgBox, i, x, base, z, w, d, h, cTop, cBot);
+            swBoxLit(g_swBgBox, i, x, base, z, w * 1.07f, 3.0f + 0.04f * d, h * 0.96f, cTop, cBot);   // nervadura X
+            swBoxLit(g_swBgBox, i, x, base, z, 3.0f + 0.04f * w, d * 1.07f, h * 0.96f, cTop, cBot);   // nervadura Z
             base += h;
             swBoxL(g_swBgBox, i, x, base - 3.0f, z, w * 1.12f, d * 1.12f, 3.0f, cTop);              // cornisa
             w *= 0.70f; d *= 0.78f;
@@ -480,7 +484,7 @@ static void swDraw(float px, float pz, float fwdX, float fwdZ) {
         // SIN LOD: el anillo exterior se dibujaba solo con su nucleo y pretiles/monolitos
         // "aparecian" al acercarse (se leia como el mundo a medio cargar). Ya cabe completo.
         const int n = c.tn;
-        if (n > 0) { sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, n, 0, g_swT[s]); g_swVtx += n; }
+        if (n > 0) { sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, n, 0, g_swT[s]); g_swVtx += n; }
     }
     for (int s = 0; s < SW_POOL; ++s) {
         if (ringOf[s] < 0) continue;

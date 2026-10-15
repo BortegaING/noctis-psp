@@ -71,6 +71,34 @@ static void drawHunterRig(const HunterRig &r) {
     sceGumPopMatrix();
 }
 
+// SOMBRA de contacto bajo el personaje: disco oscuro que se DESVANECE hacia el borde
+// (alfa por vertice) y se achica/aclara con la altura. Es lo que "apoya" al personaje en
+// el suelo; sin ella flota aunque este parado. Sin escritura de Z (no tapa nada).
+static void drawBlobShadow(float x, float gy, float z, float aboveGround) {
+    float k = 1.0f - aboveGround / 14.0f;            // 1 en el suelo .. 0 a 14u de altura
+    if (k <= 0.05f) return;
+    if (k > 1.0f) k = 1.0f;
+    const float R = 1.05f + 0.55f * k;
+    const int A = (int)(150.0f * k);
+    const int N = 14;
+    LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 3 * N);
+    const unsigned int cIn = RGBA(8, 10, 14, A), cOut = RGBA(8, 10, 14, 0);
+    const float y = gy + 0.05f;
+    for (int s = 0; s < N; ++s) {
+        const float a0 = 6.2831853f * s / N, a1 = 6.2831853f * (s + 1) / N;
+        v[s * 3 + 0] = { cIn,  x, y, z };
+        v[s * 3 + 1] = { cOut, x + cosf(a0) * R, y, z + sinf(a0) * R };
+        v[s * 3 + 2] = { cOut, x + cosf(a1) * R, y, z + sinf(a1) * R };
+    }
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    sceGuDepthMask(GU_TRUE);                          // no escribe Z
+    sceGumLoadIdentity();
+    sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, 3 * N, 0, v);
+    sceGuDepthMask(GU_FALSE);
+    sceGuDisable(GU_BLEND);
+}
+
 // Arma la pose final a partir del ciclo de anim.h + lo que esta haciendo el jugador.
 //   spd01   velocidad 0..1 (normalizada a la velocidad REAL de carrera)
 //   landK   1 al aterrizar fuerte, decae solo (lo maneja main)

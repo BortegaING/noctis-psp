@@ -26,6 +26,11 @@ if ($Build) {
   if (($b -join "`n") -notmatch 'Built target noctis') { Write-Output "BUILD FAIL:"; Write-Output (($b | Select-Object -Last 12) -join "`n"); exit }
   Write-Output "BUILD OK"
 }
+# psp_eye.py lee la VRAM: necesita el renderizador por SOFTWARE a 1x (show.ps1 pone GPU 3x)
+$ini = "$repo\ppsspp\memstick\PSP\SYSTEM\ppsspp.ini"
+$c = [IO.File]::ReadAllLines($ini)
+$c = $c -replace '^SoftwareRenderer = .*$', 'SoftwareRenderer = True' -replace '^InternalResolution = .*$', 'InternalResolution = 1'
+[IO.File]::WriteAllLines($ini, $c)
 $proc = Start-Process -FilePath "$repo\ppsspp\PPSSPPWindows64.exe" -ArgumentList "`"$repo\build\EBOOT.PBP`"" -WindowStyle Hidden -PassThru
 # vigia: 10 s ocultando cualquier ventana que PPSSPP muestre por su cuenta
 $hid = 0; $t = [Diagnostics.Stopwatch]::StartNew()

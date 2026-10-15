@@ -1731,6 +1731,10 @@ int main(void) {
         {
             HunterPose pose = hunterPose(walkPhase, idleT, speed01, grounded);   // no llamarla hp: ensombrecia la VIDA del jugador
             const int floatingNow = (!grounded && (pad.Buttons & PSP_CTRL_SQUARE) && en > 0.0f) ? 1 : 0;
+            {   // sombra de contacto sobre lo que haya debajo (si es vacio, no hay sombra)
+                const float gy = groundHeight(playerX, playerZ, playerY + 0.5f);
+                if (gy > -1000.0f) drawBlobShadow(playerX, gy, playerZ, playerY - gy);
+            }
             // hunterRig ajusta tambien pose.bobY/lean (aterrizaje), por eso va ANTES del cuerpo
             const HunterRig rig = hunterRig(pose, walkPhase, idleT, speed01, grounded, floatingNow,
                                             aiming, meleeFx > 0 ? meleeFx / 8.0f : 0.0f, landK);
