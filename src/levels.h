@@ -184,6 +184,7 @@ static void lvBossVoidBackdrop() {
                          case 6: bk_Backdrop(); break; default: bv_Backdrop(); break; }
 }
 static int g_rosaryHas = 0;   // (reservado)
+static int g_lvDashInv = 0;   // frames de DASH que le quedan al jugador (main): los orbes lo atraviesan
 static int g_timeCd = 0;      // espera del poder de detener el tiempo
 
 static void lvInit(uint32_t flags) {
@@ -368,8 +369,11 @@ static bool lvShotHit(float x, float y, float z) {
 static int g_orbCd = 0;   // pausa global entre disparos enemigos
 static void lvFireOrb(float x, float y, float z, float tx, float ty, float tz, float spd, unsigned int col) {
     int alive = 0; for (int k = 0; k < 16; ++k) if (g_orbs[k].life > 0) ++alive;
-    if (g_orbCd > 0 || alive >= 3) return;   // como mucho 3 en el aire y 0.75 s entre uno y otro
-    g_orbCd = 45;
+    // como mucho 3 en el aire y 0.75 s entre uno y otro; los ojos de los muros, 6 y 0.4 s
+    // (Benjamin: "tienen que disparar mas rapido"; para eso esta el dash)
+    const int maxAlive = (g_lvFloor == 1) ? 6 : 3;
+    if (g_orbCd > 0 || alive >= maxAlive) return;
+    g_orbCd = (g_lvFloor == 1) ? 24 : 45;
     for (int k = 0; k < 16; ++k) if (g_orbs[k].life <= 0) {
         float dx = tx - x, dy = ty - y, dz = tz - z, d = sqrtf(dx * dx + dy * dy + dz * dz); if (d < 0.01f) d = 0.01f;
         // vida: la de siempre, o lo justo para llegar (y pasar un poco) si viene de muy lejos
@@ -512,7 +516,7 @@ static void lvMenuDraw() {
         static const char *kKey[11] = { "STICK", "CRUCETA IZQ/DER", "CRUCETA ARR/ABA", "X", "L", "R", "CÍRCULO",
                                         "TRIÁNGULO", "CUADRADO", "START", "SELECT" };
         static const char *kAct[11] = { "Caminar", "Girar la cámara", "Mirar arriba/abajo", "Saltar / aceptar",
-                                        "Apuntar (autoapuntado)", "Disparar (con L)", "Golpe de sable",
+                                        "Apuntar (autoapuntado)", "Disparar (con L) / Dash (sin L)", "Golpe de sable",
                                         "Interactuar / rosario", "Detener el tiempo", "Pausa", "Rendimiento" };
         for (int k = 0; k < 11; ++k) {
             drawText(42, 132 + k * 10, 1.0f, gold, kKey[k]);
@@ -598,7 +602,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
         LvOrb &o = g_orbs[k]; if (o.life <= 0) continue;
         if (g_lvTimeStop > 0) continue;                        // congelados en el aire
         o.x += o.vx; o.y += o.vy; o.z += o.vz; --o.life;
-        if (lvDist2(o.x, o.y, o.z, px, py + 1.7f, pz) < 1.3f * 1.3f) { hp -= 5.0f; o.life = 0; g_lvFlash = 6; }
+        if (!g_lvDashInv && lvDist2(o.x, o.y, o.z, px, py + 1.7f, pz) < 1.3f * 1.3f) { hp -= 5.0f; o.life = 0; g_lvFlash = 6; }   // en dash: te atraviesa
     }
 
     // ---- piso 1: los ojos ----
@@ -624,11 +628,12 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
                 if (e.die > 0) { if (--e.die == 0) e.alive = 0; continue; }
                 lvEyePos(e, (float)g_lvT, e.x, e.y, e.z);
                 if (--e.cd <= 0) {
-                    e.cd = 240 + (int)(swRand(k, g_lvT, 5) * 300.0f);
-                    // desde el muro: la velocidad sale de la distancia para que tarde ~4 s en llegar,
-                    // venga del muro de al lado o del de enfrente (se esquiva caminando)
-                    float spd = sqrtf(lvDist2(e.x, e.y, e.z, px, py + 1.7f, pz)) / 240.0f;
-                    if (spd < 0.25f) spd = 0.25f; if (spd > 0.6f) spd = 0.6f;
+                    e.cd = 150 + (int)(swRand(k, g_lvT, 5) * 200.0f);   // cada 2.5..5.8 s (era 4..9)
+                    // desde el muro: la velocidad sale de la distancia para que tarde ~2 s en llegar
+                    // (era ~4), venga del muro de al lado o del de enfrente. Se esquiva con el DASH.
+                    // Tope 2.0 por frame: con radio de golpe 1.3 un orbe mas rapido podria saltarte.
+                    float spd = sqrtf(lvDist2(e.x, e.y, e.z, px, py + 1.7f, pz)) / 120.0f;
+                    if (spd < 0.35f) spd = 0.35f; if (spd > 2.0f) spd = 2.0f;
                     if (volleys++ < 1) lvFireOrb(e.x, e.y, e.z, px, py + 1.7f, pz, spd, RGBA(220, 40, 52, 255));
                 }
             }

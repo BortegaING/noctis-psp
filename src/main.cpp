@@ -1226,6 +1226,12 @@ int main(void) {
     for (int k = 0; k < kRangedCount && k < 16; ++k) ammoMag[k] = kRanged[k].magazine;
     int   prevDR = 0, prevDL = 0, prevDU = 0, prevDD = 0, prevCircle = 0;
     int   meleeCD = 0, meleeFx = 0;
+    // ---- DASH (R sin apuntar; con L, R dispara): rafaga corta en la direccion del nub ----
+    const float DASH_SPEED = 0.55f;                  // 5x el paso: ~8 unidades contando la salida
+    const int   DASH_FRAMES = 10, DASH_CD = 36;      // dura 1/6 s; se recarga en 0.6 s
+    int   dashT = 0, dashCD = 0, dashFx = 0, prevR = 0;
+    float dashX = 0.0f, dashZ = 0.0f;                // direccion del dash (unitaria, en XZ)
+    float dashSX = 0.0f, dashSY = 0.0f, dashSZ = 0.0f, dashEX = 0.0f, dashEY = 0.0f, dashEZ = 0.0f;   // estela
     for (int s = 0; s < 24; ++s) g_shots[s].life = 0;
     for (int s = 0; s < 12; ++s) g_sparks[s].life = 0;
     const int   SHOT_LIFE = 55;
@@ -1363,9 +1369,35 @@ int main(void) {
             velZ += (mvZ * FP_SPEED - velZ) * FP_ACCEL;
             if (mvLen < 0.001f && grounded) { velX -= velX * FP_STOP; velZ -= velZ * FP_STOP; }
             const float strafeIn = 0.0f;   // ya no hay strafe: el personaje encara lo que camina
+            // -- DASH: R sin L. Hacia donde apunta el nub, o al frente si esta suelto. Pisa la
+            // velocidad DASH_FRAMES frames y sale al paso (sin frenazo ni deslizamiento largo).
+            // Mientras dura, los orbes te atraviesan (levels.h, g_lvDashInv). Sirve en el aire.
+            const int dashing = (dashT > 0) ? 1 : 0;
+            {
+                const int rNow = (pad.Buttons & PSP_CTRL_RTRIGGER) ? 1 : 0;
+                if (rNow && !prevR && !(pad.Buttons & PSP_CTRL_LTRIGGER) && dashCD == 0 && dashT == 0) {
+                    float dx = mvX, dz = mvZ, l = mvLen;
+                    if (l < 0.2f) { dx = sinf(heroYaw); dz = -cosf(heroYaw); l = 1.0f; }
+                    dashX = dx / l; dashZ = dz / l; dashT = DASH_FRAMES; dashCD = DASH_CD; dashFx = 24;
+                    dashSX = dashEX = playerX; dashSY = dashEY = playerY; dashSZ = dashEZ = playerZ;
+                    heroYaw = atan2f(dashX, -dashZ);                    // encara el dash de golpe
+                    audioFootstep(1.0f);
+                }
+                prevR = rNow;
+                if (dashT > 0) {
+                    velX = dashX * DASH_SPEED; velZ = dashZ * DASH_SPEED;
+                    if (--dashT == 0) { velX = dashX * FP_SPEED; velZ = dashZ * FP_SPEED; }
+                }
+                if (dashCD > 0) --dashCD;
+                if (dashFx > 0) --dashFx;
+#if NOCTIS_SKYWORLD
+                g_lvDashInv = dashT;
+#endif
+            }
             // -- colision por ejes separados (desliza por muros) --
             float nx = playerX + velX; if (!blocked(nx, playerZ, playerY)) playerX = nx; else velX = 0.0f;
             float nz = playerZ + velZ; if (!blocked(playerX, nz, playerY)) playerZ = nz; else velZ = 0.0f;
+            if (dashing) { dashEX = playerX; dashEY = playerY; dashEZ = playerZ; }   // punta de la estela
             // RED DE SEGURIDAD, y ahora CUADRADA como la sala. Era circular (r=COURT) dentro
             // de un recinto CUADRADO de medio lado COURT: el circulo cortaba las cuatro
             // esquinas del pasillo perimetral con un muro invisible curvo, y al ser un
@@ -1931,6 +1963,33 @@ int main(void) {
 
             // hacia donde encara el heroe: lo usan el fogonazo del canon y el arco de melee
             const float fx = sinf(heroYaw), fz = -cosf(heroYaw);
+
+            // ---- estela del DASH: dos cintas de luz SUMADA del punto de partida a donde llego, que
+            // se apagan en 24 frames. La de pie se ve en los dash de lado; la del suelo en los de
+            // frente (con la camara detras, la de pie queda de canto y no se veria).
+            if (dashFx > 0) {
+                // degradados: transparente en la cola (punto de partida) y en los bordes, brillante en
+                // la punta y al centro. Asi se lee como un rastro de luz y no como un panel de vidrio.
+                const float a = dashFx / 24.0f;
+                const unsigned int c0 = RGBA(110, 160, 255, 0);                         // cola y bordes
+                const unsigned int cM = RGBA(185, 220, 255, (int)(170.0f * a));         // punta, al centro
+                const unsigned int cB = RGBA(150, 195, 255, (int)(90.0f * a));          // punta, a ras del suelo
+                const float wx = -dashZ * 0.6f, wz = dashX * 0.6f;     // medio ancho, perpendicular
+                const float yb = 0.08f, ym = 1.2f, yt = 2.6f;           // suelo / pecho / sobre la cabeza
+                LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 24); int vi = 0;
+                swQuadC(v, vi, dashSX, dashSY + yb, dashSZ, c0, dashEX, dashEY + yb, dashEZ, cB,
+                               dashEX, dashEY + ym, dashEZ, cM, dashSX, dashSY + ym, dashSZ, c0);   // de pie, mitad baja
+                swQuadC(v, vi, dashSX, dashSY + ym, dashSZ, c0, dashEX, dashEY + ym, dashEZ, cM,
+                               dashEX, dashEY + yt, dashEZ, c0, dashSX, dashSY + yt, dashSZ, c0);   // de pie, mitad alta
+                swQuadC(v, vi, dashSX, dashSY + yb, dashSZ, c0, dashEX, dashEY + yb, dashEZ, cB,
+                               dashEX - wx, dashEY + yb, dashEZ - wz, c0, dashSX - wx, dashSY + yb, dashSZ - wz, c0);   // suelo
+                swQuadC(v, vi, dashSX, dashSY + yb, dashSZ, c0, dashEX, dashEY + yb, dashEZ, cB,
+                               dashEX + wx, dashEY + yb, dashEZ + wz, c0, dashSX + wx, dashSY + yb, dashSZ + wz, c0);
+                sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xFFFFFFFF); sceGuDepthMask(GU_TRUE);
+                sceGumLoadIdentity();
+                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
+                sceGuDepthMask(GU_FALSE); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
+            }
 
             // ---- balas: TRAZADORA de energia (nucleo blanco alargado en la direccion del vuelo +
             //      halo del color del arma, luz SUMADA, sin escribir Z). Antes: un cubo de color ----
