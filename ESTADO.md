@@ -120,6 +120,16 @@ el **fill rate** mataba el FPS (llego a 1 FPS en la consola):
 `gothic_bldg.h`, `facade_tex.h`, `robots.h`, `village_props.h`, `atmosphere.h`, `spirescape.h`.
 No borrarlos: sirven de referencia.
 
+## DIRECCION NUEVA (2026-10-15, Benjamin) -- lo actual queda como avance
+Mundo MUY amplio tipo backrooms / megaestructura: PLATAFORMAS en el cielo con cosas colosales
+en el fondo. Referencia: TikTok de @sentientmass (video 7681839469317639445): figuras negras
+diminutas en losas planas al borde del vacio; al fondo anillos-engranaje gigantes, torres,
+tubos, vias elevadas; gris-azul monocromo con neblina. Benjamin va a mandar ademas una imagen.
+Restricciones: PSP con 64 MB (MEMSIZE 1 ya activo, 51 MB libres), FPS real = consola. Pedidos
+en cola: autoapuntado al apuntar con armas a distancia; personaje/mundo menos "cuadrado"
+(referencia de diseno: Nightmare Creatures, PS1: detalle pintado en textura, niebla que
+recorta la distancia); arreglar la camara (ver abajo).
+
 ## Pendiente, en orden
 1. **FPS real** en la PSP del ultimo build (solo lo mide Benjamin en la consola).
 2. ~~Cerrar el bucle autonomo de prueba~~ HECHO (2026-10-15): `tools/emu/psp_eye.py` manda
