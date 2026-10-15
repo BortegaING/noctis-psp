@@ -82,6 +82,13 @@ static float g_bsX = 0, g_bsY = 0, g_bsZ = 0;
 static int   g_bsCharge = 0, g_bsStun = 0, g_bsOrbs = 0, g_bsHurt = 0;
 static int   g_prison = 0; static float g_prX, g_prY, g_prZ, g_prAcc, g_prLX, g_prLY;
 static int   g_rosary = 0, g_rosaryCd = 0;
+// el serafin VUELA alrededor del descanso (orbita); ataques que piden SALTAR o moverse
+static float g_bsAng = 3.14159f, g_bsAngV = 0.006f;
+static const int BS_HP = 90;
+static int   g_waveT = 0, g_waveHit = 0; static float g_waveX = 0, g_waveZ = 0;       // 3 ondas por el piso
+static int   g_sweepT = 0, g_sweepCd = 0; static float g_sweepA = 0;                  // rayo que barre a ras
+static int   g_pillT = 0; static float g_pillX[6], g_pillZ[6];                        // columnas de luz
+static void lvAttacksReset() { g_waveT = g_sweepT = g_pillT = 0; g_bsCharge = 0; g_prison = 0; g_bsOrbs = 0; }
 // (UTF-8: drawText dibuja tildes, enie y signos de apertura)
 static const char *kBsLines[4] = {
     "Has subido muy alto, soñador.",
@@ -154,7 +161,7 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
         g_bsX = lx; g_bsY = ly + 11.0f; g_bsZ = lz - 6.0f;
         g_lvElevX = lx; g_lvElevY = ly; g_lvElevZ = lz - 8.0f;
         g_lvElevOn = (g_lvUnlocked >= 3); g_lvElevRise = g_lvElevOn ? 1.0f : 0.0f;
-        g_bs = (g_lvUnlocked >= 3) ? BS_DEAD : BS_IDLE; g_bsHp = 36; g_bsDeadT = 999; g_bsLine = 0;
+        g_bs = (g_lvUnlocked >= 3) ? BS_DEAD : BS_IDLE; g_bsHp = BS_HP; g_bsDeadT = 999; g_bsLine = 0; g_bsAng = 3.14159f; lvAttacksReset();
     }
     px = g_lvSpawnX; py = g_lvSpawnY + 0.2f; pz = g_lvSpawnZ;
     g_swSafeX = px; g_swSafeY = py; g_swSafeZ = pz;
@@ -217,7 +224,7 @@ static bool lvShotHit(float x, float y, float z) {
     }
     if (g_lvFloor == 2 && g_bs == BS_FIGHT && lvDist2(x, y, z, g_bsX, g_bsY, g_bsZ) < 5.0f * 5.0f) {
         g_bsHurt = 6;
-        if (--g_bsHp <= 0) { g_bs = BS_DEAD; g_bsDeadT = 0; g_bsCharge = 0; g_prison = 0; audioTrackStop(); audioMusic(1); }
+        if (--g_bsHp <= 0) { g_bs = BS_DEAD; g_bsDeadT = 0; lvAttacksReset(); audioTrackStop(); audioMusic(1); }
         return true;
     }
     return false;
@@ -336,7 +343,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
                     g_bs = BS_IDLE; g_lvFade = LV_FADE; g_lvFadeTo = 2; g_lvFadeWhite = 1;
                 } else {                                      // PENSAR EN DIOS
                     lvMessage("UNA LUZ CÁLIDA TE SOSTIENE. ROSARIO: TRIÁNGULO", 200);
-                    g_rosary = 1; g_bs = BS_FIGHT; g_bsT = 240; g_bsHp = 36;
+                    g_rosary = 1; g_bs = BS_FIGHT; g_bsT = 240; g_bsHp = BS_HP;
                     audioMusic(0);                            // la cancion de la pelea
                     audioTrackPlay(g_seraphAdp, (unsigned int)(g_seraphAdpEnd - g_seraphAdp), 32000);
                 }
@@ -362,13 +369,76 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
                 else if (--g_prison == 0) { hp -= 10.0f; lvMessage("LA GRAVEDAD TE SUELTA", 70); }
             }
             if (g_bsOrbs > 0 && g_lvT % 14 == 0) { --g_bsOrbs; lvFireOrb(g_bsX, g_bsY, g_bsZ, px, py + 1.7f, pz, 0.26f, RGBA(255, 226, 150, 255)); }
-            if (g_bsCharge == 0 && g_prison == 0 && g_bsStun == 0 && --g_bsT <= 0) {
+            // ---- con L la camara se FIJA en el (se mueve todo el rato); al cargar su luz se
+            //      suelta, para poder apartar la mirada ----
+            if ((btn & PSP_CTRL_LTRIGGER) && g_bsCharge == 0) {
+                float d = atan2f(g_bsX - px, -(g_bsZ - pz)) - camYaw;
+                while (d > 3.14159265f) d -= 6.28318531f;
+                while (d < -3.14159265f) d += 6.28318531f;
+                camYaw += d * 0.10f;
+            }
+            // ---- se MUEVE: orbita el descanso, sube y baja (quieto mientras carga luz o barre) ----
+            {
+                if (!(g_bsCharge > 0 || g_sweepT > 0)) g_bsAng += g_bsAngV;
+                const float t = g_lvT * 0.016f, R = 13.0f + 3.0f * sinf(t * 0.7f);
+                const float tx = lx + sinf(g_bsAng) * R, tz = lz + cosf(g_bsAng) * R, ty = ly + 11.0f + 2.5f * sinf(t * 1.1f);
+                g_bsX += (tx - g_bsX) * 0.05f; g_bsY += (ty - g_bsY) * 0.05f; g_bsZ += (tz - g_bsZ) * 0.05f;
+            }
+            // ---- ONDAS: 3 anillos de luz que corren por el piso desde debajo de el (saltalos) ----
+            if (g_waveT > 0) {
+                const int el = 200 - g_waveT;
+                const float d = sqrtf((px - g_waveX) * (px - g_waveX) + (pz - g_waveZ) * (pz - g_waveZ));
+                for (int w = 0; w < 3; ++w) {
+                    const int st = w * 55; if (el < st) continue;
+                    const float R = (el - st) * 0.32f; if (R > 26.0f) continue;
+                    if (!(g_waveHit & (1 << w)) && fabsf(d - R) < 0.9f && py < ly + 0.9f) {
+                        g_waveHit |= 1 << w; hp -= 15.0f; g_lvFlash = 10;
+                    }
+                }
+                --g_waveT;
+            }
+            // ---- RAYO que barre a ras del piso girando (saltalo cuando pasa) ----
+            if (g_sweepT > 0) {
+                if (280 - g_sweepT > 50) {                       // 50 frames de aviso: linea tenue
+                    g_sweepA += 0.032f;
+                    float da = atan2f(px - lx, pz - lz) - g_sweepA;
+                    while (da > 3.14159265f) da -= 6.28318531f;
+                    while (da < -3.14159265f) da += 6.28318531f;
+                    const float d = sqrtf((px - lx) * (px - lx) + (pz - lz) * (pz - lz));
+                    if (g_sweepCd > 0) --g_sweepCd;
+                    else if (fabsf(da) < 0.07f + 0.6f / (d + 1.0f) && d < 19.0f && py < ly + 1.1f) { hp -= 18.0f; g_lvFlash = 12; g_sweepCd = 40; }
+                }
+                --g_sweepT;
+            }
+            // ---- COLUMNAS de luz: marcas en el piso alrededor tuyo y caen al segundo (salite) ----
+            if (g_pillT > 0) {
+                if (110 - g_pillT == 70)
+                    for (int k = 0; k < 6; ++k)
+                        if ((px - g_pillX[k]) * (px - g_pillX[k]) + (pz - g_pillZ[k]) * (pz - g_pillZ[k]) < 2.4f * 2.4f && py < ly + 6.0f) {
+                            hp -= 22.0f; g_lvFlash = 18; break;
+                        }
+                --g_pillT;
+            }
+            if (g_bsCharge == 0 && g_prison == 0 && g_bsStun == 0 && g_waveT == 0 && g_sweepT == 0 && g_pillT == 0 && --g_bsT <= 0) {
                 const int r = (int)(swRand(g_lvT, 2, 9) * 100.0f);
-                if (r < 45)      { g_bsCharge = 150; lvMessage("¡NO LO MIRES!", 150); }
-                else if (r < 80) { g_prison = 240; g_prX = px; g_prY = py + 1.4f; g_prZ = pz; g_prAcc = 0.0f;
+                if (r < 18)      { g_bsCharge = 150; lvMessage("¡NO LO MIRES!", 150); }
+                else if (r < 32) { g_prison = 240; g_prX = px; g_prY = py + 1.4f; g_prZ = pz; g_prAcc = 0.0f;
                                    g_prLX = g_prLY = 0.0f; lvMessage("LA GRAVEDAD TE APRISIONA: MUEVE EL ANÁLOGO", 150); }
-                else             { g_bsOrbs = 6; }
-                g_bsT = 260 + (int)(swRand(g_lvT, 3, 9) * 140.0f);
+                else if (r < 46) { g_bsOrbs = 6; }
+                else if (r < 66) { g_waveT = 200; g_waveHit = 0; g_waveX = g_bsX; g_waveZ = g_bsZ; lvMessage("¡SALTA LAS ONDAS!", 120); }
+                else if (r < 84) { g_sweepT = 280; g_sweepCd = 0; g_sweepA = atan2f(px - lx, pz - lz) + 2.2f; lvMessage("¡SALTA EL RAYO!", 120); }
+                else {
+                    g_pillT = 110; lvMessage("¡MUÉVETE!", 100);
+                    for (int k = 0; k < 6; ++k) {
+                        float x = px, z = pz;
+                        if (k > 0) { x += (swRand(g_lvT, k, 21) - 0.5f) * 14.0f; z += (swRand(g_lvT, k, 22) - 0.5f) * 14.0f; }
+                        if (x < lx - 10.0f) x = lx - 10.0f; if (x > lx + 10.0f) x = lx + 10.0f;
+                        if (z < lz - 10.0f) z = lz - 10.0f; if (z > lz + 10.0f) z = lz + 10.0f;
+                        g_pillX[k] = x; g_pillZ[k] = z;
+                    }
+                }
+                if (swRand(g_lvT, 7, 9) < 0.5f) g_bsAngV = -g_bsAngV;   // cambia el sentido de su vuelta
+                g_bsT = 200 + (int)(swRand(g_lvT, 3, 9) * 120.0f);
             }
         } else if (g_bs == BS_DEAD && g_bsDeadT < 999) {
             if (++g_bsDeadT == 150) {
@@ -384,7 +454,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
     if (hp <= 0.0f || py < g_lvSpawnY - 60.0f) {
         if (g_lvFloor == 2 && g_bs == BS_FIGHT) { float lx, ly, lz; f2LandingTop(&lx, &ly, &lz); px = lx; py = ly + 0.2f; pz = lz + 8.0f; }
         else { px = g_lvSpawnX; py = g_lvSpawnY + 0.2f; pz = g_lvSpawnZ; }
-        vy = 0.0f; hp = hpMax; g_prison = 0; g_bsCharge = 0;
+        vy = 0.0f; hp = hpMax; lvAttacksReset();
         for (int k = 0; k < 16; ++k) g_orbs[k].life = 0;
         lvMessage("DESPIERTAS", 90);
     }
@@ -417,6 +487,28 @@ static void lvLookAngles(float x, float y, float z, float tx, float ty, float tz
 static void lvBox(float x, float y, float z, float w, float h, unsigned int col) {
     LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30); int i = 0;
     swBoxL(v, i, x, y, z, w, w, h, col);
+    sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, i, 0, v);
+}
+
+// anillo plano en el piso (ondas, marcas de las columnas)
+static void lvRing3D(float cx, float y, float cz, float R, float w, unsigned int col) {
+    const int N = 40;
+    LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 6 * N); int i = 0;
+    const float r0 = (R - w * 0.5f > 0.0f) ? R - w * 0.5f : 0.0f, r1 = R + w * 0.5f;
+    for (int s = 0; s < N; ++s) {
+        const float a0 = 6.2831853f * s / N, a1 = 6.2831853f * (s + 1) / N;
+        const float c0 = cosf(a0), s0 = sinf(a0), c1 = cosf(a1), s1 = sinf(a1);
+        swQuadC(v, i, cx + s0 * r0, y, cz + c0 * r0, col, cx + s0 * r1, y, cz + c0 * r1, col,
+                      cx + s1 * r1, y, cz + c1 * r1, col, cx + s1 * r0, y, cz + c1 * r0, col);
+    }
+    sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, i, 0, v);
+}
+// rayo horizontal desde (cx,cz) en angulo a (misma convencion que la orbita: x=sin, z=cos)
+static void lvBeam(float cx, float y, float cz, float a, float len, float h, unsigned int col) {
+    LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 12); int i = 0;
+    const float ex = cx + sinf(a) * len, ez = cz + cosf(a) * len, qx = cosf(a) * h * 0.5f, qz = -sinf(a) * h * 0.5f;
+    swQuadC(v, i, cx, y - h * 0.5f, cz, col, ex, y - h * 0.5f, ez, col, ex, y + h * 0.5f, ez, col, cx, y + h * 0.5f, cz, col);
+    swQuadC(v, i, cx - qx, y, cz - qz, col, ex - qx, y, ez - qz, col, ex + qx, y, ez + qz, col, cx + qx, y, cz + qz, col);
     sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, i, 0, v);
 }
 
@@ -487,6 +579,32 @@ static void lvDraw(float px, float py, float pz) {
             if (fade != 1.0f) { ScePspFVector3 s = { fade, fade, fade }; sceGumScale(&s); }
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_lvSerWingN, 0, g_lvSerWing);
         }
+    }
+    // ataques del serafin: ondas, rayo y columnas (luz SUMADA, sin escribir Z)
+    if (g_lvFloor == 2 && g_bs == BS_FIGHT && (g_waveT > 0 || g_sweepT > 0 || g_pillT > 0)) {
+        float lx, ly, lz; f2LandingTop(&lx, &ly, &lz);
+        sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDepthMask(GU_TRUE);   // dorado opaco: sobre el piso blanco la luz SUMADA no se ve
+        if (g_waveT > 0) {
+            const int el = 200 - g_waveT;
+            for (int w = 0; w < 3; ++w) {
+                const int st = w * 55; if (el < st) continue;
+                const float R = (el - st) * 0.32f; if (R > 26.0f) continue;
+                lvRing3D(g_waveX, ly + 0.08f, g_waveZ, R, 0.9f, RGBA(232, 140, 40, 230));
+                lvRing3D(g_waveX, ly + 0.10f, g_waveZ, R, 0.3f, RGBA(255, 226, 150, 255));
+            }
+        }
+        if (g_sweepT > 0) {
+            const int a = (280 - g_sweepT > 50) ? 240 : 60 + (g_lvT & 8) * 8;   // aviso tenue que parpadea
+            lvBeam(lx, ly + 0.9f, lz, g_sweepA, 19.0f, 0.7f, RGBA(236, 120, 36, a));
+        }
+        if (g_pillT > 0) {
+            const int el = 110 - g_pillT;
+            for (int k = 0; k < 6; ++k) {
+                if (el < 70) lvRing3D(g_pillX[k], ly + 0.06f, g_pillZ[k], 1.2f + 1.2f * el / 70.0f, 0.35f, RGBA(226, 104, 36, 210));
+                else if (el < 94) lvBox(g_pillX[k], ly, g_pillZ[k], 2.2f, 36.0f, RGBA(255, 206, 110, 220));
+            }
+        }
+        sceGuDepthMask(GU_FALSE); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
     }
     // orbes
     for (int k = 0; k < 16; ++k) if (g_orbs[k].life > 0) lvBox(g_orbs[k].x, g_orbs[k].y - 0.35f, g_orbs[k].z, 0.7f, 0.7f, g_orbs[k].col);
@@ -572,7 +690,7 @@ static void lvHud(int aiming, float hp, float hpMax) {
             lvFan2D(sx, sy, 70 + (int)(10.0f * p), RGBA(255, 255, 238, I * 3 / 4), RGBA(255, 250, 220, 0), 20);
             sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
         }
-        drawRect(0, 0, SCR_WIDTH, SCR_HEIGHT, RGBA(255, 246, 214, 34 + (int)(16.0f * p)));
+        drawRect(0, 0, SCR_WIDTH, SCR_HEIGHT, RGBA(255, 246, 214, 20 + (int)(10.0f * p)));
     }
     // marcador de autoapuntado
     float tp[3];

@@ -2017,7 +2017,7 @@ int main(void) {
             }
             st.objLabel = "OJOS "; st.matTaken = g_eyesKilled;
             st.matTotal = (g_lvFloor == 1 && g_eyesOn && g_lvUnlocked < 2) ? 30 : 0;
-            if (g_lvFloor == 2 && g_bs == BS_FIGHT) { st.objLabel = "LUZ "; st.matTaken = g_bsHp; st.matTotal = 36; }
+            if (g_lvFloor == 2 && g_bs == BS_FIGHT) { st.objLabel = "LUZ "; st.matTaken = g_bsHp; st.matTotal = BS_HP; }
 #endif
             st.pickTimer = pickTimer;
             st.pickName = (pickedType >= 0 && pickedType < kMaterialCount) ? kMaterials[pickedType].name : 0;
