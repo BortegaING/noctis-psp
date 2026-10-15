@@ -95,6 +95,11 @@ seguidas): se ve a 30 o 20 fps pero el juego va a la velocidad correcta, no en c
 Probado con `NOCTIS_SLOWSIM 25000` (frame alargado a proposito): 20 FPS, S40, y el hunter
 llega al MISMO punto en los mismos 3 s. `NOCTIS_SLOWSIM` va SIEMPRE en 0 al commitear.
 
+**PENDIENTE (2026-10-15): prueba en la PSP REAL.** Benjamin no tenia la consola a mano; se
+llevo `Desktop\NOCTIS_PSP.zip` (solo `PSP/GAME/NOCTIS/EBOOT.PBP`, commit e9b1cb4; la cancion
+va dentro del EBOOT). Pedido: pisos 5 y 7, mantener SELECT, anotar FPS y `C.. G.. S..`.
+G alto = quitar capas transparentes (nubes/brumas/velos); C alto = aliviar la CPU.
+
 ## Lo siguiente, ya diagnosticado y sin aplicar
 
 Por orden de ahorro segun la auditoria de rendimiento:
