@@ -124,9 +124,14 @@ No borrarlos: sirven de referencia.
 1. **FPS real** en la PSP del ultimo build (solo lo mide Benjamin en la consola).
 2. ~~Cerrar el bucle autonomo de prueba~~ HECHO (2026-10-15): `tools/emu/psp_eye.py` manda
    input y lee el frame real por el debugger (breakpoint en `sceDisplaySetFrameBuf` + VRAM;
-   `gpu.buffer.screenshot` no funciona en 1.20.4). Visto al probarlo, SIN confirmar: tras
-   caminar adelante ~1.5 s la camara queda mirando el piso con el hunter fuera de cuadro, y
-   aparecen dos barras horizontales a media pantalla (beige corta + clara larga).
+   `gpu.buffer.screenshot` no funciona en 1.20.4). Lanzar con `tools/emu/hidden.ps1` (oculto de
+   verdad; `shot.ps1` lo deja ~7 s en pantalla). Emulador SILENCIADO (volumenes del ini a 0).
+   - Barras a media pantalla = el DIALOGO de los robots dibujado sin textura de fuente. ARREGLADO.
+   - CAMARA, MEDIDO (SELECT muestra `CAM` = distancia real tras la colision): caminando del
+     spawn hacia el ANCIANO baja 9.0 -> 8.0 -> 5.0 -> 2.2 -> 0.0; en 0 el ojo queda sobre la
+     cabeza mirando el piso y el hunter sale de cuadro. Algo bloquea DETRAS del jugador a la
+     altura de la camara (4.5..7.5 con GRAV_BODY_H). Los robots no tienen caja; sospechoso:
+     cajas de arch_detail.h (gravBoxSpan). PENDIENTE hallar la caja y suavizar el fallback a 0.
 3. **El sable del hunter sigue siendo un bloque gris** (`src/cand/hunter.h`) — quejado varias veces.
 4. Fill rate: texturas 8888 -> 5650 (16 bits) y menos capas de pintado.
 

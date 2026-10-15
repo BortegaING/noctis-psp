@@ -8,6 +8,7 @@
 #include <pspctrl.h>
 #include <psppower.h>
 #include <string.h>
+#include <stdlib.h>
 #include <pspgu.h>
 #include <pspgum.h>
 #include <cmath>
@@ -19,6 +20,9 @@
 
 PSP_MODULE_INFO("NOCTIS", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
+// Heap = toda la memoria de usuario menos 1 MB (hilos, audio). Con MEMSIZE 1 (CMakeLists)
+// en una PSP-2000/3000 eso son ~50 MB en vez de los ~22 del modo de 32 MB.
+PSP_HEAP_THRESHOLD_SIZE_KB(1024);
 
 #define BUF_WIDTH  512
 #define SCR_WIDTH  480
@@ -1098,6 +1102,19 @@ int main(void) {
 
     // ---- armas (L apunta, R dispara; D-pad izq/der cambia arma; O melee) ----
     int   aiming = 0, fireCD = 0, reloadCD = 0, muzzle = 0;
+    float dbgCamBack = 9.0f;   // distancia real de la camara tras la colision (SELECT la muestra)
+    // RAM libre REAL al arrancar: el bloque mas grande que entrega malloc, en MB (SELECT la
+    // muestra). Es la prueba de que el modo 64 MB esta activo: ~50 con MEMSIZE 1, ~20 sin el.
+    float ramFreeMB = 0.0f;
+    {
+        int lo = 0, hi = 63;
+        while (lo < hi) {
+            const int mid = (lo + hi + 1) / 2;
+            void *p = malloc((size_t)mid << 20);
+            if (p) { free(p); lo = mid; } else hi = mid - 1;
+        }
+        ramFreeMB = (float)lo;
+    }
     unsigned int muzzleCol = RGBA(255, 235, 170, 255);
     int   curRanged = 0, curMelee = 0;
     int   ammoMag[16];
@@ -1586,6 +1603,7 @@ int main(void) {
                     camBack = gravBlocked(gravG, ox - fX * 2.2f, oy - fY * 2.2f, oz - fZ * 2.2f, CAM_R)
                             ? 0.0f : 2.2f;
             }
+            dbgCamBack = camBack;
             ScePspFVector3 eye = { playerX - fX * camBack + uX * CAM_UP, playerY - fY * camBack + uY * CAM_UP, playerZ - fZ * camBack + uZ * CAM_UP };
             // LA VISTA AHORA SIGUE AL CABECEO. Antes habia un (void)camPitch: la camara
             // tenia un angulo FIJO mientras el rayo de gravedad SI usaba camPitch, que el
@@ -1835,6 +1853,9 @@ int main(void) {
             hudDraw(st);
         }
         // ---- DIALOGO de los robots: nombre y linea, con desvanecido al final ----
+        // hudDraw() termina con GU_TEXTURE_2D apagada: sin fontTexOn() cada glifo sale como
+        // un rectangulo macizo, y el dialogo se veia como dos barras (beige + clara).
+        if ((dlgTimer > 0 && dlgLine) || (pad.Buttons & PSP_CTRL_SELECT)) fontTexOn();
         if (dlgTimer > 0 && dlgLine) {
             int a = 255;
             if (dlgTimer < 60) a = dlgTimer * 4;       // se apaga en el ultimo segundo
@@ -1856,7 +1877,7 @@ int main(void) {
                 hud[n++] = (char)('0' + t % 10);
                 hud[n++] = ' ';
             };
-            put("CPU ", msCpu); put("GE ", msGe); put("ESP ", msWait);
+            put("CPU ", msCpu); put("GE ", msGe); put("ESP ", msWait); put("CAM ", dbgCamBack); put("RAM ", ramFreeMB);
             hud[n] = 0;
             // Como leerlo: a 30 fps el presupuesto es 33.3 ms. Si manda ESP, sobra
             // tiempo. Si manda GE, el cuello es la GPU (relleno o vertices). Si manda

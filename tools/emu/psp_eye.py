@@ -3,6 +3,7 @@ Uso: python psp_eye.py [acciones...]
   boton:ms          -> presiona y suelta (cross circle square triangle up down left right start select l r)
   ax:X:ms / ay:Y:ms -> nub analogico (-1..1) mantenido ms
   wait:ms           -> espera sin tocar nada
+  hold:boton / free:boton -> mantiene / suelta un boton (ej. hold:l ... shot ... free:l)
   shot[:nombre]     -> guarda el frame REAL del juego en build/<nombre>.png (gpu.buffer.screenshot)
 Si no hay ningun shot, al final guarda build/eye.png.
 Ej: python psp_eye.py shot:antes "ay:-1.0:1500" shot:despues
@@ -117,6 +118,9 @@ def main():
             out.append(screenshot(s, parts[1] if len(parts) > 1 else "eye")); shots += 1
         elif k == "wait":
             time.sleep(int(parts[1]) / 1000.0)
+        elif k in ("hold", "free"):   # mantener/soltar un boton entre otras acciones (L apuntando, SELECT...)
+            ws_send(s, {"event": "input.buttons.send", "buttons": {parts[1].lower(): k == "hold"}})
+            time.sleep(0.05)
         elif k in ("ax", "ay"):
             v = float(parts[1]); ms = int(parts[2]) if len(parts) > 2 else 500
             ws_send(s, {"event": "input.analog.send", "stick": "left", "x": v if k == "ax" else 0.0, "y": v if k == "ay" else 0.0})

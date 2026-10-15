@@ -42,4 +42,5 @@ target_link_libraries(${PROJECT_NAME}
 create_pbp_file(
     TARGET ${PROJECT_NAME}
     TITLE  "PROJECT NOCTIS"
+    MEMSIZE 1   # 64 MB de la PSP-2000/3000 (~52 libres). El helper pone 2 (modo limitado) si se omite
 )
