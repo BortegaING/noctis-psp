@@ -32,7 +32,9 @@ $c = [IO.File]::ReadAllLines($ini)
 $c = $c -replace '^SoftwareRenderer = .*$', 'SoftwareRenderer = True' -replace '^InternalResolution = .*$', 'InternalResolution = 1' -replace '^GameVolume = .*$', 'GameVolume = 0'
 [IO.File]::WriteAllLines($ini, $c)
 $proc = Start-Process -FilePath "$repo\ppsspp\PPSSPPWindows64.exe" -ArgumentList "`"$repo\build\EBOOT.PBP`"" -WindowStyle Hidden -PassThru
-# vigia: 10 s ocultando cualquier ventana que PPSSPP muestre por su cuenta
+# vigia PERMANENTE (oculto) mientras viva este PPSSPP: si se muestra en cualquier momento, se oculta
+Start-Process powershell -WindowStyle Hidden -ArgumentList "-ExecutionPolicy", "Bypass", "-File", "`"$repo\tools\emu\hider.ps1`"", "-ProcId", $proc.Id | Out-Null
+# y los primeros 10 s tambien desde aca (arranque)
 $hid = 0; $t = [Diagnostics.Stopwatch]::StartNew()
 while ($t.ElapsedMilliseconds -lt 10000) { $hid += [WH]::HideAll([uint32]$proc.Id); Start-Sleep -Milliseconds 15 }
 $port = $null
