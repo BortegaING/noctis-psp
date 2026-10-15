@@ -28,7 +28,9 @@ static const int   SW_TV     = 900;      // vertices texturizados max por celda
 static const int   SW_LV     = 1100;     // vertices de color max por celda
 static const float SW_RISE   = 0.75f;    // alto de escalon (< 0.8, lo que blocked() deja subir)
 static const float SW_TREAD  = 1.1f;     // huella de escalon
-static const float SW_FOG_NEAR = 26.0f, SW_FOG_FAR = 100.0f;
+// La niebla termina ANTES de donde nacen las celdas nuevas (anillo 2: su contenido empieza a
+// ~72-80u): asi aparecen ya disueltas en la bruma, no de golpe.
+static const float SW_FOG_NEAR = 20.0f, SW_FOG_FAR = 86.0f;
 static const unsigned int SW_HAZE = RGBA(186, 192, 198, 255);
 
 // ---------------------------------------------------------------- hash / azar
@@ -71,20 +73,26 @@ struct SwOut {
     CityBldg *box; int bn, bmax;              // colision (null = no se pide)
 };
 
-// Caja con el TECHO en sentido invertido respecto de addSolidBoxT/addSolidBox: con cull ON
-// sus techos desaparecian vistos desde arriba (las losas quedaban sin piso). Visto en el
-// emulador: los costados salen bien, el techo no.
+// Caja con las 5 caras en sentido INVERTIDO respecto de addSolidBoxT/addSolidBox. Con
+// NOCTIS_FRONTFACE y cull ON, esas cajas se ven DESDE ADENTRO: la GE descarta las caras que
+// te miran y pinta el interior de las de atras. Primero se noto en los techos (losas sin
+// piso); despues Benjamin "veo dentro de las escaleras" = los costados, igual. Las cinco.
+template <typename V> static void swFlipQuads(V *buf, int t0, int quads) {
+    for (int q = 0; q < quads; ++q) {
+        V *f = buf + t0 + q * 6, tmp;
+        tmp = f[1]; f[1] = f[2]; f[2] = tmp;
+        tmp = f[4]; f[4] = f[5]; f[5] = tmp;
+    }
+}
 static void swBoxT(TexVertex *buf, int &i, float cx, float baseY, float cz, float w, float d, float h, unsigned int col) {
     const int t0 = i;
     addSolidBoxT(buf, i, cx, baseY, cz, w, d, h, col);
-    TexVertex tmp = buf[t0 + 1]; buf[t0 + 1] = buf[t0 + 2]; buf[t0 + 2] = tmp;   // tri 1 del techo
-    tmp = buf[t0 + 4]; buf[t0 + 4] = buf[t0 + 5]; buf[t0 + 5] = tmp;              // tri 2 del techo
+    swFlipQuads(buf, t0, 5);
 }
 static void swBoxL(LineVertex *buf, int &i, float cx, float baseY, float cz, float w, float d, float h, unsigned int col) {
     const int t0 = i;
     addSolidBox(buf, i, cx, baseY, cz, w, d, h, col);
-    LineVertex tmp = buf[t0 + 1]; buf[t0 + 1] = buf[t0 + 2]; buf[t0 + 2] = tmp;
-    tmp = buf[t0 + 4]; buf[t0 + 4] = buf[t0 + 5]; buf[t0 + 5] = tmp;
+    swFlipQuads(buf, t0, 5);
 }
 
 static void swSolidT(SwOut &o, float x, float base, float z, float w, float d, float h, unsigned int col, bool collide) {
@@ -138,23 +146,27 @@ static void swEmitBridge(int cx, int cz, int axis, SwOut &o) {
     const float W = 4.0f, TH = 1.6f;
     const int n = (int)ceilf((hi - lo) / SW_RISE - 0.01f);
     const bool upB = (b.top > a.top);                 // la losa alta es b (+eje)?
+    // Sin superficies COPLANARES (con z de 16 bits parpadeaban): el puente queda 0.04 bajo
+    // la losa donde se mete, y los escalones son 0.12 mas angostos que el puente.
+    const float BT = lo - 0.04f, SW = W - 0.12f;
+    const unsigned int cStep = brighten(SW_C_SLAB, 0.94f);       // un pelo mas oscuros: se leen los peldanos
     if (axis == 0) {
         const float x0 = a.x + a.w * 0.5f - 1.0f, x1 = b.x - b.w * 0.5f + 1.0f, zc = (a.z + b.z) * 0.5f;
-        swSolidT(o, (x0 + x1) * 0.5f, lo - TH, zc, x1 - x0, W, TH, SW_C_SLAB, true);
+        swSolidT(o, (x0 + x1) * 0.5f, BT - TH, zc, x1 - x0, W, TH, SW_C_SLAB, true);
         for (int k = 1; k <= n; ++k) {
             const float top = lo + (hi - lo) * k / n;
             const float sx = upB ? (b.x - b.w * 0.5f) - (n - k + 0.5f) * SW_TREAD
                                  : (a.x + a.w * 0.5f) + (n - k + 0.5f) * SW_TREAD;
-            swSolidT(o, sx, lo - TH, zc, SW_TREAD, W, top - (lo - TH), SW_C_SLAB, true);
+            swSolidT(o, sx, BT - TH, zc, SW_TREAD, SW, top - (BT - TH), (k & 1) ? cStep : SW_C_SLAB, true);
         }
     } else {
         const float z0 = a.z + a.d * 0.5f - 1.0f, z1 = b.z - b.d * 0.5f + 1.0f, xc = (a.x + b.x) * 0.5f;
-        swSolidT(o, xc, lo - TH, (z0 + z1) * 0.5f, W, z1 - z0, TH, SW_C_SLAB, true);
+        swSolidT(o, xc, BT - TH, (z0 + z1) * 0.5f, W, z1 - z0, TH, SW_C_SLAB, true);
         for (int k = 1; k <= n; ++k) {
             const float top = lo + (hi - lo) * k / n;
             const float sz = upB ? (b.z - b.d * 0.5f) - (n - k + 0.5f) * SW_TREAD
                                  : (a.z + a.d * 0.5f) + (n - k + 0.5f) * SW_TREAD;
-            swSolidT(o, xc, lo - TH, sz, W, SW_TREAD, top - (lo - TH), SW_C_SLAB, true);
+            swSolidT(o, xc, BT - TH, sz, SW, SW_TREAD, top - (BT - TH), (k & 1) ? cStep : SW_C_SLAB, true);
         }
     }
 }
@@ -314,11 +326,12 @@ static void swBoxGrad(LineVertex *b, int &i, float cx, float y0, float cz, float
     const unsigned int t = brighten(cTop, 1.15f);
     const unsigned int aT = brighten(cTop, 0.82f), aB = brighten(cBot, 0.82f);
     const unsigned int sT = brighten(cTop, 0.60f), sB = brighten(cBot, 0.60f);
-    swQuadC(b, i, x0, y1, z0, t, x0, y1, z1, t, x1, y1, z1, t, x1, y1, z0, t);              // techo (invertido)
-    swQuadC(b, i, x0, y0, z0, aB, x1, y0, z0, aB, x1, y1, z0, aT, x0, y1, z0, aT);          // frente
-    swQuadC(b, i, x1, y0, z1, aB, x0, y0, z1, aB, x0, y1, z1, aT, x1, y1, z1, aT);          // atras
-    swQuadC(b, i, x0, y0, z1, sB, x0, y0, z0, sB, x0, y1, z0, sT, x0, y1, z1, sT);          // izq
-    swQuadC(b, i, x1, y0, z0, sB, x1, y0, z1, sB, x1, y1, z1, sT, x1, y1, z0, sT);          // der
+    // mismo sentido que swBoxL: cada cara es la de addSolidBox recorrida al reves (a,d,c,b)
+    swQuadC(b, i, x0, y1, z0, t, x0, y1, z1, t, x1, y1, z1, t, x1, y1, z0, t);              // techo
+    swQuadC(b, i, x0, y0, z0, aB, x0, y1, z0, aT, x1, y1, z0, aT, x1, y0, z0, aB);          // frente
+    swQuadC(b, i, x1, y0, z1, aB, x1, y1, z1, aT, x0, y1, z1, aT, x0, y0, z1, aB);          // atras
+    swQuadC(b, i, x0, y0, z1, sB, x0, y1, z1, sT, x0, y1, z0, sT, x0, y0, z0, sB);          // izq
+    swQuadC(b, i, x1, y0, z0, sB, x1, y1, z0, sT, x1, y1, z1, sT, x1, y0, z1, sB);          // der
 }
 
 static void swBuildBackground() {
@@ -411,11 +424,16 @@ static void swInit(float *px, float *py, float *pz) {
     g_swSafeX = *px; g_swSafeY = *py; g_swSafeZ = *pz;
     swUpdate(*px, *pz, 99);                      // todo de una al arrancar
 }
-// Recuerda el ultimo punto pisado; si caes 45 por debajo, vuelves ahi.
+// Recuerda el ultimo punto pisado; si caes 45 por debajo, vuelves al CENTRO de la losa de
+// esa celda. Volver al punto exacto era volver al BORDE: con el stick adelante se caia otra
+// vez en bucle (visto en el emulador).
 static bool swFallRespawn(float &px, float &py, float &pz, int grounded) {
     if (grounded) { g_swSafeX = px; g_swSafeY = py; g_swSafeZ = pz; return false; }
     if (py > g_swSafeY - 45.0f) return false;
-    px = g_swSafeX; py = g_swSafeY; pz = g_swSafeZ;
+    const int cx = (int)floorf(g_swSafeX / SW_C + 0.5f), cz = (int)floorf(g_swSafeZ / SW_C + 0.5f);
+    SwLayout L; swLayout(cx, cz, L);
+    if (L.type == 1) { px = L.x; pz = L.z; py = L.top + 0.5f; }
+    else             { px = g_swSafeX; pz = g_swSafeZ; py = g_swSafeY + 0.5f; }   // (pisaba un puente)
     return true;
 }
 
@@ -459,18 +477,20 @@ static void swDraw(float px, float pz, float fwdX, float fwdZ) {
         const float wx = c.cx * SW_C - px, wz = c.cz * SW_C - pz;
         if (ring >= 1 && wx * fwdX + wz * fwdZ < -SW_C * 0.75f) continue;
         ringOf[s] = ring;
-        const int n = (ring >= SW_R) ? c.tCore : c.tn;
+        // SIN LOD: el anillo exterior se dibujaba solo con su nucleo y pretiles/monolitos
+        // "aparecian" al acercarse (se leia como el mundo a medio cargar). Ya cabe completo.
+        const int n = c.tn;
         if (n > 0) { sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, n, 0, g_swT[s]); g_swVtx += n; }
     }
     for (int s = 0; s < SW_POOL; ++s) {
         if (ringOf[s] < 0) continue;
         const SwCell &c = g_swCell[s];
-        const int n = (ringOf[s] >= SW_R) ? c.lCore : c.lBoxEnd;
+        const int n = c.lBoxEnd;
         if (n > 0) { sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, n, 0, g_swL[s]); g_swVtx += n; }
     }
     sceGuDisable(GU_CULL_FACE);
     for (int s = 0; s < SW_POOL; ++s) {
-        if (ringOf[s] < 0 || ringOf[s] >= SW_R) continue;
+        if (ringOf[s] < 0) continue;
         const SwCell &c = g_swCell[s];
         if (c.ln > c.lBoxEnd) { sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, c.ln - c.lBoxEnd, 0, g_swL[s] + c.lBoxEnd); g_swVtx += c.ln - c.lBoxEnd; }
     }

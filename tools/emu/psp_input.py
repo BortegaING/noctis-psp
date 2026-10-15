@@ -11,6 +11,8 @@ def find_port():
     if p: return int(p)
     out = subprocess.run(["netstat","-ano"], capture_output=True, text=True).stdout
     pid = subprocess.run(["powershell","-Command","(Get-Process PPSSPPWindows64).Id"], capture_output=True, text=True).stdout.strip()
+    # sin PPSSPP el pid queda vacio y endswith("") aceptaba CUALQUIER puerto (se conecto a un IIS)
+    if not pid: raise SystemExit("NO_PPSSPP (lanzalo con hidden.ps1)")
     for line in out.splitlines():
         if "LISTENING" in line and line.strip().endswith(pid):
             m = re.search(r":(\d+)\s", line)
