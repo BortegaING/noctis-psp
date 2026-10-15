@@ -209,6 +209,21 @@ izquierda (apunta con ese brazo); sol en el cielo; vineta suave.
   no dan FPS. El cuello es **fill rate** (pixeles pintados por frame).
 - El emulador **siempre marca 60 FPS**: no sirve para medir velocidad, solo para ver fallos visuales.
 - Cerrar PPSSPP antes de compilar (bloquea `build/EBOOT.PBP`).
+- **Hashes con `int` = comportamiento indefinido.** `f1Rnd` hacia `(unsigned)(a * 73856093)` con
+  `int`: desde a = 30 desborda, y con `-O2` el compilador asumio que nunca pasa y el bucle del suelo
+  de 35x35 corrio sin limite hasta llenar el buffer (piso 1 entero en blanco). Multiplicar SIEMPRE
+  como `(unsigned)a * 73856093u`. Se cazo armando el piso en el PC con g++ `-O2` (con `-O1` no fallaba).
+- **Tamano de buffer vs lo que se arma:** `f1BuildElevator` arma 558 vertices y su arreglo era de
+  480 (el chequeo decia "< 420"). Al cambiar un modelo, contar lo que de verdad genera.
+- Despues de armar geometria en RAM: `sceKernelDcacheWritebackAll()` (el GE lee RAM, no la cache).
+  `lvEnter` no lo hacia; en la PSP real lo ultimo escrito podia dibujarse viejo.
+
+**PISO 1 (2026-10-15, Benjamin: "el arbol y los ojos los siento muy cerca"; "los ojos no tienen
+que estar flotando, deben estar en las paredes"):** campo 280x280 (era 120), muros de 150, se
+llega a 100 del arbol (era 46), arbol 1.4x. Los 30 ojos estan INCRUSTADOS en los 4 muros (5x de
+tamano, fijos, siguen al jugador con la mirada; disparan con velocidad segun la distancia, ~4 s).
+A oscuras los muros quedan como un cielo muerto azul oscuro (antes negro total). Suelo = UNA tira
+de triangulos de 35x35 paneles de 8u (2.588 verts); paneles de 15u abrian un agujero bajo la camara.
 
 ## Como se trabaja
 - Compilar (**solo en el PC**, WSL): `bash tools/build.sh` dentro de

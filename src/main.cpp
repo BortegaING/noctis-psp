@@ -2157,7 +2157,7 @@ int main(void) {
                     hud[n++] = (char)('0' + t % 10);
                     hud[n++] = ' ';
                 };
-                put("CPU ", msCpu); put("GE ", msGe); put("ESP ", msWait); put("CAM ", dbgCamBack); put("RAM ", ramFreeMB); put("KV ", g_swVtx * 0.001f); put("Z-", -playerZ);
+                put("CPU ", msCpu); put("GE ", msGe); put("ESP ", msWait); put("GEO ", g_lvGeoN * 0.001f); put("CAM ", dbgCamBack); put("RAM ", ramFreeMB); put("KV ", g_swVtx * 0.001f); put("Z-", -playerZ);
                 hud[n] = 0;
                 // Como leerlo: a 30 fps el presupuesto es 33.3 ms. Si manda ESP, sobra
                 // tiempo. Si manda GE, el cuello es la GPU (relleno o vertices). Si manda

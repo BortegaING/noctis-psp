@@ -47,26 +47,27 @@ static int   g_lvNear = 0;                 // 0 nada, 1 guardado, 2 elevador
 static float g_lvEye[3], g_lvFwd[3], g_lvRight[3], g_lvUp[3];
 
 // ---------------------------------------------------------------- geometria
-static LineVertex __attribute__((aligned(16))) g_lvGeo[9000];
-static LineVertex __attribute__((aligned(16))) g_lvElevV[480];
+static LineVertex __attribute__((aligned(16))) g_lvGeo[12000];   // el piso 1 grande usa ~9.2k (+ suelo aparte); los jefes siguen pidiendo 9000
+static LineVertex __attribute__((aligned(16))) g_lvFloorV[2600];  // suelo del piso 1: una tira de triangulos
+static int g_lvFloorN = 0;
+static LineVertex __attribute__((aligned(16))) g_lvElevV[600];
 static LineVertex __attribute__((aligned(16))) g_lvEyeV[560];
+static LineVertex __attribute__((aligned(16))) g_lvEyeFarV[200];   // el mismo ojo, liviano, para lejos
 static LineVertex __attribute__((aligned(16))) g_lvSerBody[900];
 static LineVertex __attribute__((aligned(16))) g_lvSerWing[420];
 static LineVertex __attribute__((aligned(16))) g_lvSerRing[3][1000];
+static int g_lvEyeFarN = 0;
 static int g_lvGeoN = 0, g_lvElevN = 0, g_lvEyeN = 0, g_lvSerBodyN = 0, g_lvSerWingN = 0, g_lvSerRingN[3];
 
 // ---------------------------------------------------------------- ojos, orbes, jefe
 struct LvEye { float bx, by, bz, x, y, z, ph, a0, r0, w; int hp, alive, delay, die, cd; };
 
-// Los ojos ORBITAN en remolino alrededor del arbol (unos a un lado, otros al otro), entran y
-// salen y suben y bajan. La posicion es funcion del tiempo, asi el autoapuntado puede
-// calcular donde ESTARA el ojo cuando llegue la bala.
+// Los ojos estan INCRUSTADOS en los muros de cielo pintado (Benjamin, 2026-10-15: "no tienen
+// que estar flotando, deben estar en las paredes"): el decorado se apaga y el cielo mismo te
+// mira. No se mueven de su sitio; solo giran para seguirte. (La funcion queda con el tiempo
+// por el autoapuntado, que pregunta donde ESTARA el ojo cuando llegue la bala.)
 static void lvEyePos(const LvEye &e, float tf, float &x, float &y, float &z) {
-    const float t = tf * 0.016f;
-    const float ang = e.a0 + e.w * t;
-    const float r = e.r0 + sinf(t * 0.9f + e.ph) * 5.0f;
-    x = sinf(ang) * r; z = cosf(ang) * r;
-    y = e.by + sinf(t * 1.6f + e.ph) * 2.5f;
+    (void)tf; x = e.bx; y = e.by; z = e.bz;
 }
 static LvEye g_eyes[30];
 static int   g_eyesOn = 0, g_eyesKilled = 0;
@@ -186,8 +187,9 @@ static int g_rosaryHas = 0;   // (reservado)
 static int g_timeCd = 0;      // espera del poder de detener el tiempo
 
 static void lvInit(uint32_t flags) {
-    g_lvElevN = f1BuildElevator(g_lvElevV, 480);
+    g_lvElevN = f1BuildElevator(g_lvElevV, 600);
     g_lvEyeN = f1BuildEye(g_lvEyeV, 560);
+    g_lvEyeFarN = f1BuildEyeFar(g_lvEyeFarV, 200);
     g_lvSerBodyN = f2BuildSeraphBody(g_lvSerBody, 900);
     g_lvSerWingN = f2BuildSeraphWing(g_lvSerWing, 420);
     const float rr[3] = { 5.5f, 6.5f, 7.5f };
@@ -232,19 +234,26 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
         swUpdate(g_lvSpawnX, g_lvSpawnZ, 99);
     } else if (floor == 1) {
         int nb = 0;
-        g_lvGeoN = f1BuildWorld(g_lvGeo, 9000, g_city, &nb, 255);
-        g_city[nb++] = { 0.0f, 0.0f, 120.0f, 120.0f, 0.0f, 0 };   // el suelo (techo y=0)
+        g_lvGeoN = f1BuildWorld(g_lvGeo, 12000, g_city, &nb, 255);
+        g_lvFloorN = f1BuildFloor(g_lvFloorV, 2600);
+        g_city[nb++] = { 0.0f, 0.0f, 2.0f * F1_HALF, 2.0f * F1_HALF, 0.0f, 0 };   // el suelo (techo y=0)
         g_cityCount = nb;
-        g_lvSpawnX = 0.0f; g_lvSpawnY = 0.0f; g_lvSpawnZ = 46.0f;
-        g_lvSaveX = -9.0f; g_lvSaveY = 0.0f; g_lvSaveZ = 44.0f;
-        g_lvElevX = 13.0f; g_lvElevY = 0.0f; g_lvElevZ = 0.0f;
+        // se llega LEJOS del arbol (era 46): el arbol y los ojos se ven a distancia, como un paisaje
+        g_lvSpawnX = 0.0f; g_lvSpawnY = 0.0f; g_lvSpawnZ = 100.0f;
+        g_lvSaveX = -9.0f; g_lvSaveY = 0.0f; g_lvSaveZ = 98.0f;
+        g_lvElevX = 18.0f; g_lvElevY = 0.0f; g_lvElevZ = 0.0f;   // junto al arbol, fuera de sus raices (1.4x)
         g_lvElevOn = (g_lvUnlocked >= 2); g_lvElevRise = g_lvElevOn ? 1.0f : 0.0f;
         g_eyesOn = 0; g_eyesKilled = 0; g_f1Dark = 0.0f; g_f1DarkSaid = 0;
-        for (int k = 0; k < 30; ++k) {                        // reparto en espiral aurea sobre el campo
+        for (int k = 0; k < 30; ++k) {                        // 7-8 por muro, a distintas alturas
             LvEye &e = g_eyes[k];
-            const float a = k * 2.39996f, r = 14.0f + 34.0f * ((k * 7) % 30) / 29.0f;
-            e.bx = sinf(a) * r; e.bz = cosf(a) * r; e.by = 16.0f + (float)((k * 13) % 29);
-            e.a0 = a; e.r0 = r; e.w = (0.35f + 0.35f * ((k * 11) % 17) / 16.0f) * ((k & 1) ? 1.0f : -1.0f);   // rad/s
+            // muro k%4 (0=-Z 1=+Z 2=-X 3=+X), puesto j a lo largo, alturas 24..140 sin patron visible.
+            // Medio HUNDIDO en la pared: asoma una cupula (radio del ojo 1.8*F1_EYE_S = 9).
+            const int side = k & 3, j = k >> 2;
+            const float t = -112.0f + j * 32.0f + (f1Rnd(k, 71) - 0.5f) * 14.0f;
+            const float y = 24.0f + f1Rnd(k, 72) * 116.0f;
+            float x, yy, z; f1WallPt(side, t, y, 1.8f * F1_EYE_S * 0.45f, x, yy, z);
+            e.bx = x; e.by = yy; e.bz = z;
+            e.a0 = 0.0f; e.r0 = 0.0f; e.w = 0.0f;
             // los ojos se abren DESPUES de que el cielo termina de apagarse (~3 s), uno tras otro
             e.ph = k * 0.7f; e.hp = 4; e.alive = (g_lvUnlocked < 2); e.delay = 190 + k * 6; e.die = 0; e.cd = 180 + (k * 37) % 300;
         }
@@ -273,6 +282,9 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
         g_lvElevOn = (g_lvUnlocked >= 3); g_lvElevRise = g_lvElevOn ? 1.0f : 0.0f;
         g_bs = (g_lvUnlocked >= 3) ? BS_DEAD : BS_IDLE; g_bsHp = BS_HP; g_bsDeadT = 999; g_bsLine = 0; g_bsAng = 3.14159f; lvAttacksReset();
     }
+    // el GE lee la RAM, no la cache de la CPU: sin esto, lo ultimo que se escribio de la geometria
+    // del piso (hasta 16 KB) puede llegar viejo al dibujarse en la PSP real (el emulador no lo nota)
+    sceKernelDcacheWritebackAll();
     px = g_lvSpawnX; py = g_lvSpawnY + 0.2f; pz = g_lvSpawnZ;
     g_swSafeX = px; g_swSafeY = py; g_swSafeZ = pz;
     // CINEMATICA de presentacion del jefe (si todavia no lo venciste)
@@ -314,7 +326,7 @@ static int lvAimTarget(float out[3], float shotSpeed = 0.0f) {
     float best = 0.766f; int found = 0, eye = -1;
     auto consider = [&](float x, float y, float z, int k) {
         const float dx = x - g_lvEye[0], dy = y - g_lvEye[1], dz = z - g_lvEye[2];
-        const float d = sqrtf(dx * dx + dy * dy + dz * dz); if (d < 0.5f || d > 95.0f) return;
+        const float d = sqrtf(dx * dx + dy * dy + dz * dz); if (d < 0.5f || d > 300.0f) return;   // 300: hay ojos en el muro de enfrente
         const float c = (dx * g_lvFwd[0] + dy * g_lvFwd[1] + dz * g_lvFwd[2]) / d;
         if (c > best) { best = c; out[0] = x; out[1] = y; out[2] = z; found = 1; eye = k; }
     };
@@ -339,7 +351,7 @@ static bool lvShotHit(float x, float y, float z) {
         for (int k = 0; k < 30; ++k) {
             LvEye &e = g_eyes[k];
             if (!e.alive || e.delay > 0 || e.die) continue;
-            if (lvDist2(x, y, z, e.x, e.y, e.z) < 2.4f * 2.4f) {
+            if (lvDist2(x, y, z, e.x, e.y, e.z) < (2.4f * F1_EYE_S) * (2.4f * F1_EYE_S)) {   // el ojo es F1_EYE_S veces mas grande
                 e.hp -= LV_SHOT_DMG; if (e.hp <= 0) { e.die = 14; g_eyesKilled++; }
                 return true;
             }
@@ -360,7 +372,9 @@ static void lvFireOrb(float x, float y, float z, float tx, float ty, float tz, f
     g_orbCd = 45;
     for (int k = 0; k < 16; ++k) if (g_orbs[k].life <= 0) {
         float dx = tx - x, dy = ty - y, dz = tz - z, d = sqrtf(dx * dx + dy * dy + dz * dz); if (d < 0.01f) d = 0.01f;
-        g_orbs[k] = { x, y, z, dx / d * spd, dy / d * spd, dz / d * spd, 520, col };
+        // vida: la de siempre, o lo justo para llegar (y pasar un poco) si viene de muy lejos
+        int life = (int)(d / spd) + 120; if (life < 520) life = 520;
+        g_orbs[k] = { x, y, z, dx / d * spd, dy / d * spd, dz / d * spd, life, col };
         return;
     }
 }
@@ -372,10 +386,14 @@ static void lvFireOrb(float x, float y, float z, float tx, float ty, float tz, f
 static const int LV_CINE = 330;
 static float g_cineFx = 0, g_cineFy = 0, g_cineFz = 0, g_cineA0 = 0;
 static const char *g_cineTitle = 0, *g_cineSub = 0;
+static float g_cineRk = 1.0f;   // escala de la distancia de la camara (los ojos: el enjambre es grande)
+static float g_cineZm = 1.0f;   // cuanto se acerca (1 = de R a R/2)
+static float g_cineH0 = 0.0f;   // altura extra de la camara (negativa = desde abajo, mirando arriba)
 static void lvCineStart(float fx, float fy, float fz, float px, float pz, const char *title, const char *sub) {
     g_cine = LV_CINE; g_cineFx = fx; g_cineFy = fy; g_cineFz = fz;
     g_cineA0 = atan2f(px - fx, pz - fz);                     // arranca del lado del jugador
     g_cineTitle = title; g_cineSub = sub;
+    g_cineRk = 1.0f; g_cineZm = 1.0f; g_cineH0 = 0.0f;        // quien necesite otro encuadre lo pone despues
 }
 // main la llama antes de sceGumLookAt: si hay cinematica, reemplaza el ojo y el objetivo
 static float g_menuPx = 0, g_menuPy = 0, g_menuPz = 0;      // jugador (para la camara del lobby)
@@ -390,7 +408,7 @@ static int lvCineCam(ScePspFVector3 &eye, ScePspFVector3 &ctr) {
     if (g_cine <= 0) return 0;
     const float t = 1.0f - (float)g_cine / LV_CINE;          // 0 -> 1
     const float s = t * t * (3.0f - 2.0f * t);               // suave al empezar y al terminar
-    const float a = g_cineA0 + 1.3f * s, R = 36.0f - 18.0f * s, h = 12.0f - 7.0f * s;
+    const float a = g_cineA0 + 1.3f * s, R = (36.0f - 18.0f * s * g_cineZm) * g_cineRk, h = 12.0f - 7.0f * s + g_cineH0;
     eye.x = g_cineFx + sinf(a) * R; eye.y = g_cineFy + h; eye.z = g_cineFz + cosf(a) * R;
     ctr.x = g_cineFx; ctr.y = g_cineFy; ctr.z = g_cineFz;
     return 1;
@@ -585,7 +603,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
 
     // ---- piso 1: los ojos ----
     if (g_lvFloor == 1 && g_lvUnlocked < 2) {
-        if (!g_eyesOn && (g_lvT > 600 || px * px + pz * pz < 30.0f * 30.0f)) {
+        if (!g_eyesOn && (g_lvT > 600 || px * px + pz * pz < 40.0f * 40.0f)) {
             g_eyesOn = 1; lvMessage("EL CIELO SE APAGA", 150);
         }
         if (g_eyesOn && g_eyesKilled < 30) {          // el cielo se va a NEGRO en ~3 s
@@ -593,6 +611,9 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
             if (g_f1Dark >= 1.0f && !g_f1DarkSaid) {
                 g_f1DarkSaid = 1; lvMessage("Y SE LLENA DE OJOS", 150);
                 lvCineStart(0.0f, 30.0f, 0.0f, px, pz, "LOS OJOS", "EL CIELO TE MIRA");   // cinematica
+                // a ras del pasto (y ~8..15) entre 60 y 51 del arbol, mirando arriba hacia la copa:
+                // detras quedan los muros llenos de ojos, y la camara gira barriendolos
+                g_cineRk = 1.67f; g_cineZm = 0.3f; g_cineH0 = -34.0f;
             }
         }
         if (g_eyesOn && g_lvTimeStop == 0) {                  // tiempo detenido: los ojos se congelan
@@ -604,7 +625,11 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
                 lvEyePos(e, (float)g_lvT, e.x, e.y, e.z);
                 if (--e.cd <= 0) {
                     e.cd = 240 + (int)(swRand(k, g_lvT, 5) * 300.0f);
-                    if (volleys++ < 1) lvFireOrb(e.x, e.y, e.z, px, py + 1.7f, pz, 0.20f, RGBA(220, 40, 52, 255));   // se esquiva caminando
+                    // desde el muro: la velocidad sale de la distancia para que tarde ~4 s en llegar,
+                    // venga del muro de al lado o del de enfrente (se esquiva caminando)
+                    float spd = sqrtf(lvDist2(e.x, e.y, e.z, px, py + 1.7f, pz)) / 240.0f;
+                    if (spd < 0.25f) spd = 0.25f; if (spd > 0.6f) spd = 0.6f;
+                    if (volleys++ < 1) lvFireOrb(e.x, e.y, e.z, px, py + 1.7f, pz, spd, RGBA(220, 40, 52, 255));
                 }
             }
             if (g_eyesKilled >= 30 && g_lvUnlocked < 2) {
@@ -818,18 +843,23 @@ static void lvDraw(float px, float py, float pz) {
         // pintado se hunden en la oscuridad y solo queda el pasto y el arbol cerca
         const float k = (g_lvFloor == 1) ? g_f1Dark : 0.0f;
         // piso 2: neblina de LUZ (blanco calido) que se traga la escalera hacia lo lejos
-        sceGuFog(g_lvFloor == 1 ? 30.0f - 20.0f * k : 15.0f, g_lvFloor == 1 ? 170.0f - 110.0f * k : 170.0f,
+        // (piso 1 con el campo grande: la bruma empieza y termina mas lejos). A oscuras ya NO se traga
+        // los muros (antes 10..60 = negro total): los ojos estan EN las paredes y la pared se tiene
+        // que adivinar detras, como un cielo muerto; el muro de enfrente si se hunde casi del todo.
+        sceGuFog(g_lvFloor == 1 ? 50.0f - 40.0f * k : 15.0f, g_lvFloor == 1 ? 330.0f - 30.0f * k : 170.0f,
                  g_lvFloor == 1 ? lvMix(RGBA(196, 214, 232, 255), RGBA(0, 0, 0, 255), k) : RGBA(252, 246, 226, 255));
         if (lvBossFloor()) { float nf = 20.0f, ff = 150.0f; const unsigned int fc = LV_BOSS(Fog, &nf, &ff); sceGuFog(nf, ff, fc); }
         sceGuEnable(GU_FOG);
-        sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_lvGeoN, 0, g_lvGeo);
+        sceGumLoadIdentity();
+        if (g_lvFloor == 1) sceGumDrawArray(GU_TRIANGLE_STRIP, LINE_FLAGS, g_lvFloorN, 0, g_lvFloorV);   // suelo (tira)
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_lvGeoN, 0, g_lvGeo);
         sceGuDisable(GU_FOG);
         // VELO NEGRO sobre el escenario (pasto incluido) cuando el cielo se apaga. Va ANTES de
         // los ojos y del personaje: ellos quedan encendidos sobre la oscuridad. Sin tocar la Z.
         if (g_lvFloor == 1 && g_f1Dark > 0.0f) {
             sceGuDisable(GU_DEPTH_TEST); sceGuEnable(GU_BLEND);
             sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-            drawRect(0, 0, SCR_WIDTH, SCR_HEIGHT, RGBA(0, 0, 4, (int)(195.0f * g_f1Dark)));
+            drawRect(0, 0, SCR_WIDTH, SCR_HEIGHT, RGBA(0, 0, 6, (int)(172.0f * g_f1Dark)));   // 172 (era 195): se adivinan los muros
             sceGuDisable(GU_BLEND); sceGuEnable(GU_DEPTH_TEST);
         }
     }
@@ -846,8 +876,12 @@ static void lvDraw(float px, float py, float pz) {
         for (int k = 0; k < 30; ++k) {
             const LvEye &e = g_eyes[k]; if (!e.alive || e.delay > 0) continue;
             float yaw, pitch; lvLookAngles(e.x, e.y, e.z, px, py + 1.7f, pz, yaw, pitch);
-            const float s = e.die ? 1.0f + (14 - e.die) * 0.08f : 1.0f;
-            lvDrawAt(g_lvEyeV, g_lvEyeN, e.x, e.y, e.z, yaw, pitch, s, g_lvT * 0.06f * (k & 1 ? 1.0f : -1.0f) + e.ph);
+            const float s = F1_EYE_S * (e.die ? 1.0f + (14 - e.die) * 0.08f : 1.0f);
+            // LOD: a mas de 110 el ojo liviano (los parpados y venitas ya no se distinguen)
+            const int lejos = lvDist2(e.x, e.y, e.z, px, py, pz) > 110.0f * 110.0f;
+            // sin giro sobre su eje (antes rodaba al volar): solo un temblor leve, como un parpadeo
+            lvDrawAt(lejos ? g_lvEyeFarV : g_lvEyeV, lejos ? g_lvEyeFarN : g_lvEyeN, e.x, e.y, e.z, yaw, pitch, s,
+                     0.12f * sinf(g_lvT * 0.05f + e.ph));
         }
     }
     // serafin: el ojo mira al jugador, tres aros giran en ejes distintos, seis alas baten

@@ -15,7 +15,9 @@ def main():
     press("cross"); time.sleep(1.0)       # menu principal: JUGAR (partida nueva, desde el cielo)
     stick(0, 1); time.sleep(38.5); stick(0, 0); time.sleep(0.4)   # y+ = stick ARRIBA
     press("triangle"); time.sleep(0.4)
-    press("select")                       # atajo de pruebas: abre los pisos 1..7
+    # atajo de pruebas: abre los pisos 1..7. Al piso 1 NO: con los pisos abiertos el piso 1 cuenta
+    # como ganado y los ojos no aparecen (y el piso 1 ya esta abierto en una partida nueva)
+    if n > 1: press("select")
     for _ in range(n - 1): press("down")  # el menu arranca en el piso 1
     time.sleep(0.2); press("cross")
     time.sleep(5.2)
