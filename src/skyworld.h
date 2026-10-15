@@ -411,8 +411,10 @@ static void swBuildBackground() {
         const float ax = sinf(ang), az = -cosf(ang);
         const float R = 70.0f + 40.0f * swRand(k, 3, 87);
         const float cy = 40.0f + 60.0f * swRand(k, 3, 88), cx = ax * r, cz = az * r;
-        const unsigned int c = swFade(dark, 0.42f);
-        swRing(g_swBgRing, j, 6400, cx, cy, cz, ax, az, R, 7.0f, 6.0f, 28, 7.0f, c);
+        // aro grueso y REDONDO (44 tramos) con dientes mas grandes y espaciados: el aro fino de 28
+        // tramos con dientes chicos hacia escalera (pixelado) a 480x272; y algo mas hundido en la bruma
+        const unsigned int c = swFade(dark, 0.52f);
+        swRing(g_swBgRing, j, 6400, cx, cy, cz, ax, az, R, 9.5f, 7.0f, 44, 4.5f, c);
         // eje que atraviesa el anillo + cubo + 6 rayos: deja de ser una rosquilla plana
         addLimb(g_swBgRing, j, cx - ax * 18.0f, cy, cz - az * 18.0f, cx + ax * 18.0f, cy, cz + az * 18.0f,
                 R * 0.14f, R * 0.14f, 8, brighten(c, 0.8f), c);
@@ -420,7 +422,7 @@ static void swBuildBackground() {
         for (int s = 0; s < 6; ++s) {
             const float a = 6.2831853f * s / 6.0f + 0.3f * k, ca = cosf(a), sa = sinf(a);
             addLimb(g_swBgRing, j, cx, cy, cz, cx + ca * (R - 6.0f) * tX, cy + sa * (R - 6.0f), cz + ca * (R - 6.0f) * tZ,
-                    3.2f, 2.0f, 4, c, brighten(c, 1.15f));
+                    4.2f, 2.8f, 6, c, brighten(c, 1.15f));
         }
     }
     g_swBgBoxN = i; g_swBgRingN = j;

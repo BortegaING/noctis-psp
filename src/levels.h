@@ -382,8 +382,9 @@ static float g_menuPx = 0, g_menuPy = 0, g_menuPz = 0;      // jugador (para la 
 static int lvCineCam(ScePspFVector3 &eye, ScePspFVector3 &ctr) {
     if (g_menu) {   // LOBBY: la camara gira alrededor del hunter y lo deja a la DERECHA (el menu va a la izquierda)
         const float a = g_menuT * 0.0035f, ca = cosf(a), sa = sinf(a);
-        eye.x = g_menuPx + sa * 10.0f; eye.y = g_menuPy + 3.4f; eye.z = g_menuPz + ca * 10.0f;
-        ctr.x = g_menuPx - ca * 3.6f; ctr.y = g_menuPy + 2.2f; ctr.z = g_menuPz + sa * 3.6f;   // apunta a su izquierda
+        // baja un poco y MIRA HACIA ARRIBA: entra mas cielo (sol, colosos) detras del titulo
+        eye.x = g_menuPx + sa * 11.0f; eye.y = g_menuPy + 2.4f; eye.z = g_menuPz + ca * 11.0f;
+        ctr.x = g_menuPx - ca * 3.6f; ctr.y = g_menuPy + 5.6f; ctr.z = g_menuPz + sa * 3.6f;   // apunta a su izquierda
         return 1;
     }
     if (g_cine <= 0) return 0;
@@ -454,13 +455,12 @@ static void lvMenuDraw() {
     const unsigned int gold = RGBA(214, 186, 120, 255), dim = RGBA(150, 156, 170, 255), white = RGBA(240, 242, 248, 255);
     sceGuDisable(GU_DEPTH_TEST); sceGuDisable(GU_TEXTURE_2D);
     sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-    drawVignette();
-    gradQuadV(0, 270, RGBA(6, 8, 12, 225), RGBA(6, 8, 12, 0));      // panel lateral: legibilidad sobre el cielo
+    gradQuadV(0, 230, RGBA(6, 8, 12, 185), RGBA(6, 8, 12, 0));      // velo lateral suave: el cielo se sigue viendo
     drawRect(36, 93, 216, 1, RGBA(214, 186, 120, 200));              // filete dorado bajo el titulo
-    int y0 = 128;
+    int y0 = 124;
     if (g_menu == 1) {                                                // barra suave del seleccionado
-        drawRect(30, y0 + g_menuSel * 28 - 4, 230, 22, RGBA(214, 186, 120, 26 + (int)(24.0f * pulse)));
-        drawRect(30, y0 + g_menuSel * 28 - 4, 2, 22, gold);
+        drawRect(30, y0 + g_menuSel * 32 - 4, 230, 22, RGBA(214, 186, 120, 26 + (int)(24.0f * pulse)));
+        drawRect(30, y0 + g_menuSel * 32 - 4, 2, 22, gold);
     }
     fontTexOn();
     lvMenuSpaced(39, 51, 4.0f, RGBA(0, 0, 0, 170), "NOCTIS", 4);     // sombra
@@ -470,12 +470,12 @@ static void lvMenuDraw() {
         static const char *kMain[4] = { "JUGAR", "CARGAR PARTIDA", "OPCIONES", "CONTROLES" };
         for (int k = 0; k < 4; ++k) {
             const unsigned int c = (k == 1 && !g_svHas) ? RGBA(90, 94, 104, 255) : (k == g_menuSel ? gold : dim);
-            drawText(42, y0 + k * 28, 1.75f, c, kMain[k]);
+            drawText(42, y0 + k * 32, 1.75f, c, kMain[k]);
         }
         if (g_svHas) {                                                // de que piso es la partida guardada
             static const char *kFl[8] = { "EL CIELO", "PISO 1: EL CAMPO", "PISO 2: LA ESCALERA", "PISO 3: LA CUEVA",
                                           "PISO 4: JINETE BLANCO", "PISO 5: JINETE ROJO", "PISO 6: JINETE NEGRO", "PISO 7: JINETE PÁLIDO" };
-            drawText(44, y0 + 28 + 16, 1.0f, RGBA(150, 140, 110, 255), kFl[lvSavedFloor()]);
+            drawText(44, y0 + 32 + 17, 1.0f, RGBA(150, 140, 110, 255), kFl[lvSavedFloor()]);
         }
         drawText(36, 248, 1.0f, RGBA(120, 126, 140, 255), "X ACEPTAR");
         if (g_lvMsgT > 0 && g_lvMsg) drawText(36, 232, 1.0f, RGBA(230, 120, 110, 255), g_lvMsg);
@@ -833,8 +833,8 @@ static void lvDraw(float px, float py, float pz) {
             sceGuDisable(GU_BLEND); sceGuEnable(GU_DEPTH_TEST);
         }
     }
-    // punto de guardado: pilar oscuro con un cristal frio que gira y respira
-    {
+    // punto de guardado: pilar oscuro con un cristal frio que gira y respira (no en el lobby)
+    if (!g_menu) {
         const float b = 0.5f + 0.5f * sinf(g_lvT * 0.06f);
         lvBox(g_lvSaveX, g_lvSaveY, g_lvSaveZ, 1.2f, 2.6f, RGBA(52, 58, 70, 255));
         lvBox(g_lvSaveX, g_lvSaveY + 3.2f + 0.3f * b, g_lvSaveZ, 0.8f, 0.8f, RGBA(150 + (int)(80 * b), 230, 250, 255));
