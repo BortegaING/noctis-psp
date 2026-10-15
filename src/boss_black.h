@@ -458,7 +458,7 @@ static void bk_Update(BossIO &io) {
             for (int w = 0; w < bk_waveN; ++w) {
                 const int st = w * bk_waveSp; if (el < st) continue;
                 const float R = (el - st) * BK_WAVE_V; if (R > BK_WAVE_MAX) continue;
-                if (!(bk_waveHit & (1 << w)) && fabsf(d - R) < 1.2f && io.py < 0.9f) {
+                if (!g_lvDashInv && !(bk_waveHit & (1 << w)) && fabsf(d - R) < 1.2f && io.py < 0.9f) {   // dash: la atraviesas
                     bk_waveHit |= 1 << w; io.hp -= 12.0f; g_lvFlash = 10;
                 }
             }
@@ -471,7 +471,7 @@ static void bk_Update(BossIO &io) {
             --bk_orbs; bk_orbT = 48;
         }
         // atropello: si te quedas en su camino
-        if (bk_contactCd == 0 && bk_spd > 0.05f && io.py < 6.0f) {
+        if (!g_lvDashInv && bk_contactCd == 0 && bk_spd > 0.05f && io.py < 6.0f) {   // dash: pasas entre las patas
             const float dx = io.px - bk_bx, dz = io.pz - bk_bz, l2 = dx * dx + dz * dz;
             if (l2 < 3.5f * 3.5f) {
                 const float l = sqrtf(l2) + 0.001f;

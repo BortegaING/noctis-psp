@@ -227,8 +227,11 @@ de triangulos de 35x35 paneles de 8u (2.588 verts); paneles de 15u abrian un agu
 
 **DASH (2026-10-15, Benjamin: "el personaje debe poder hacer un dash"):** R SIN L (con L, R
 dispara). 10 frames a 0.55/frame en la direccion del nub (o al frente), recarga 0.6 s, sirve en el
-aire, estela de luz sumada. Mientras dura, los ORBES te atraviesan (`g_lvDashInv`); el dano de los
-jefes (cada modulo lo aplica a su manera) NO tiene invulnerabilidad todavia. Ojos del piso 1 mas
+aire, estela de luz sumada. Mientras dura (`g_lvDashInv`, contrato en boss_api.h) te atraviesan
+los golpes ESQUIVABLES de todos los pisos: orbes; serafin (ondas, rayo, columnas); Baphomet (ondas,
+sombras); Blanco (zonas, flechas); Rojo (embestida, ondas); Negro (ondas, atropello); Palido (moscas,
+guadana). El dano de MECANICA sigue: mirar la luz, prision, fogata, trampa mental, oracion fallada,
+confusion, grito, pulso de la balanza. Un jefe nuevo debe respetar `g_lvDashInv` igual. Ojos del piso 1 mas
 rapidos: orbes ~2 s de vuelo (velocidad = distancia/120, tope 2.0), cada ojo cada 2.5..5.8 s,
 hasta 6 orbes en el aire y 0.4 s entre uno y otro (los otros pisos siguen con 3 y 0.75 s).
 Quieto, te bajan de 100 a 60 en ~9 s: hay que moverse.

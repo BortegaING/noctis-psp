@@ -184,7 +184,6 @@ static void lvBossVoidBackdrop() {
                          case 6: bk_Backdrop(); break; default: bv_Backdrop(); break; }
 }
 static int g_rosaryHas = 0;   // (reservado)
-static int g_lvDashInv = 0;   // frames de DASH que le quedan al jugador (main): los orbes lo atraviesan
 static int g_timeCd = 0;      // espera del poder de detener el tiempo
 
 static void lvInit(uint32_t flags) {
@@ -709,7 +708,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
                 for (int w = 0; w < 3; ++w) {
                     const int st = w * 55; if (el < st) continue;
                     const float R = (el - st) * 0.32f; if (R > 26.0f) continue;
-                    if (!(g_waveHit & (1 << w)) && fabsf(d - R) < 0.9f && py < ly + 0.9f) {
+                    if (!g_lvDashInv && !(g_waveHit & (1 << w)) && fabsf(d - R) < 0.9f && py < ly + 0.9f) {   // en dash: la atraviesas
                         g_waveHit |= 1 << w; hp -= 15.0f; g_lvFlash = 10;
                     }
                 }
@@ -724,7 +723,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
                     while (da < -3.14159265f) da += 6.28318531f;
                     const float d = sqrtf((px - lx) * (px - lx) + (pz - lz) * (pz - lz));
                     if (g_sweepCd > 0) --g_sweepCd;
-                    else if (fabsf(da) < 0.07f + 0.6f / (d + 1.0f) && d < 19.0f && py < ly + 1.1f) { hp -= 18.0f; g_lvFlash = 12; g_sweepCd = 40; }
+                    else if (!g_lvDashInv && fabsf(da) < 0.07f + 0.6f / (d + 1.0f) && d < 19.0f && py < ly + 1.1f) { hp -= 18.0f; g_lvFlash = 12; g_sweepCd = 40; }
                 }
                 --g_sweepT;
             }
@@ -732,7 +731,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
             if (g_pillT > 0) {
                 if (110 - g_pillT == 70)
                     for (int k = 0; k < 6; ++k)
-                        if ((px - g_pillX[k]) * (px - g_pillX[k]) + (pz - g_pillZ[k]) * (pz - g_pillZ[k]) < 2.4f * 2.4f && py < ly + 6.0f) {
+                        if (!g_lvDashInv && (px - g_pillX[k]) * (px - g_pillX[k]) + (pz - g_pillZ[k]) * (pz - g_pillZ[k]) < 2.4f * 2.4f && py < ly + 6.0f) {
                             hp -= 22.0f; g_lvFlash = 18; break;
                         }
                 --g_pillT;

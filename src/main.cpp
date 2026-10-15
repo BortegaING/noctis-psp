@@ -1371,7 +1371,8 @@ int main(void) {
             const float strafeIn = 0.0f;   // ya no hay strafe: el personaje encara lo que camina
             // -- DASH: R sin L. Hacia donde apunta el nub, o al frente si esta suelto. Pisa la
             // velocidad DASH_FRAMES frames y sale al paso (sin frenazo ni deslizamiento largo).
-            // Mientras dura, los orbes te atraviesan (levels.h, g_lvDashInv). Sirve en el aire.
+            // Mientras dura, los golpes esquivables (orbes, ondas, embestidas, flechas, guadana...)
+            // te atraviesan: g_lvDashInv, contrato en boss_api.h. Sirve en el aire.
             const int dashing = (dashT > 0) ? 1 : 0;
             {
                 const int rNow = (pad.Buttons & PSP_CTRL_RTRIGGER) ? 1 : 0;

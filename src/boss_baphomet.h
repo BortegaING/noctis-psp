@@ -610,7 +610,7 @@ static void bpFightUpdate(BossIO &io) {
         const float d = sqrtf((io.px - g_bpWaveX) * (io.px - g_bpWaveX) + (io.pz - g_bpWaveZ) * (io.pz - g_bpWaveZ));
         for (int w = 0; w < g_bpWaveN; ++w) {
             const float R = bpWaveR(w);
-            if (R > 0.0f && !(g_bpWaveHit & (1 << w)) && fabsf(d - R) < 1.0f && io.py < 1.4f) { g_bpWaveHit |= 1 << w; io.hp -= 12.0f; g_lvFlash = 10; }
+            if (!g_lvDashInv && R > 0.0f && !(g_bpWaveHit & (1 << w)) && fabsf(d - R) < 1.0f && io.py < 1.4f) { g_bpWaveHit |= 1 << w; io.hp -= 12.0f; g_lvFlash = 10; }   // dash: la atraviesas
         }
         ++g_bpWaveT;
         if (g_bpWaveT > (g_bpWaveN - 1) * 42 + 76) g_bpWaveT = 0;
@@ -624,7 +624,7 @@ static void bpFightUpdate(BossIO &io) {
             const float sp = (g_bpHp < BP_HP / 2 ? 0.14f : 0.11f) + 0.01f * (i & 1);
             s.vx += (dx / l * sp - s.vx) * 0.05f; s.vz += (dz / l * sp - s.vz) * 0.05f;
             s.x += s.vx; s.z += s.vz;
-            if (l < 1.3f && io.py < 3.8f) { io.hp -= 9.0f; g_lvFlash = 8; s.life = 0; }
+            if (!g_lvDashInv && l < 1.3f && io.py < 3.8f) { io.hp -= 9.0f; g_lvFlash = 8; s.life = 0; }   // dash: la sombra te atraviesa
         }
     }
 }

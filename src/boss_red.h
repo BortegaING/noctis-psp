@@ -493,7 +493,8 @@ static void rj_ChargeHit(BossIO &io) {
     if (rj_hitDone) return;
     const float rx = io.px - rj_x, rz = io.pz - rj_z;
     const float along = rx * rj_dirX + rz * rj_dirZ, side = rx * rj_dirZ - rz * rj_dirX;
-    if (fabsf(side) < 2.8f && along > -5.5f && along < 6.5f && io.py < 4.0f) {   // saltando lo esquivas
+    // saltando lo esquivas; con el DASH lo atraviesas (y si el dash termina dentro, igual te pega)
+    if (!g_lvDashInv && fabsf(side) < 2.8f && along > -5.5f && along < 6.5f && io.py < 4.0f) {
         rj_hitDone = 1;
         io.hp -= 35.0f;
         io.vy = 6.0f;
@@ -546,7 +547,7 @@ static void br_Update(BossIO &io) {
         if (wv.r > 30.0f) { wv.on = 0; continue; }
         if (!wv.hit) {
             const float d = sqrtf((io.px - wv.x) * (io.px - wv.x) + (io.pz - wv.z) * (io.pz - wv.z));
-            if (fabsf(d - wv.r) < 1.3f && io.py < 1.0f) {      // saltando la onda no te toca
+            if (!g_lvDashInv && fabsf(d - wv.r) < 1.3f && io.py < 1.0f) {      // saltando (o en dash) la onda no te toca
                 wv.hit = 1; io.hp -= 12.0f; rj_tint = 14; rj_tintMax = 40; g_lvFlash = 5;
             }
         }

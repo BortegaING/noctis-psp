@@ -472,7 +472,7 @@ static void bwAttackStep(BossIO &io) {
             if (z.t == 78 && !z.hit) {
                 z.hit = 1;
                 const float dx = io.px - z.x, dz = io.pz - z.z;
-                if (dx * dx + dz * dz < BW_ZR * BW_ZR && io.py < 3.2f) { io.hp -= 14.0f; g_lvFlash = 8; }
+                if (!g_lvDashInv && dx * dx + dz * dz < BW_ZR * BW_ZR && io.py < 3.2f) { io.hp -= 14.0f; g_lvFlash = 8; }   // dash justo al caer: te salvas
             }
             if (z.t < 96) ++alive;
         }
@@ -611,7 +611,7 @@ static void bw_Update(BossIO &io) {
         if (a.life <= 0) continue;
         a.x += a.vx; a.y += a.vy; a.z += a.vz; --a.life;
         const float dx = a.x - io.px, dy = a.y - (io.py + 1.7f), dz = a.z - io.pz;
-        if (dx * dx + dy * dy + dz * dz < 1.6f * 1.6f) { io.hp -= 7.0f; g_lvFlash = 6; a.life = 0; continue; }
+        if (!g_lvDashInv && dx * dx + dy * dy + dz * dz < 1.6f * 1.6f) { io.hp -= 7.0f; g_lvFlash = 6; a.life = 0; continue; }   // dash: la flecha te atraviesa
         if (a.y < -0.2f && a.x * a.x + a.z * a.z < (BW_R + 1.0f) * (BW_R + 1.0f)) a.life = 0;   // se clava en el suelo
         else if (a.y < -40.0f) a.life = 0;
     }

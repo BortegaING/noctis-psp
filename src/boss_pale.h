@@ -490,7 +490,7 @@ static void bvUpdateFlies(BossIO &io) {
         if (F.y < 0.7f) { F.y = 0.7f; F.vy = fabsf(F.vy); } if (F.y > 16.0f) { F.y = 16.0f; F.vy = -fabsf(F.vy); }
         // contacto: pica y se aparta
         const float cx = F.x - tpx, cy = F.y - (io.py + 1.7f), cz = F.z - tpz;
-        if (cx * cx + cy * cy + cz * cz < 1.5f * 1.5f && bv_grace == 0 && bv_hitCd == 0) {
+        if (!g_lvDashInv && cx * cx + cy * cy + cz * cz < 1.5f * 1.5f && bv_grace == 0 && bv_hitCd == 0) {   // dash: la mosca no te alcanza
             bvHurtPlayer(io, 5.0f);
             F.vx = -F.vx * 0.6f; F.vy = 0.12f; F.vz = -F.vz * 0.6f; F.dash = 0; F.cd = 70;
             bvEmit(F.x, F.y, F.z, 0.5f, 0.1f, -0.003f, 18, RGBA(255, 90, 60, 255), 0.16f);
@@ -645,7 +645,7 @@ static void bv_Update(BossIO &io) {
         if (bv_swingT == 29 && !bv_swingHit) {
             bv_swingHit = 1; bv_shake = 0.25f;
             const float c = (pdx * fx + pdz * fz) / pd;
-            if (pd < 8.6f && c > 0.18f && io.py < 7.0f) {
+            if (!g_lvDashInv && pd < 8.6f && c > 0.18f && io.py < 7.0f) {   // dash en el tajo: la guadana corta el aire
                 bvHurtPlayer(io, io.hpMax * 0.35f > 30.0f ? io.hpMax * 0.35f : 30.0f);
                 for (int s = 0; s < 4; ++s) bvEmit(io.px, io.py + 1.7f, io.pz, 0.8f, 0.15f, -0.004f, 20, RGBA(230, 255, 190, 255), 0.2f);
             }

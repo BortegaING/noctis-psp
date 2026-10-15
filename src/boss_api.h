@@ -23,6 +23,9 @@
 //  - Todo se dibuja SIN cull. LINE_FLAGS + LineVertex {color,x,y,z}. Sin texturas.
 //  - Si g_lvTimeStop > 0 (poder de Baphomet) los enemigos y sus proyectiles NO se mueven.
 //  - Danio al jugador: io.hp -= n; (levels.h maneja la muerte y el respawn en el piso).
+//  - DASH: si g_lvDashInv > 0 el jugador esta en pleno dash. Los golpes que se ESQUIVAN
+//    (proyectiles, ondas, embestidas, zonas, contacto) no le hacen nada y el proyectil lo
+//    atraviesa. El danio de MECANICA (minijuegos, quemaduras, estados) si le llega.
 //  - Mensajes grandes: lvMessage(texto, frames). Destello blanco: g_lvFlash = frames.
 //  - Proyectil enemigo generico: lvFireOrb(x,y,z, tx,ty,tz, velocidad, color) (5 de danio,
 //    lo mueve/dibuja levels.h, ya respeta la parada del tiempo).
@@ -46,6 +49,7 @@ static int g_lvTimeStop = 0;         // frames de tiempo detenido (poder de Baph
 static int g_lvPowerTime = 0;        // 1 = el jugador tiene el poder de detener el tiempo
 static int g_lvGiveTimePower = 0;    // un modulo pone 1 para otorgarlo (levels.h lo guarda)
 static int g_lvNoHeal = 0;           // 1 = el rosario no cura en este piso (jinete palido)
+static int g_lvDashInv = 0;          // frames de DASH que le quedan al jugador (main lo pone)
 
 // ---------------------------------------------------------------- helpers de levels.h
 // (definidos mas abajo en levels.h; aqui solo declarados para que los modulos los usen)
