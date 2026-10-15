@@ -16,7 +16,10 @@
 static const float BV_PI    = 3.14159265f;
 static const int   BV_HPMAX = 120;
 static const int   BV_NFLY  = 7;
-static const float BV_ARENA = 20.5f;     // limite de la arena para el jefe y las moscas
+static const float BV_ARENA = 41.0f;     // limite de la arena para el jefe y las moscas (radio jugable ~42)
+static const float BV_WALL  = 46.0f;     // centro de los muros perimetrales
+static const int   BV_CW_T  = 130;       // aviso de la carga (frames)
+static const int   BV_CW_LOCK = 45;      // frames antes de salir en que se bloquea la direccion
 
 // paleta (RGBA empaquetado 0xAABBGGRR)
 static const unsigned int BV_FOG    = RGBA(88, 106, 66, 255);     // niebla gris-verdosa
@@ -34,11 +37,11 @@ static const unsigned int BV_STEEL  = RGBA(150, 170, 150, 255);
 enum { BV_INTRO, BV_STALK, BV_CWIND, BV_CRUN, BV_CREC, BV_SAPP, BV_SWING, BV_SUMMON, BV_DEAD };
 static int   bv_t = 0, bv_state = BV_INTRO, bv_st = 0, bv_hp = BV_HPMAX, bv_hurt = 0, bv_cd = 0;
 static int   bv_done = 0, bv_grace = 0, bv_hitCd = 0, bv_swingN = 0, bv_swingT = 0, bv_swingHit = 0, bv_horde = 0;
-static float bv_x = 0.0f, bv_z = -13.0f, bv_yaw = 3.14159265f, bv_spd = 0.0f, bv_gp = 0.0f, bv_orb = 0.0f, bv_orbDir = 1.0f;
+static float bv_x = 0.0f, bv_z = -26.0f, bv_yaw = 3.14159265f, bv_spd = 0.0f, bv_gp = 0.0f, bv_orb = 0.0f, bv_orbDir = 1.0f;
 static float bv_dx = 0.0f, bv_dz = 1.0f;                 // direccion bloqueada de la carga
 static float bv_pitch = 0.0f, bv_pitchT = 0.0f, bv_arm = 0.15f, bv_armT = 0.15f, bv_armK = 0.2f, bv_roll = 0.0f, bv_rollT = 0.0f;
 static float bv_shake = 0.0f, bv_dis = 0.0f;             // temblor; disolucion 0..1 (muerte)
-static float bv_hx = 0.0f, bv_hy = 3.0f, bv_hz = -8.0f, bv_hYaw = 0.0f, bv_hFlare = 0.0f;
+static float bv_hx = 0.0f, bv_hy = 3.0f, bv_hz = -30.0f, bv_hYaw = 0.0f, bv_hFlare = 0.0f;
 static int   bv_hOrbCd = 240, bv_blockMsg = 0;
 static float bv_lpx = 0.0f, bv_lpz = 0.0f; static int bv_lpOk = 0;   // ultima posicion del jugador (detecta respawn)
 
@@ -296,87 +299,87 @@ static void bvDisc(float cx, float cz, float r, float y, unsigned int cIn, unsig
         bvgB[bvgN++] = { cOut, cx + sinf(a1) * r, y, cz + cosf(a1) * r };
     }
 }
-static const float kBvFire[6][2] = { { -16.0f, -13.0f }, { 16.0f, -13.0f }, { -19.0f, 6.0f }, { 19.0f, 6.0f }, { -20.0f, 18.0f }, { 20.0f, 18.0f } };
+static const float kBvFire[6][2] = { { -32.0f, -26.0f }, { 32.0f, -26.0f }, { -38.0f, 12.0f }, { 38.0f, 12.0f }, { -40.0f, 36.0f }, { 40.0f, 36.0f } };
 
 static void bvBuildArena() {
-    // suelo visual enorme (se funde con la niebla) + colision de la arena
+    // suelo visual enorme (se funde con la niebla) + colision de la arena (radio jugable ~42)
     if (bvgN + 6 <= bvgCap)
-        swQuadC(bvgB, bvgN, -170.0f, -0.06f, -170.0f, RGBA(44, 46, 36, 255), -170.0f, -0.06f, 170.0f, RGBA(44, 46, 36, 255),
-                170.0f, -0.06f, 170.0f, RGBA(44, 46, 36, 255), 170.0f, -0.06f, -170.0f, RGBA(44, 46, 36, 255));
-    if (*bvbN < bvbCap) { bvbB[*bvbN].x = 0.0f; bvbB[*bvbN].z = 0.0f; bvbB[*bvbN].w = 64.0f; bvbB[*bvbN].d = 64.0f; bvbB[*bvbN].h = 0.0f; bvbB[*bvbN].color = RGBA(60, 60, 50, 255); ++(*bvbN); }
-    // losas agrietadas del patio (4x4, con juntas)
+        swQuadC(bvgB, bvgN, -400.0f, -0.06f, -400.0f, RGBA(44, 46, 36, 255), -400.0f, -0.06f, 400.0f, RGBA(44, 46, 36, 255),
+                400.0f, -0.06f, 400.0f, RGBA(44, 46, 36, 255), 400.0f, -0.06f, -400.0f, RGBA(44, 46, 36, 255));
+    if (*bvbN < bvbCap) { bvbB[*bvbN].x = 0.0f; bvbB[*bvbN].z = 0.0f; bvbB[*bvbN].w = 104.0f; bvbB[*bvbN].d = 104.0f; bvbB[*bvbN].h = 0.0f; bvbB[*bvbN].color = RGBA(60, 60, 50, 255); ++(*bvbN); }
+    // losas agrietadas del patio (4x4 de 21u, con juntas)
     for (int a = 0; a < 4; ++a) for (int c = 0; c < 4; ++c) {
-        const float x = -15.75f + a * 10.5f, z = -15.75f + c * 10.5f, v = bvR(a * 4 + c, 5);
+        const float x = -31.5f + a * 21.0f, z = -31.5f + c * 21.0f, v = bvR(a * 4 + c, 5);
         const unsigned int col = RGBA(74 + (int)(26 * v), 74 + (int)(24 * v), 62 + (int)(18 * v), 255);
-        bvBox(x, -0.7f, z, 10.5f, 10.5f, 0.7f, col, 0);
+        bvBox(x, -0.7f, z, 21.0f, 21.0f, 0.7f, col, 0);
     }
     if (bvgN + 36 <= bvgCap) {                                                     // juntas oscuras entre las losas
         const unsigned int cj = RGBA(18, 18, 16, 255);
         for (int q = -1; q <= 1; ++q) {
-            const float u = q * 10.5f;
-            swQuadC(bvgB, bvgN, -21.0f, 0.10f, u - 0.18f, cj, -21.0f, 0.10f, u + 0.18f, cj, 21.0f, 0.10f, u + 0.18f, cj, 21.0f, 0.10f, u - 0.18f, cj);
-            swQuadC(bvgB, bvgN, u - 0.18f, 0.10f, -21.0f, cj, u + 0.18f, 0.10f, -21.0f, cj, u + 0.18f, 0.10f, 21.0f, cj, u - 0.18f, 0.10f, 21.0f, cj);
+            const float u = q * 21.0f;
+            swQuadC(bvgB, bvgN, -42.0f, 0.10f, u - 0.3f, cj, -42.0f, 0.10f, u + 0.3f, cj, 42.0f, 0.10f, u + 0.3f, cj, 42.0f, 0.10f, u - 0.3f, cj);
+            swQuadC(bvgB, bvgN, u - 0.3f, 0.10f, -42.0f, cj, u + 0.3f, 0.10f, -42.0f, cj, u + 0.3f, 0.10f, 42.0f, cj, u - 0.3f, 0.10f, 42.0f, cj);
         }
     }
     // manchas de quemadura y charcos radioactivos
-    for (int k = 0; k < 7; ++k) bvDisc(-17.0f + bvR(k, 11) * 34.0f, -17.0f + bvR(k, 12) * 30.0f, 2.5f + bvR(k, 13) * 3.5f, 0.14f, RGBA(16, 16, 14, 255), RGBA(40, 40, 34, 255), 9);
+    for (int k = 0; k < 7; ++k) bvDisc(-34.0f + bvR(k, 11) * 68.0f, -34.0f + bvR(k, 12) * 60.0f, 5.0f + bvR(k, 13) * 7.0f, 0.14f, RGBA(16, 16, 14, 255), RGBA(40, 40, 34, 255), 9);
     for (int k = 0; k < 5; ++k) {
-        const float x = -16.0f + bvR(k, 21) * 32.0f, z = -18.0f + bvR(k, 22) * 22.0f;
-        bvDisc(x, z, 1.6f + bvR(k, 23) * 1.8f, 0.18f, RGBA(176, 255, 80, 255), RGBA(40, 120, 30, 255), 9);
+        const float x = -32.0f + bvR(k, 21) * 64.0f, z = -36.0f + bvR(k, 22) * 44.0f;
+        bvDisc(x, z, 3.2f + bvR(k, 23) * 3.6f, 0.18f, RGBA(176, 255, 80, 255), RGBA(40, 120, 30, 255), 9);
     }
-    // muro perimetral en ruinas (alto >= 10.5: no se salta) con coronas rotas
+    // muro perimetral en ruinas (alto >= 13: no se salta) con coronas rotas; cara interior a +-44.5
     for (int side = 0; side < 4; ++side) {
         for (int k = 0; k < 6; ++k) {
-            const float t = -20.0f + k * 8.0f, h = 10.5f + bvR(side * 6 + k, 31) * 5.5f, v = bvR(side * 6 + k, 32);
+            const float t = -40.0f + k * 16.0f, h = 13.0f + bvR(side * 6 + k, 31) * 8.0f, v = bvR(side * 6 + k, 32);
             const unsigned int col = RGBA(52 + (int)(18 * v), 52 + (int)(16 * v), 46 + (int)(12 * v), 255);
             float x, z, w, d;
-            if (side < 2) { x = t; z = side == 0 ? -24.5f : 24.5f; w = 8.0f; d = 3.0f; }
-            else          { x = side == 2 ? -24.5f : 24.5f; z = t; w = 3.0f; d = 8.0f; }
+            if (side < 2) { x = t; z = side == 0 ? -BV_WALL : BV_WALL; w = 16.0f; d = 3.0f; }
+            else          { x = side == 2 ? -BV_WALL : BV_WALL; z = t; w = 3.0f; d = 16.0f; }
             bvBox(x, 0.0f, z, w, d, h, col, 1);
-            const float ox = (side < 2) ? (bvR(side * 6 + k, 33) - 0.5f) * 3.0f : 0.0f, oz = (side < 2) ? 0.0f : (bvR(side * 6 + k, 33) - 0.5f) * 3.0f;
-            bvBox(x + ox, h, z + oz, w * 0.55f, d * 0.8f, 1.5f + bvR(side * 6 + k, 34) * 3.5f, brighten(col, 0.85f), 0);
+            const float ox = (side < 2) ? (bvR(side * 6 + k, 33) - 0.5f) * 6.0f : 0.0f, oz = (side < 2) ? 0.0f : (bvR(side * 6 + k, 33) - 0.5f) * 6.0f;
+            bvBox(x + ox, h, z + oz, w * 0.55f, d * 0.8f, 2.0f + bvR(side * 6 + k, 34) * 5.0f, brighten(col, 0.85f), 0);
         }
     }
     for (int cx = -1; cx <= 1; cx += 2) for (int cz = -1; cz <= 1; cz += 2) {     // torres de las esquinas
-        bvBox(cx * 24.5f, 0.0f, cz * 24.5f, 4.4f, 4.4f, 19.0f, RGBA(46, 46, 40, 255), 1);
-        bvBox(cx * 24.5f, 19.0f, cz * 24.5f, 3.0f, 3.0f, 3.5f, RGBA(40, 42, 36, 255), 0);
+        bvBox(cx * BV_WALL, 0.0f, cz * BV_WALL, 7.0f, 7.0f, 28.0f, RGBA(46, 46, 40, 255), 1);
+        bvBox(cx * BV_WALL, 28.0f, cz * BV_WALL, 4.6f, 4.6f, 5.0f, RGBA(40, 42, 36, 255), 0);
     }
-    // columnas rotas (techo 4.6..6.0: se puede subir de un salto) y dos columnas caidas
-    static const float kCol[6][2] = { { -11.0f, -6.0f }, { 11.0f, -6.0f }, { -14.0f, 4.0f }, { 14.0f, 4.0f }, { -6.0f, -16.0f }, { 6.0f, -16.0f } };
-    for (int k = 0; k < 6; ++k) {
+    // columnas rotas (techo 4.6..6.0: se puede subir de un salto) y columnas caidas (saltables)
+    static const float kCol[8][2] = { { -22.0f, -12.0f }, { 22.0f, -12.0f }, { -28.0f, 8.0f }, { 28.0f, 8.0f },
+                                      { -12.0f, -32.0f }, { 12.0f, -32.0f }, { -14.0f, 20.0f }, { 14.0f, 20.0f } };
+    for (int k = 0; k < 8; ++k) {
         const float h = 4.6f + bvR(k, 41) * 1.4f;
-        bvBox(kCol[k][0], 0.0f, kCol[k][1], 3.4f, 3.4f, 1.0f, RGBA(88, 86, 74, 255), 1);
-        bvBox(kCol[k][0], 1.0f, kCol[k][1], 2.2f, 2.2f, h - 1.0f, RGBA(104, 102, 88, 255), 1);
-        bvBox(kCol[k][0] + 0.5f, h, kCol[k][1] - 0.3f, 1.3f, 1.1f, 1.0f, RGBA(96, 94, 80, 255), 0);
+        bvBox(kCol[k][0], 0.0f, kCol[k][1], 5.0f, 5.0f, 1.0f, RGBA(88, 86, 74, 255), 1);
+        bvBox(kCol[k][0], 1.0f, kCol[k][1], 3.3f, 3.3f, h - 1.0f, RGBA(104, 102, 88, 255), 1);
+        bvBox(kCol[k][0] + 0.8f, h, kCol[k][1] - 0.4f, 1.9f, 1.6f, 1.4f, RGBA(96, 94, 80, 255), 0);
     }
-    bvBox(-7.0f, 0.0f, 9.0f, 8.0f, 2.2f, 1.8f, RGBA(100, 98, 84, 255), 1);
-    bvBox(8.0f, 0.0f, -2.0f, 7.0f, 2.2f, 1.8f, RGBA(100, 98, 84, 255), 1);
+    bvBox(-15.0f, 0.0f, -2.0f, 14.0f, 3.2f, 2.4f, RGBA(100, 98, 84, 255), 1);
+    bvBox(16.0f, 0.0f, -20.0f, 12.0f, 3.2f, 2.4f, RGBA(100, 98, 84, 255), 1);
+    bvBox(-6.0f, 0.0f, 14.0f, 12.0f, 3.2f, 2.4f, RGBA(100, 98, 84, 255), 1);
     // escombros sueltos (sin colision), barriles radioactivos junto a los fuegos
     for (int k = 0; k < 28; ++k) {
-        const float x = -20.0f + bvR(k, 51) * 40.0f, z = -20.0f + bvR(k, 52) * 40.0f;
-        if (z > 9.0f && x > -9.0f && x < 9.0f) continue;                           // la entrada queda libre
-        const float s = 0.5f + bvR(k, 53) * 1.1f, v = bvR(k, 54);
+        const float x = -42.0f + bvR(k, 51) * 84.0f, z = -42.0f + bvR(k, 52) * 84.0f;
+        if (z > 24.0f && x > -12.0f && x < 12.0f) continue;                        // la entrada queda libre
+        const float s = 0.9f + bvR(k, 53) * 1.8f, v = bvR(k, 54);
         bvBox(x, 0.0f, z, s * 1.6f, s * 1.2f, s * 0.55f, RGBA(66 + (int)(30 * v), 64 + (int)(28 * v), 54 + (int)(22 * v), 255), 0);
     }
     for (int k = 0; k < 6; ++k) {
-        bvBox(kBvFire[k][0], 0.0f, kBvFire[k][1], 1.5f, 1.5f, 1.7f, RGBA(96, 112, 40, 255), 0);
-        bvBox(kBvFire[k][0], 0.8f, kBvFire[k][1], 1.62f, 1.62f, 0.3f, RGBA(220, 210, 50, 255), 0);
-        bvBox(kBvFire[k][0] + 1.6f, 0.0f, kBvFire[k][1] + 0.9f, 1.2f, 1.2f, 1.4f, RGBA(80, 94, 34, 255), 0);
+        bvBox(kBvFire[k][0], 0.0f, kBvFire[k][1], 1.8f, 1.8f, 2.0f, RGBA(96, 112, 40, 255), 0);
+        bvBox(kBvFire[k][0], 0.95f, kBvFire[k][1], 1.95f, 1.95f, 0.35f, RGBA(220, 210, 50, 255), 0);
+        bvBox(kBvFire[k][0] + 2.0f, 0.0f, kBvFire[k][1] + 1.1f, 1.4f, 1.4f, 1.6f, RGBA(80, 94, 34, 255), 0);
     }
-    // horizonte: torres calcinadas en la niebla, con ventanas verdes encendidas
+    // horizonte: torres calcinadas en la niebla (r 100..170), con una ventana verde encendida
     for (int k = 0; k < 14; ++k) {
-        const float a = 2.0f * BV_PI * k / 14.0f + (bvR(k, 61) - 0.5f) * 0.3f, r = 58.0f + bvR(k, 62) * 50.0f;
-        const float x = sinf(a) * r, z = cosf(a) * r, w = 8.0f + bvR(k, 63) * 10.0f, d = 8.0f + bvR(k, 64) * 10.0f, h = 24.0f + bvR(k, 65) * 48.0f;
+        const float a = 2.0f * BV_PI * k / 14.0f + (bvR(k, 61) - 0.5f) * 0.3f, r = 100.0f + bvR(k, 62) * 70.0f;
+        const float x = sinf(a) * r, z = cosf(a) * r, w = 12.0f + bvR(k, 63) * 14.0f, d = 12.0f + bvR(k, 64) * 14.0f, h = 36.0f + bvR(k, 65) * 70.0f;
         const float v = bvR(k, 66);
         const unsigned int col = RGBA(34 + (int)(14 * v), 40 + (int)(14 * v), 34 + (int)(10 * v), 255);
         bvBox(x, 0.0f, z, w, d, h, col, 0);
-        bvBox(x + w * 0.2f, h, z - d * 0.1f, w * 0.6f, d * 0.6f, 4.0f + bvR(k, 67) * 9.0f, brighten(col, 0.8f), 0);
-        bvBox(x - w * 0.3f, 0.0f, z + d * 0.3f, 2.6f, 2.6f, h + 10.0f + bvR(k, 68) * 12.0f, brighten(col, 0.9f), 0);
+        bvBox(x + w * 0.2f, h, z - d * 0.1f, w * 0.6f, d * 0.6f, 6.0f + bvR(k, 67) * 13.0f, brighten(col, 0.8f), 0);
+        bvBox(x - w * 0.3f, 0.0f, z + d * 0.3f, 3.6f, 3.6f, h + 14.0f + bvR(k, 68) * 16.0f, brighten(col, 0.9f), 0);
         const float nx = -sinf(a), nz = -cosf(a);                                  // cara que mira a la arena
-        for (int q = 0; q < 2; ++q) {
-            const float wy = 6.0f + bvR(k * 2 + q, 69) * (h - 10.0f);
-            bvBox(x + nx * (w * 0.5f + 0.1f), wy, z + nz * (d * 0.5f + 0.1f), 1.6f, 1.6f, 2.2f, RGBA(150, 255, 70, 255), 0);
-        }
+        const float wy = 9.0f + bvR(k, 69) * (h - 14.0f);
+        bvBox(x + nx * (w * 0.5f + 0.1f), wy, z + nz * (d * 0.5f + 0.1f), 2.4f, 2.4f, 3.2f, RGBA(150, 255, 70, 255), 0);
     }
 }
 
@@ -407,7 +410,7 @@ static void bvOnRespawn() {
     bv_grace = 150;
     if (bv_state != BV_INTRO && bv_state != BV_SUMMON) {
         bv_state = BV_STALK; bv_st = 0; bv_cd = 150; bv_swingN = 0;
-        bv_x = 0.0f; bv_z = -13.0f; bv_yaw = BV_PI; bv_spd = 0.0f; bv_pitchT = 0.0f;
+        bv_x = 0.0f; bv_z = -26.0f; bv_yaw = BV_PI; bv_spd = 0.0f; bv_pitchT = 0.0f;
     }
 }
 static void bvHurtPlayer(BossIO &io, float amount) {
@@ -430,15 +433,15 @@ static void bv_Enter(BossIO &io, LineVertex *geo, int geoCap, int *geoN,
     sceKernelDcacheWritebackAll();
     // estado
     bv_t = 0; bv_state = BV_INTRO; bv_st = 0; bv_hp = BV_HPMAX; bv_hurt = 0; bv_cd = 0; bv_done = 0; bv_grace = 0; bv_hitCd = 0;
-    bv_x = 0.0f; bv_z = -13.0f; bv_yaw = BV_PI; bv_spd = 0.0f; bv_gp = 0.0f; bv_orb = 3.14159f; bv_orbDir = 1.0f;
+    bv_x = 0.0f; bv_z = -26.0f; bv_yaw = BV_PI; bv_spd = 0.0f; bv_gp = 0.0f; bv_orb = 3.14159f; bv_orbDir = 1.0f;
     bv_dx = 0.0f; bv_dz = 1.0f; bv_pitch = bv_pitchT = 0.0f; bv_arm = bv_armT = 0.15f; bv_armK = 0.2f; bv_roll = bv_rollT = 0.0f;
     bv_swingN = bv_swingT = bv_swingHit = 0; bv_horde = 0; bv_shake = 0.0f; bv_dis = 0.0f;
-    bv_hx = -4.2f; bv_hy = 3.0f; bv_hz = -8.0f; bv_hYaw = 0.0f; bv_hFlare = 0.0f; bv_hOrbCd = 300; bv_blockMsg = 0; bv_lpOk = 0;
+    bv_hx = -6.0f; bv_hy = 3.0f; bv_hz = -30.0f; bv_hYaw = 0.0f; bv_hFlare = 0.0f; bv_hOrbCd = 300; bv_blockMsg = 0; bv_lpOk = 0;
     for (int k = 0; k < BV_NFLY; ++k) { bv_fly[k].alive = 0; bv_fly[k].die = 0; bv_fly[k].delay = 0; }
     for (int k = 0; k < 72; ++k) bv_part[k].life = 0;
     g_lvNoHeal = 1;                                           // el rosario no cura en este piso
     lvMessage("EL CUARTO JINETE: MUERTE. HADES LO SIGUE", 200);
-    *sx = 0.0f; *sy = 0.0f; *sz = 15.0f;
+    *sx = 0.0f; *sy = 0.0f; *sz = 32.0f;
 }
 
 // ---------------------------------------------------------------- Update
@@ -467,8 +470,8 @@ static void bvUpdateFlies(BossIO &io) {
         // zumbido: gira alrededor del jugador y de vez en cuando se lanza en picada
         const float sw = 2.8f + 1.4f * sinf(bv_t * 0.04f + F.ph);
         float ox = sinf(bv_t * 0.21f + F.ph * 3.1f) * sw, oy = sinf(bv_t * 0.33f + F.ph * 1.7f) * 0.9f, oz = cosf(bv_t * 0.19f + F.ph * 2.3f) * sw;
-        float spd = 0.15f + 0.03f * sinf(bv_t * 0.1f + F.ph);
-        if (F.dash > 0) { --F.dash; ox = oy = oz = 0.0f; spd = 0.30f; }
+        float spd = 0.18f + 0.03f * sinf(bv_t * 0.1f + F.ph);
+        if (F.dash > 0) { --F.dash; ox = oy = oz = 0.0f; spd = 0.34f; }
         else if (--F.cd <= 0) { F.dash = 42; F.cd = 130 + (int)(bvR(bv_t, k + 100) * 170.0f); }
         float dx = tpx + ox - F.x, dy = tpy + oy - F.y, dz = tpz + oz - F.z;
         const float d = sqrtf(dx * dx + dy * dy + dz * dz) + 0.001f;
@@ -484,7 +487,7 @@ static void bvUpdateFlies(BossIO &io) {
         F.x += F.vx; F.y += F.vy; F.z += F.vz;
         if (F.x > BV_ARENA + 0.5f) { F.x = BV_ARENA + 0.5f; F.vx = -F.vx; } if (F.x < -BV_ARENA - 0.5f) { F.x = -BV_ARENA - 0.5f; F.vx = -F.vx; }
         if (F.z > BV_ARENA + 0.5f) { F.z = BV_ARENA + 0.5f; F.vz = -F.vz; } if (F.z < -BV_ARENA - 0.5f) { F.z = -BV_ARENA - 0.5f; F.vz = -F.vz; }
-        if (F.y < 0.7f) { F.y = 0.7f; F.vy = fabsf(F.vy); } if (F.y > 14.0f) { F.y = 14.0f; F.vy = -fabsf(F.vy); }
+        if (F.y < 0.7f) { F.y = 0.7f; F.vy = fabsf(F.vy); } if (F.y > 16.0f) { F.y = 16.0f; F.vy = -fabsf(F.vy); }
         // contacto: pica y se aparta
         const float cx = F.x - tpx, cy = F.y - (io.py + 1.7f), cz = F.z - tpz;
         if (cx * cx + cy * cy + cz * cz < 1.5f * 1.5f && bv_grace == 0 && bv_hitCd == 0) {
@@ -551,10 +554,10 @@ static void bv_Update(BossIO &io) {
     }
     case BV_STALK: {
         if (bv_cd > 0) --bv_cd;
-        bv_orb += bv_orbDir * 0.012f;
-        const float R = 13.0f, tx = sinf(bv_orb) * R, tz = cosf(bv_orb) * R;
+        bv_orb += bv_orbDir * 0.008f;
+        const float R = 26.0f, tx = sinf(bv_orb) * R, tz = cosf(bv_orb) * R;
         const float ddx = tx - bv_x, ddz = tz - bv_z, d = sqrtf(ddx * ddx + ddz * ddz);
-        const float sp = bvClamp(d * 0.12f, 0.0f, 0.42f);
+        const float sp = bvClamp(d * 0.12f, 0.0f, 0.60f);
         if (sp > 0.06f) bv_yaw = bvTurn(bv_yaw, bvYawTo(ddx, ddz), 0.07f);
         else bv_yaw = bvTurn(bv_yaw, bvYawTo(pdx, pdz), 0.05f);
         bv_spd += (sp - bv_spd) * 0.15f;
@@ -568,11 +571,11 @@ static void bv_Update(BossIO &io) {
         break;
     }
     case BV_CWIND: {                                           // aviso: sigue tu posicion y se clava en el piso
-        const int T = 78;
+        const int T = BV_CW_T;
         if (bv_st == 0) lvMessage("¡ESQUIVA!", 90);
         ++bv_st;
         bv_spd *= 0.85f;
-        if (bv_st < T - 26) {
+        if (bv_st < T - BV_CW_LOCK) {
             bv_yaw = bvTurn(bv_yaw, bvYawTo(pdx, pdz), 0.10f);
             bv_dx = pdx / pd; bv_dz = pdz / pd;
         } else {
@@ -586,7 +589,7 @@ static void bv_Update(BossIO &io) {
     case BV_CRUN: {                                            // CARGA: si te toca, mueres
         ++bv_st;
         bv_armT = -1.25f; bv_armK = 0.3f;
-        bv_spd += (0.95f - bv_spd) * 0.10f;
+        bv_spd += (1.30f - bv_spd) * 0.08f;
         bv_yaw = bvYawTo(bv_dx, bv_dz);
         bv_x += bv_dx * bv_spd; bv_z += bv_dz * bv_spd;
         if (bv_t % 2 == 0) bvEmit(bv_x - bv_dx * 1.5f + (bvR(bv_t, 41) - 0.5f) * 2.0f, 0.3f, bv_z - bv_dz * 1.5f, 0.3f, 0.07f, 0.0f, 26, RGBA(110, 150, 70, 255), 0.35f);
@@ -603,7 +606,7 @@ static void bv_Update(BossIO &io) {
                 }
             }
         }
-        if (bv_state == BV_CRUN && (bv_x > BV_ARENA || bv_x < -BV_ARENA || bv_z > BV_ARENA || bv_z < -BV_ARENA || bv_st > 90)) {
+        if (bv_state == BV_CRUN && (bv_x > BV_ARENA || bv_x < -BV_ARENA || bv_z > BV_ARENA || bv_z < -BV_ARENA || bv_st > 140)) {
             bv_x = bvClamp(bv_x, -BV_ARENA, BV_ARENA); bv_z = bvClamp(bv_z, -BV_ARENA, BV_ARENA);
             bv_state = BV_CREC; bv_st = 0; bv_shake = 0.25f;
             for (int s = 0; s < 5; ++s) bvEmit(bv_x, 0.4f, bv_z, 1.0f, 0.1f, -0.002f, 28, RGBA(110, 130, 80, 255), 0.5f);
@@ -621,12 +624,12 @@ static void bv_Update(BossIO &io) {
     case BV_SAPP: {                                            // se acerca a tajar
         ++bv_st;
         bv_yaw = bvTurn(bv_yaw, bvYawTo(pdx, pdz), 0.12f);
-        bv_spd += (0.45f - bv_spd) * 0.15f;
+        bv_spd += (0.70f - bv_spd) * 0.15f;
         bv_x += fx * bv_spd; bv_z += fz * bv_spd;
         bv_x = bvClamp(bv_x, -BV_ARENA, BV_ARENA); bv_z = bvClamp(bv_z, -BV_ARENA, BV_ARENA);
         bv_armT = 0.5f;
         if (pd < 6.8f) { bv_state = BV_SWING; bv_st = 0; bv_swingN = (bv_hp > 60) ? 2 : 3; bv_swingT = 0; bv_swingHit = 0; lvMessage("¡ALÉJATE!", 70); }
-        else if (bv_st > 150) { bv_state = BV_STALK; bv_st = 0; bv_cd = 40; }
+        else if (bv_st > 240) { bv_state = BV_STALK; bv_st = 0; bv_cd = 40; }
         break;
     }
     case BV_SWING: {                                           // tajos: aviso con abanico, golpe, recuperacion
@@ -670,16 +673,16 @@ static void bv_Update(BossIO &io) {
     bv_arm += (bv_armT - bv_arm) * bv_armK;
     bv_roll += (bv_rollT - bv_roll) * 0.25f;
     bv_pitch += (bv_pitchT - bv_pitch) * 0.12f;
-    if (bv_state == BV_CRUN && bv_spd > 0.3f && pd < 30.0f) bv_shake = bv_shake > 0.10f ? bv_shake : 0.10f;
+    if (bv_state == BV_CRUN && bv_spd > 0.3f && pd < 60.0f) bv_shake = bv_shake > 0.10f ? bv_shake : 0.10f;
 
     // ---- Hades: flota detras-izquierda del jinete, te mira y lanza orbes verdes ----
     {
         const float s = sinf(bv_yaw), c = cosf(bv_yaw);
-        float wx = bv_x + (-4.2f) * c + 5.0f * s, wz = bv_z - (-4.2f) * s + 5.0f * c;
+        float wx = bv_x + (-6.0f) * c + 7.0f * s, wz = bv_z - (-6.0f) * s + 7.0f * c;
         wx = bvClamp(wx, -BV_ARENA, BV_ARENA); wz = bvClamp(wz, -BV_ARENA, BV_ARENA);
         float hy = 2.6f + 0.5f * sinf(bv_t * 0.05f);
         if (bv_state == BV_SUMMON) hy += 1.8f * sinf(BV_PI * bvClamp(bv_st / 100.0f, 0.0f, 1.0f));
-        bv_hx += (wx - bv_hx) * 0.04f; bv_hz += (wz - bv_hz) * 0.04f; bv_hy += (hy - bv_hy) * 0.06f;
+        bv_hx += (wx - bv_hx) * 0.05f; bv_hz += (wz - bv_hz) * 0.05f; bv_hy += (hy - bv_hy) * 0.06f;
         bv_hYaw = bvYawTo(io.px - bv_hx, io.pz - bv_hz);
         if (bv_state != BV_INTRO) {
             if (--bv_hOrbCd <= 0) {
@@ -823,11 +826,11 @@ static void bv_Draw(float px, float py, float pz) {
     }
     // aviso de la CARGA: carril en el piso (naranja mientras te sigue, rojo cuando se bloquea)
     if (bv_state == BV_CWIND) {
-        const int locked = (bv_st >= 78 - 26);
+        const int locked = (bv_st >= BV_CW_T - BV_CW_LOCK);
         const float a = atan2f(bv_dx, bv_dz);
         const int al = locked ? 235 : 130 + ((bv_t & 6) ? 40 : 0);
         const unsigned int col = locked ? RGBA(255, 40, 30, al) : RGBA(255, 150, 40, al);
-        const float len = 48.0f, ox = cosf(a) * 1.9f, oz = -sinf(a) * 1.9f;
+        const float len = 120.0f, ox = cosf(a) * 1.9f, oz = -sinf(a) * 1.9f;
         lvBeam(bv_x, 0.15f, bv_z, a, len, 1.0f, col);
         lvBeam(bv_x + ox, 0.15f, bv_z + oz, a, len, 0.35f, col);
         lvBeam(bv_x - ox, 0.15f, bv_z - oz, a, len, 0.35f, col);
@@ -893,7 +896,7 @@ static void bv_Hud(BossIO &io) {
     sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
     bxTint(RGBA(70, 120, 20, 16));                                                   // bruma radioactiva sobre todo
     // aviso de carga: bordes rojos que parpadean
-    if (bv_state == BV_CWIND && bv_st > 30 && (bv_t & 4)) {
+    if (bv_state == BV_CWIND && bv_st > 60 && (bv_t & 4)) {
         drawRect(0, 0, SCR_WIDTH, 6, RGBA(255, 40, 30, 150)); drawRect(0, SCR_HEIGHT - 6, SCR_WIDTH, 6, RGBA(255, 40, 30, 150));
         drawRect(0, 0, 6, SCR_HEIGHT, RGBA(255, 40, 30, 110)); drawRect(SCR_WIDTH - 6, 0, 6, SCR_HEIGHT, RGBA(255, 40, 30, 110));
     }
@@ -1005,7 +1008,7 @@ static void bv_Backdrop() {
 }
 
 // ---------------------------------------------------------------- resto del contrato
-static unsigned int bv_Fog(float *nearF, float *farF) { *nearF = 20.0f; *farF = 130.0f; return BV_FOG; }
+static unsigned int bv_Fog(float *nearF, float *farF) { *nearF = 30.0f; *farF = 195.0f; return BV_FOG; }
 
 static int bv_AimTarget(float out[3]) {
     if (bv_state == BV_DEAD) return 0;
@@ -1013,14 +1016,14 @@ static int bv_AimTarget(float out[3]) {
     for (int k = 0; k < BV_NFLY; ++k) {                       // la mosca viva mas cercana a la mirada
         const BvFly &F = bv_fly[k]; if (!F.alive || F.die > 0 || F.delay > 0) continue;
         const float dx = F.x - g_lvEye[0], dy = F.y - g_lvEye[1], dz = F.z - g_lvEye[2];
-        const float d = sqrtf(dx * dx + dy * dy + dz * dz); if (d < 0.5f || d > 95.0f) continue;
+        const float d = sqrtf(dx * dx + dy * dy + dz * dz); if (d < 0.5f || d > 150.0f) continue;
         const float c = (dx * g_lvFwd[0] + dy * g_lvFwd[1] + dz * g_lvFwd[2]) / d;
         if (c > best) { best = c; out[0] = F.x + F.vx * 3.0f; out[1] = F.y + F.vy * 3.0f; out[2] = F.z + F.vz * 3.0f; found = 1; }
     }
     if (found) return 1;
     float wx, wy, wz; bvW(0.0f, 5.4f, 0.1f, wx, wy, wz);       // si no, el jinete (pecho)
     const float dx = wx - g_lvEye[0], dy = wy - g_lvEye[1], dz = wz - g_lvEye[2];
-    const float d = sqrtf(dx * dx + dy * dy + dz * dz); if (d < 0.5f || d > 95.0f) return 0;
+    const float d = sqrtf(dx * dx + dy * dy + dz * dz); if (d < 0.5f || d > 150.0f) return 0;
     if ((dx * g_lvFwd[0] + dy * g_lvFwd[1] + dz * g_lvFwd[2]) / d < 0.4f) return 0;
     out[0] = wx; out[1] = wy; out[2] = wz;
     return 1;

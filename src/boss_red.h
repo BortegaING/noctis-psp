@@ -5,7 +5,7 @@
 // boss_api.h, skyworld.h (swQuadC/swBoxLit/swBoxL/swRand), char_prims.h (addLimb/addBall/addLoft).
 //
 // ESCENARIO: cielo rojo carnoso (venas y manchas que laten), arena de piedra/carne rojiza de
-//   radio ~22 con borde organico (el suelo es una pila de franjas-caja), costillas de hueso en el
+//   radio ~42 (el doble, para correr y escapar) con borde organico (el suelo es una pila de franjas-caja), costillas de hueso en el
 //   borde, tendones colgando, columnas de carne lejanas y niebla rojo oscuro.
 // JINETE: caballo rojo (crin oscura, ojos brillantes, 4 patas articuladas que corren), jinete con
 //   armadura, casco con cuernos, capa y una GRAN ESPADA. Escala RJ_S sobre el modelo (mira a -Z).
@@ -25,13 +25,15 @@
 // ---------------------------------------------------------------- constantes
 static const float RJ_PI   = 3.14159265f;
 static const float RJ_TAU  = 6.2831853f;
-static const float RJ_R    = 22.0f;        // radio nominal de la arena
+static const float RJ_R    = 42.0f;        // radio nominal de la arena (x1.9: espacio para correr y escapar)
+static const float RJ_K    = 42.0f / 22.0f; // factor de escala de la arena respecto al diseno base
+static const float RJ_VMAX = 1.7f, RJ_VMAXE = 2.0f, RJ_DECEL = 0.13f;   // embestida: velocidad, enfurecido, frenado
 static const int   RJ_HPMAX = 110;
 static const float RJ_S    = 1.4f;         // escala del modelo (unidades del modelo -> mundo)
 static const float RJ_PIV  = 1.8f;         // pivote del encabritado (z de los cascos traseros)
 static const float RJ_MASHNEED = 8.0f;     // recorrido del analogo para soltarse del grito
 static const int   RJ_MASHFRAMES = 420;    // tope de tiempo del aturdimiento
-static const int   RJ_STR_N = 24;          // franjas maximas del suelo
+static const int   RJ_STR_N = 28;          // franjas maximas del suelo
 
 // paleta
 static const unsigned int RJ_HORSE  = RGBA(172, 26, 28, 255);
@@ -256,7 +258,7 @@ enum { RJS_INTRO, RJS_PACE, RJS_ALIGN, RJS_ROAR, RJS_CHARGE, RJS_SKID, RJS_SCREA
        RJS_SLASH, RJS_DYING, RJS_DEAD };
 
 static int   rj_s = RJS_INTRO, rj_st = 0, rj_t = 0;      // estado, frames en el estado, frames totales
-static float rj_x = 0.0f, rj_z = -15.0f, rj_a = 0.0f;    // posicion y rumbo (dir = sin a, cos a)
+static float rj_x = 0.0f, rj_z = -32.0f, rj_a = 0.0f;    // posicion y rumbo (dir = sin a, cos a)
 static float rj_spd = 0.0f, rj_gait = 0.0f, rj_rear = 0.0f;
 static float rj_dirX = 0.0f, rj_dirZ = 1.0f;             // direccion fijada de la embestida
 static float rj_ax = 0.0f, rj_az = 0.0f;                 // punto de salida (borde opuesto)
@@ -294,15 +296,15 @@ static void rj_Spawn(float x, float y, float z, float vx, float vy, float vz, fl
 // ---------------------------------------------------------------- arena
 // borde organico: radio segun el angulo (angulo a: x = sin a, z = cos a)
 static float rj_rad(float a) {
-    return RJ_R + 1.5f * sinf(3.0f * a + 0.7f) + 0.9f * sinf(5.0f * a + 2.1f) + 0.5f * sinf(9.0f * a + 0.3f);
+    return RJ_R + RJ_K * (1.5f * sinf(3.0f * a + 0.7f) + 0.9f * sinf(5.0f * a + 2.1f) + 0.5f * sinf(9.0f * a + 0.3f));
 }
 static bool rj_inside(float x, float z) { return sqrtf(x * x + z * z) < rj_rad(atan2f(x, z)); }
 
 // color del suelo: carne rojiza o piedra, mas clara al centro, con variacion por baldosa
 static unsigned int rj_floorCol(float x, float z, float var, int stone) {
-    float r = sqrtf(x * x + z * z) / 23.0f; if (r > 1.0f) r = 1.0f;
+    float r = sqrtf(x * x + z * z) / (RJ_R + 1.0f); if (r > 1.0f) r = 1.0f;
     const float k = 1.0f - r * r * 0.55f;
-    const float n = 0.92f + 0.08f * sinf(x * 0.9f) * sinf(z * 0.8f + 1.3f);
+    const float n = 0.92f + 0.08f * sinf(x * 0.5f) * sinf(z * 0.45f + 1.3f);
     const float f = var * n * k;
     const float cr = stone ? 122.0f : 152.0f, cg = stone ? 90.0f : 44.0f, cb = stone ? 86.0f : 46.0f;
     int R = (int)(cr * f), G = (int)(cg * f), B = (int)(cb * f);
@@ -313,8 +315,8 @@ static unsigned int rj_floorCol(float x, float z, float var, int stone) {
 struct RjStrip { float xl, xr, zc; };
 static RjStrip rj_strips[RJ_STR_N];
 static int rj_nStrips = 0;
-static const int RJ_NV = 10, RJ_NP = 13;                   // venas del suelo: cuantas y puntos por vena
-static float rj_vx[10][13], rj_vz[10][13];
+static const int RJ_NV = 12, RJ_NP = 15;                   // venas del suelo: cuantas y puntos por vena
+static float rj_vx[12][15], rj_vz[12][15];
 
 // anillo plano en la geometria estatica
 static void rj_RingGeo(LineVertex *g, int &i, int cap, float R, float w, float y, unsigned int col) {
@@ -340,7 +342,7 @@ static void br_Enter(BossIO &io, LineVertex *geo, int geoCap, int *geoN, CityBld
     rj_BuildModels();
     // ---- reinicio de estado ----
     rj_s = RJS_INTRO; rj_st = 0; rj_t = 0;
-    rj_x = 0.0f; rj_z = -15.0f; rj_a = 0.0f; rj_spd = 0.0f; rj_gait = 0.0f; rj_rear = 0.0f;
+    rj_x = 0.0f; rj_z = -32.0f; rj_a = 0.0f; rj_spd = 0.0f; rj_gait = 0.0f; rj_rear = 0.0f;
     rj_dirX = 0.0f; rj_dirZ = 1.0f; rj_travel = 0.0f; rj_tBrake = 20.0f;
     rj_sw = rj_swT = 0.35f;
     rj_hp = RJ_HPMAX; rj_hurt = 0; rj_done = 0; rj_dieT = 0;
@@ -353,15 +355,17 @@ static void br_Enter(BossIO &io, LineVertex *geo, int geoCap, int *geoN, CityBld
     io.camYaw = 0.0f;
 
     // ---- suelo: franjas-caja que siguen el borde organico (visual = colision) ----
+    if (geoCap > 8500) geoCap = 8500;                     // presupuesto de vertices de la arena
     int i = 0, nb = 0;
     rj_nStrips = 0;
-    const float SZ = 2.5f;
-    for (float zc = -23.75f; zc < 24.0f && rj_nStrips < RJ_STR_N; zc += SZ) {
+    const float SZ = 4.5f;                                // profundidad de cada franja
+    for (int sIdx = -11; sIdx < 11 && rj_nStrips < RJ_STR_N; ++sIdx) {
+        const float zc = ((float)sIdx + 0.5f) * SZ;
         if (!rj_inside(0.0f, zc)) continue;
         float xr = 0.0f, xl = 0.0f;
-        while (xr < 30.0f && rj_inside(xr + 0.25f, zc)) xr += 0.25f;
-        while (xl > -30.0f && rj_inside(xl - 0.25f, zc)) xl -= 0.25f;
-        if (xr - xl < 2.0f) continue;
+        while (xr < 70.0f && rj_inside(xr + 0.5f, zc)) xr += 0.5f;
+        while (xl > -70.0f && rj_inside(xl - 0.5f, zc)) xl -= 0.5f;
+        if (xr - xl < 4.0f) continue;
         rj_strips[rj_nStrips].xl = xl; rj_strips[rj_nStrips].xr = xr; rj_strips[rj_nStrips].zc = zc;
         ++rj_nStrips;
         if (boxes && nb < boxCap) { boxes[nb].x = (xl + xr) * 0.5f; boxes[nb].z = zc; boxes[nb].w = xr - xl; boxes[nb].d = SZ; boxes[nb].h = 0.0f; boxes[nb].color = RGBA(140, 40, 44, 255); ++nb; }
@@ -371,7 +375,7 @@ static void br_Enter(BossIO &io, LineVertex *geo, int geoCap, int *geoN, CityBld
     for (int s = 0; s < rj_nStrips; ++s) {
         const RjStrip &st = rj_strips[s];
         if (i + 36 > geoCap) break;
-        swBoxLit(geo, i, (st.xl + st.xr) * 0.5f, -8.0f, st.zc, st.xr - st.xl, SZ, 7.88f, RGBA(122, 30, 34, 255), RGBA(20, 2, 8, 255), false);
+        swBoxLit(geo, i, (st.xl + st.xr) * 0.5f, -14.0f, st.zc, st.xr - st.xl, SZ, 13.88f, RGBA(122, 30, 34, 255), RGBA(20, 2, 8, 255), false);
         const unsigned int cg = RGBA(58, 8, 14, 255);
         swQuadC(geo, i, st.xl, -0.12f, st.zc - SZ * 0.5f, cg, st.xl, -0.12f, st.zc + SZ * 0.5f, cg,
                         st.xr, -0.12f, st.zc + SZ * 0.5f, cg, st.xr, -0.12f, st.zc - SZ * 0.5f, cg);
@@ -379,8 +383,8 @@ static void br_Enter(BossIO &io, LineVertex *geo, int geoCap, int *geoN, CityBld
     // baldosas de la cara superior: variacion de tono por baldosa y degradado radial por vertice
     for (int s = 0; s < rj_nStrips; ++s) {
         const RjStrip &st = rj_strips[s];
-        int n = (int)((st.xr - st.xl) / 2.5f + 0.5f); if (n < 1) n = 1;
-        const float cw = (st.xr - st.xl) / n, g = 0.07f;
+        int n = (int)((st.xr - st.xl) / 4.0f + 0.5f); if (n < 1) n = 1;
+        const float cw = (st.xr - st.xl) / n, g = 0.1f;
         for (int c = 0; c < n; ++c) {
             if (i + 6 > geoCap) break;
             const float x0 = st.xl + c * cw + g, x1 = st.xl + (c + 1) * cw - g;
@@ -392,53 +396,54 @@ static void br_Enter(BossIO &io, LineVertex *geo, int geoCap, int *geoN, CityBld
                             x1, 0.0f, z1, rj_floorCol(x1, z1, var, stone), x1, 0.0f, z0, rj_floorCol(x1, z0, var, stone));
         }
     }
-    // sigilo de guerra en el centro: dos anillos y una cruz en aspa
-    rj_RingGeo(geo, i, geoCap, 5.2f, 0.45f, 0.09f, RGBA(176, 110, 40, 255));
-    rj_RingGeo(geo, i, geoCap, 8.4f, 0.30f, 0.09f, RGBA(60, 6, 12, 255));
-    rj_BarGeo(geo, i, geoCap, -7.0f, -7.0f, 7.0f, 7.0f, 0.4f, 0.09f, RGBA(60, 6, 12, 255));
-    rj_BarGeo(geo, i, geoCap, -7.0f, 7.0f, 7.0f, -7.0f, 0.4f, 0.09f, RGBA(60, 6, 12, 255));
+    // sigilo de guerra en el centro: tres anillos y una cruz en aspa
+    rj_RingGeo(geo, i, geoCap, 10.0f, 0.8f, 0.09f, RGBA(176, 110, 40, 255));
+    rj_RingGeo(geo, i, geoCap, 16.0f, 0.5f, 0.09f, RGBA(60, 6, 12, 255));
+    rj_RingGeo(geo, i, geoCap, 27.0f, 0.7f, 0.09f, RGBA(120, 70, 34, 255));
+    rj_BarGeo(geo, i, geoCap, -14.0f, -14.0f, 14.0f, 14.0f, 0.7f, 0.09f, RGBA(60, 6, 12, 255));
+    rj_BarGeo(geo, i, geoCap, -14.0f, 14.0f, 14.0f, -14.0f, 0.7f, 0.09f, RGBA(60, 6, 12, 255));
     // costillas de hueso en el borde (curvadas hacia afuera)
     rj_capCur = geoCap;
-    for (int k = 0; k < 18; ++k) {
-        const float a = RJ_TAU * k / 18.0f + 0.15f * sinf(k * 2.3f);
-        const float rr = rj_rad(a) + 0.6f, ox = sinf(a), oz = cosf(a);
-        const float h = 2.2f + 1.8f * (float)((k * 7) % 5) / 4.0f;
-        rjL(geo, i, ox * rr, -1.0f, oz * rr, ox * (rr + 1.4f), h, oz * (rr + 1.4f), 0.55f, 0.05f, 5, RGBA(120, 70, 62, 255), RJ_BONE);
+    for (int k = 0; k < 22; ++k) {
+        const float a = RJ_TAU * k / 22.0f + 0.15f * sinf(k * 2.3f);
+        const float rr = rj_rad(a) + 1.0f, ox = sinf(a), oz = cosf(a);
+        const float h = 4.0f + 3.2f * (float)((k * 7) % 5) / 4.0f;
+        rjL(geo, i, ox * rr, -2.0f, oz * rr, ox * (rr + 2.6f), h, oz * (rr + 2.6f), 1.0f, 0.08f, 5, RGBA(120, 70, 62, 255), RJ_BONE);
     }
     // tendones colgando bajo la plataforma
     for (int k = 0; k < 8; ++k) {
         const float a = RJ_TAU * k / 8.0f + 0.4f;
-        const float rr = rj_rad(a) * 0.92f, ox = sinf(a), oz = cosf(a), wig = 1.0f + 0.5f * sinf(k * 2.1f);
-        rjL(geo, i, ox * rr, -1.5f, oz * rr, ox * rr * 0.95f + wig, -6.0f, oz * rr * 0.95f, 0.5f, 0.34f, 6, RGBA(170, 30, 34, 255), RGBA(120, 14, 22, 255));
-        rjL(geo, i, ox * rr * 0.95f + wig, -6.0f, oz * rr * 0.95f, ox * rr * 0.9f - wig, -11.5f, oz * rr * 0.9f, 0.34f, 0.05f, 6, RGBA(120, 14, 22, 255), RGBA(56, 4, 12, 255));
+        const float rr = rj_rad(a) * 0.92f, ox = sinf(a), oz = cosf(a), wig = 2.0f + 1.0f * sinf(k * 2.1f);
+        rjL(geo, i, ox * rr, -3.0f, oz * rr, ox * rr * 0.95f + wig, -12.0f, oz * rr * 0.95f, 0.9f, 0.62f, 6, RGBA(170, 30, 34, 255), RGBA(120, 14, 22, 255));
+        rjL(geo, i, ox * rr * 0.95f + wig, -12.0f, oz * rr * 0.95f, ox * rr * 0.9f - wig, -24.0f, oz * rr * 0.9f, 0.62f, 0.08f, 6, RGBA(120, 14, 22, 255), RGBA(56, 4, 12, 255));
     }
     // columnas de carne lejanas (profundidad) + rocas flotantes
     for (int k = 0; k < 8; ++k) {
         const float a = RJ_TAU * k / 8.0f + 0.3f * sinf(k * 1.9f);
-        const float rr = 55.0f + (float)((k * 13) % 30), cx = sinf(a) * rr, cz = cosf(a) * rr;
-        const float top = 26.0f + (float)((k * 11) % 34);
-        rjL(geo, i, cx, -45.0f, cz, cx, top, cz, 5.0f, 2.6f, 7, RGBA(70, 8, 16, 255), RGBA(150, 32, 36, 255));
-        rjB(geo, i, cx, top + 1.5f, cz, 3.6f, 3.2f, 3.6f, 3, 6, RGBA(176, 40, 40, 255));
+        const float rr = 85.0f + (float)((k * 13) % 50), cx = sinf(a) * rr, cz = cosf(a) * rr;
+        const float top = 40.0f + (float)((k * 11) % 50);
+        rjL(geo, i, cx, -70.0f, cz, cx, top, cz, 8.0f, 4.2f, 7, RGBA(70, 8, 16, 255), RGBA(150, 32, 36, 255));
+        rjB(geo, i, cx, top + 2.5f, cz, 5.8f, 5.2f, 5.8f, 3, 6, RGBA(176, 40, 40, 255));
     }
     for (int k = 0; k < 5; ++k) {
-        const float a = RJ_TAU * k / 5.0f + 0.9f, rr = 36.0f + (float)((k * 17) % 22);
-        rjB(geo, i, sinf(a) * rr, 6.0f + (float)((k * 9) % 17), cosf(a) * rr, 3.0f + (float)(k % 3), 2.4f + (float)(k % 2), 3.0f + (float)(k % 3), 4, 8, RGBA(120, 24, 28, 255));
+        const float a = RJ_TAU * k / 5.0f + 0.9f, rr = 62.0f + (float)((k * 17) % 34);
+        rjB(geo, i, sinf(a) * rr, 12.0f + (float)((k * 9) % 28), cosf(a) * rr, 5.0f + 1.6f * (float)(k % 3), 4.0f + 1.5f * (float)(k % 2), 5.0f + 1.6f * (float)(k % 3), 4, 8, RGBA(120, 24, 28, 255));
     }
     if (geoN) *geoN = i;
 
-    // ---- venas del suelo (se dibujan en br_Draw pulsando): del centro al borde ----
+    // ---- venas del suelo (se dibujan en rj_Draw pulsando): del centro al borde ----
     for (int k = 0; k < RJ_NV; ++k) {
         float th = RJ_TAU * k / RJ_NV + 0.25f * sinf(k * 1.7f);
         for (int j = 0; j < RJ_NP; ++j) {
-            th += sinf(j * 0.8f + k * 1.9f) * 0.16f;
-            float r = 2.5f + j * 1.7f, lim = rj_rad(th) - 0.8f;
+            th += sinf(j * 0.8f + k * 1.9f) * 0.14f;
+            float r = 4.0f + j * 2.9f, lim = rj_rad(th) - 1.5f;
             if (r > lim) r = lim;
             rj_vx[k][j] = sinf(th) * r; rj_vz[k][j] = cosf(th) * r;
         }
     }
     sceKernelDcacheWritebackAll();
     // jugador: de un lado de la arena, mirando al jinete (camara yaw 0 mira a -Z)
-    *sx = 0.0f; *sy = 0.0f; *sz = 15.0f;
+    *sx = 0.0f; *sy = 0.0f; *sz = 32.0f;
 }
 
 // ---------------------------------------------------------------- utilidades de IA
@@ -458,12 +463,12 @@ static void rj_turn(float target, float rate) {
 }
 static void rj_Step(float dx, float dz, float spd) {
     rj_x += dx * spd; rj_z += dz * spd;
-    rj_gait += spd * 0.26f + (spd > 0.05f ? 0.02f : 0.0f);
+    rj_gait += spd * 0.2f + (spd > 0.05f ? 0.02f : 0.0f);
 }
 // distancia desde (x,z) en la direccion (dx,dz) hasta el circulo de radio R (raiz mayor)
 static float rj_ChordEnd(float x, float z, float dx, float dz, float R) {
     const float b = x * dx + z * dz, c = x * x + z * z - R * R, disc = b * b - c;
-    if (disc < 0.0f) return 20.0f;
+    if (disc < 0.0f) return 40.0f;
     return -b + sqrtf(disc);
 }
 static void rj_Dust(float amount) {
@@ -537,11 +542,11 @@ static void br_Update(BossIO &io) {
     // ---- ondas del tajo ----
     for (int w = 0; w < 3; ++w) {
         RjWave &wv = rj_wv[w]; if (!wv.on) continue;
-        wv.r += 0.42f;
-        if (wv.r > 17.0f) { wv.on = 0; continue; }
+        wv.r += 0.6f;
+        if (wv.r > 30.0f) { wv.on = 0; continue; }
         if (!wv.hit) {
             const float d = sqrtf((io.px - wv.x) * (io.px - wv.x) + (io.pz - wv.z) * (io.pz - wv.z));
-            if (fabsf(d - wv.r) < 1.15f && io.py < 1.0f) {      // saltando la onda no te toca
+            if (fabsf(d - wv.r) < 1.3f && io.py < 1.0f) {      // saltando la onda no te toca
                 wv.hit = 1; io.hp -= 12.0f; rj_tint = 14; rj_tintMax = 40; g_lvFlash = 5;
             }
         }
@@ -563,32 +568,32 @@ static void br_Update(BossIO &io) {
         rj_rear += (0.0f - rj_rear) * 0.1f;
         rj_swT = 0.35f;
         const float ang = atan2f(rj_x - io.px, rj_z - io.pz) + rj_orb * 0.55f;   // orbita alrededor tuyo
-        float tx = io.px + sinf(ang) * 11.0f, tz = io.pz + cosf(ang) * 11.0f;
+        float tx = io.px + sinf(ang) * 20.0f, tz = io.pz + cosf(ang) * 20.0f;
         const float tr = sqrtf(tx * tx + tz * tz);
-        if (tr > 17.0f) { tx *= 17.0f / tr; tz *= 17.0f / tr; }
+        if (tr > 32.0f) { tx *= 32.0f / tr; tz *= 32.0f / tr; }
         const float mx = tx - rj_x, mz = tz - rj_z, md = sqrtf(mx * mx + mz * mz) + 0.001f;
         rj_turn(atan2f(mx, mz), 0.07f);
-        rj_spd += ((md > 1.0f ? 0.36f : 0.0f) - rj_spd) * 0.08f;
+        rj_spd += ((md > 1.0f ? 0.62f : 0.0f) - rj_spd) * 0.08f;
         rj_Step(sinf(rj_a), cosf(rj_a), rj_spd);
-        { const float rr = sqrtf(rj_x * rj_x + rj_z * rj_z); if (rr > 18.0f) { rj_x *= 18.0f / rr; rj_z *= 18.0f / rr; } }
+        { const float rr = sqrtf(rj_x * rj_x + rj_z * rj_z); if (rr > 34.0f) { rj_x *= 34.0f / rr; rj_z *= 34.0f / rr; } }
         if (--rj_paceT <= 0) { rj_s = RJS_ALIGN; rj_st = 0; }
         else if (rj_slashCd > 0) --rj_slashCd;
-        else if (rj_pd < 14.5f && rj_paceT > 30) { rj_s = RJS_SLASH; rj_st = 0; }
+        else if (rj_pd < 25.0f && rj_paceT > 30) { rj_s = RJS_SLASH; rj_st = 0; }
         break;
     }
     case RJS_ALIGN: {
         if (rj_st == 1) {                                  // borde opuesto a donde estas
             float pa = atan2f(io.px, io.pz);
-            if (io.px * io.px + io.pz * io.pz < 16.0f) pa = rj_rnd() * RJ_TAU;
-            rj_ax = -sinf(pa) * 17.0f; rj_az = -cosf(pa) * 17.0f;
+            if (io.px * io.px + io.pz * io.pz < 64.0f) pa = rj_rnd() * RJ_TAU;
+            rj_ax = -sinf(pa) * 32.0f; rj_az = -cosf(pa) * 32.0f;
         }
         rj_swT = 0.2f;
         const float mx = rj_ax - rj_x, mz = rj_az - rj_z, md = sqrtf(mx * mx + mz * mz) + 0.001f;
         rj_turn(atan2f(mx, mz), 0.12f);
-        float want = 0.12f + md * 0.10f; if (want > 0.78f) want = 0.78f;
+        float want = 0.25f + md * 0.10f; if (want > 1.1f) want = 1.1f;
         rj_spd += (want - rj_spd) * 0.12f;
         rj_Step(sinf(rj_a), cosf(rj_a), rj_spd);
-        if (md < 2.0f || rj_st > 170) { rj_s = RJS_ROAR; rj_st = 0; }
+        if (md < 3.0f || rj_st > 260) { rj_s = RJS_ROAR; rj_st = 0; }
         break;
     }
     case RJS_ROAR: {
@@ -604,9 +609,10 @@ static void br_Update(BossIO &io) {
         if (rj_st == 52) rj_shake = 0.2f;
         if (rj_st >= 82) {
             rj_a = atan2f(rj_dirX, rj_dirZ);
-            rj_travel = 0.0f; rj_hitDone = 0; rj_spd = 0.35f;
-            const float tEnd = rj_ChordEnd(rj_x, rj_z, rj_dirX, rj_dirZ, 17.0f);
-            rj_tBrake = tEnd - 8.5f; if (rj_tBrake < 10.0f) rj_tBrake = 10.0f;
+            rj_travel = 0.0f; rj_hitDone = 0; rj_spd = 0.5f;
+            const float tEnd = rj_ChordEnd(rj_x, rj_z, rj_dirX, rj_dirZ, 32.0f);
+            const float vm = rj_enr ? RJ_VMAXE : RJ_VMAX;
+            rj_tBrake = tEnd - vm * vm / (2.0f * RJ_DECEL) - 0.5f; if (rj_tBrake < 12.0f) rj_tBrake = 12.0f;
             rj_s = RJS_CHARGE; rj_st = 0; rj_rear = 0.0f;
         }
         break;
@@ -614,8 +620,8 @@ static void br_Update(BossIO &io) {
     case RJS_CHARGE: {
         rj_swT = -1.45f;
         rj_rear += (0.0f - rj_rear) * 0.2f;
-        const float vmax = rj_enr ? 1.4f : 1.2f;
-        rj_spd += 0.055f; if (rj_spd > vmax) rj_spd = vmax;
+        const float vmax = rj_enr ? RJ_VMAXE : RJ_VMAX;
+        rj_spd += 0.08f; if (rj_spd > vmax) rj_spd = vmax;
         rj_a = atan2f(rj_dirX, rj_dirZ);
         rj_Step(rj_dirX, rj_dirZ, rj_spd);
         rj_travel += rj_spd;
@@ -626,7 +632,7 @@ static void br_Update(BossIO &io) {
     }
     case RJS_SKID: {
         rj_swT = -1.0f;
-        rj_spd -= 0.09f; if (rj_spd < 0.0f) rj_spd = 0.0f;
+        rj_spd -= RJ_DECEL; if (rj_spd < 0.0f) rj_spd = 0.0f;
         rj_Step(rj_dirX, rj_dirZ, rj_spd);
         rj_ChargeHit(io);
         rj_Dust(1.0f);
@@ -665,8 +671,8 @@ static void br_Update(BossIO &io) {
         if (rj_st < 38) {
             rj_turn(atan2f(io.px - rj_x, io.pz - rj_z), 0.12f);
             rj_swT = 1.0f;
-            rj_ix = rj_x + sinf(rj_a) * 8.0f; rj_iz = rj_z + cosf(rj_a) * 8.0f;
-            { const float rr = sqrtf(rj_ix * rj_ix + rj_iz * rj_iz); if (rr > 20.0f) { rj_ix *= 20.0f / rr; rj_iz *= 20.0f / rr; } }
+            rj_ix = rj_x + sinf(rj_a) * 11.0f; rj_iz = rj_z + cosf(rj_a) * 11.0f;
+            { const float rr = sqrtf(rj_ix * rj_ix + rj_iz * rj_iz); if (rr > 38.0f) { rj_ix *= 38.0f / rr; rj_iz *= 38.0f / rr; } }
         } else if (rj_st < 70) { rj_swT = -2.2f; swRate = 0.40f; }
         else rj_swT = 0.35f;
         if (rj_st == 2) lvMessage("¡SALTA LA ONDA!", 70);
@@ -735,14 +741,14 @@ static int   br_Blocks() { return rj_stun ? 1 : 0; }
 static int   br_Done() { return rj_done; }
 static float br_Shake() {
     float a = rj_shake;
-    if (rj_s == RJS_CHARGE || rj_s == RJS_SKID) { float c = 1.0f - rj_pd / 30.0f; if (c < 0.0f) c = 0.0f; a += 0.18f * c; }
+    if (rj_s == RJS_CHARGE || rj_s == RJS_SKID) { float c = 1.0f - rj_pd / 60.0f; if (c < 0.0f) c = 0.0f; a += 0.18f * c; }
     if (rj_s == RJS_ROAR) a += 0.08f;
     if (rj_stun) a += 0.10f;
     if (rj_s == RJS_DYING) a += 0.15f;
     return a;
 }
 static unsigned int br_Fog(float *nearF, float *farF) {
-    *nearF = 22.0f; *farF = 150.0f;
+    *nearF = 33.0f; *farF = 225.0f;
     return RGBA(122, 12, 20, 255);
 }
 
@@ -869,7 +875,7 @@ static void rj_DrawHorse() {
         flail = 1.0f - e;
         if (sc < 0.02f) return;
     } else if (rj_s == RJS_DEAD) return;
-    const float spR = (rj_spd > 1.2f) ? 1.0f : rj_spd / 1.2f;
+    const float spR = (rj_spd > RJ_VMAX) ? 1.0f : rj_spd / RJ_VMAX;
     const float rear = rj_rear, pitch = rear * 0.72f + 0.03f * sinf(rj_gait * 2.0f) * spR;
     const float bob = (0.12f * fabsf(sinf(rj_gait)) * spR + 0.03f * sinf(rj_t * 0.07f)) * RJ_S;
     const float hurtS = (rj_hurt > 0) ? 1.03f : 1.0f;
@@ -946,9 +952,9 @@ static void rj_DrawVeins() {
             const float x0 = rj_vx[k][j], z0 = rj_vz[k][j], x1 = rj_vx[k][j + 1], z1 = rj_vz[k][j + 1];
             const float dx = x1 - x0, dz = z1 - z0, l = sqrtf(dx * dx + dz * dz) + 0.0001f;
             const float nx = -dz / l, nz = dx / l;
-            const float w0 = 0.55f - 0.035f * j, w1 = 0.55f - 0.035f * (j + 1);
-            float p0 = 0.5f + 0.5f * sinf(j * 0.55f - t * 0.09f + k * 1.1f);
-            float p1 = 0.5f + 0.5f * sinf((j + 1) * 0.55f - t * 0.09f + k * 1.1f);
+            const float w0 = 1.0f - 0.05f * j, w1 = 1.0f - 0.05f * (j + 1);
+            float p0 = 0.5f + 0.5f * sinf(j * 0.5f - t * 0.09f + k * 1.1f);
+            float p1 = 0.5f + 0.5f * sinf((j + 1) * 0.5f - t * 0.09f + k * 1.1f);
             const unsigned int c0 = lvMix(cLo, cHi, p0 * p0), c1 = lvMix(cLo, cHi, p1 * p1);
             swQuadC(v, i, x0 - nx * w0, 0.15f, z0 - nz * w0, c0, x0 + nx * w0, 0.15f, z0 + nz * w0, c0,
                           x1 + nx * w1, 0.15f, z1 + nz * w1, c1, x1 - nx * w1, 0.15f, z1 - nz * w1, c1);
@@ -976,20 +982,20 @@ static void rj_DrawParts() {
 // linea de aviso de la embestida: cinta ancha del ancho letal + chevrones + lvBeam al centro
 static void rj_DrawLane() {
     const float ang = atan2f(rj_dirX, rj_dirZ);
-    float len = rj_ChordEnd(rj_x, rj_z, rj_dirX, rj_dirZ, 18.5f); if (len < 6.0f) len = 6.0f;
+    float len = rj_ChordEnd(rj_x, rj_z, rj_dirX, rj_dirZ, 36.0f); if (len < 6.0f) len = 6.0f;
     const bool locked = rj_st >= 52;
     const int pulse = (rj_t & 4) ? 1 : 0;
     const float fx = rj_dirX, fz = rj_dirZ, nx = -rj_dirZ, nz = rj_dirX, W = 2.8f;
-    LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * (6 + 12 * 8)); int i = 0;
+    LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * (6 + 12 * 12)); int i = 0;
     const unsigned int c0 = locked ? RGBA(255, 120, 60, 40) : RGBA(255, 40, 30, 20);
     const unsigned int c1 = locked ? RGBA(255, 70, 40, 150 + 60 * pulse) : RGBA(255, 40, 30, 90);
     const float y = 0.13f;
     swQuadC(v, i, rj_x - nx * W, y, rj_z - nz * W, c0, rj_x + nx * W, y, rj_z + nz * W, c0,
                   rj_x + fx * len + nx * W, y, rj_z + fz * len + nz * W, c1, rj_x + fx * len - nx * W, y, rj_z + fz * len - nz * W, c1);
     const unsigned int cc = locked ? RGBA(255, 236, 200, 230) : RGBA(255, 150, 90, 170);
-    float ph = (float)(rj_t % 12) * 0.5f;                              // los chevrones avanzan hacia ti
-    for (int k = 0; k < 8; ++k) {
-        const float s = 6.0f + ph + k * 6.0f;
+    float ph = (float)(rj_t % 14) * 0.5f;                              // los chevrones avanzan hacia ti
+    for (int k = 0; k < 12; ++k) {
+        const float s = 6.0f + ph + k * 7.0f;
         if (s + 1.4f > len) break;
         for (int sd = -1; sd <= 1; sd += 2) {
             const float ax = rj_x + fx * s + nx * sd * 1.8f, az = rj_z + fz * s + nz * sd * 1.8f;
@@ -1000,7 +1006,7 @@ static void rj_DrawLane() {
     }
     sceGumLoadIdentity();
     sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, i, 0, v);
-    lvBeam(rj_x, 0.16f, rj_z, ang, len, 0.5f, locked ? RGBA(255, 244, 210, 235) : RGBA(255, 80, 50, 150 + 60 * pulse));
+    lvBeam(rj_x, 0.16f, rj_z, ang, len, 0.7f, locked ? RGBA(255, 244, 210, 235) : RGBA(255, 80, 50, 150 + 60 * pulse));
 }
 
 static void br_Draw(float px, float py, float pz) {
@@ -1017,11 +1023,11 @@ static void br_Draw(float px, float py, float pz) {
     if (rj_s == RJS_SLASH && rj_st < 48) {                           // aviso del tajo: punto de impacto y alcance
         const int a = 80 + ((rj_t & 8) ? 70 : 0);
         lvRing3D(rj_ix, 0.13f, rj_iz, 2.0f + 0.04f * rj_st, 0.6f, RGBA(255, 40, 30, a));
-        lvRing3D(rj_ix, 0.12f, rj_iz, 16.0f, 0.3f, RGBA(255, 60, 40, 50 + ((rj_t & 8) ? 30 : 0)));
+        lvRing3D(rj_ix, 0.12f, rj_iz, 29.0f, 0.45f, RGBA(255, 60, 40, 50 + ((rj_t & 8) ? 30 : 0)));
     }
     for (int w = 0; w < 3; ++w) if (rj_wv[w].on) {                   // onda roja que se salta
-        lvRing3D(rj_wv[w].x, 0.12f, rj_wv[w].z, rj_wv[w].r, 1.0f, RGBA(230, 20, 24, 230));
-        lvRing3D(rj_wv[w].x, 0.14f, rj_wv[w].z, rj_wv[w].r, 0.32f, RGBA(255, 190, 150, 255));
+        lvRing3D(rj_wv[w].x, 0.12f, rj_wv[w].z, rj_wv[w].r, 1.4f, RGBA(230, 20, 24, 230));
+        lvRing3D(rj_wv[w].x, 0.14f, rj_wv[w].z, rj_wv[w].r, 0.45f, RGBA(255, 190, 150, 255));
     }
     sceGuDepthMask(GU_FALSE); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
     sceGumLoadIdentity();

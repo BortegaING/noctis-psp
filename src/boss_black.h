@@ -5,7 +5,8 @@
 // Usa: addLimb/addBall/addLoft (char_prims.h), swBoxLit/swBoxL/swQuadC/swRand (skyworld.h).
 //
 // Escenario: noche negro-violeta con polvo dorado y un sol negro; losa de marmol negro de
-//   40x40 con lineas doradas (la losa ES la caja de suelo, tope y=0); 4 columnas con brasero.
+//   80x80 con lineas doradas (la losa ES la caja de suelo, tope y=0); 8 columnas con brasero.
+//   Arena grande a proposito: hay que correr, saltar las ondas y escapar del jinete.
 // Jefe: caballo negro de ojos ambar que trota en circulo, jinete encapuchado y una BALANZA
 //   dorada (dos platillos que oscilan). La balanza se levanta para el JUEGO DE DADOS.
 // Dados: ambos tiran 1..6 (HUD con dados girando). El MAYOR PIERDE: si el tuyo es mayor
@@ -17,7 +18,8 @@
 
 // ---------------------------------------------------------------- constantes
 static const float BK_PI = 3.14159265f, BK_TAU = 6.2831853f;
-static const float BK_CX = 0.0f, BK_CZ = -3.0f, BK_RADIUS = 11.0f;   // circulo por donde trota
+static const float BK_CX0 = 0.0f, BK_CZ0 = -4.0f, BK_RADIUS = 22.0f;  // circulo por donde trota (centro inicial)
+static const float BK_SPEED = 0.20f, BK_WAVE_V = 0.5f, BK_WAVE_MAX = 60.0f;
 static const int   BK_HPMAX = 100;
 
 static const unsigned int BK_GOLD   = RGBA(222, 178,  78, 255);
@@ -37,12 +39,13 @@ enum { BK_INTRO, BK_FIGHT, BK_CALL, BK_WAIT, BK_ROLL, BK_RESULT, BK_DYING, BK_DE
 // ---------------------------------------------------------------- estado
 static int   bk_st = BK_INTRO, bk_stT = 0, bk_t = 0, bk_anim = 0;
 static int   bk_hp = BK_HPMAX, bk_done = 0, bk_built = 0, bk_ph2Said = 0;
-static float bk_bx = 0, bk_by = 0, bk_bz = -14, bk_yaw = 0, bk_ang = 3.14159f, bk_rad = 36.0f;
+static float bk_bx = 0, bk_by = 0, bk_bz = -26, bk_yaw = 0, bk_ang = 3.14159f, bk_rad = 72.0f;
+static float bk_cx = 0, bk_cz = -4;                          // centro del circulo (sigue al jugador, despacio)
 static float bk_spd = 0, bk_ph = 0, bk_dir = 1.0f, bk_amp = 0, bk_bob = 0, bk_alpha = 0;
 static float bk_raise = 0, bk_raiseT = 0, bk_beamTh = 0, bk_beamTT = 0;
 static int   bk_scaleOn = 1;
 static int   bk_diceT = 330, bk_atkT = 150, bk_orbs = 0, bk_orbT = 0, bk_windT = 0;
-static int   bk_waveT = 0, bk_waveTot = 190, bk_waveHit = 0, bk_waveN = 3, bk_waveSp = 56;
+static int   bk_waveT = 0, bk_waveTot = 236, bk_waveHit = 0, bk_waveN = 3, bk_waveSp = 56;
 static float bk_waveX = 0, bk_waveZ = 0;
 static int   bk_pVal = 1, bk_bVal = 1, bk_res = 0;          // dados y resultado (0 empate, 1 pierdes tu, 2 pierde el)
 static int   bk_hurt = 0, bk_shakeT = 0, bk_contactCd = 0;
@@ -239,58 +242,66 @@ static void bk_FlatDisc(LineVertex *g, int &i, int cap, float cx, float cz, floa
 
 static void bk_BuildStage(LineVertex *g, int &i, int cap) {
     const unsigned int MT = RGBA(58, 56, 76, 255), MB = RGBA(26, 24, 38, 255);
-    // losa de marmol negro (techo y=0) y la base escalonada que se hunde en la oscuridad
-    if (i + 36 <= cap) swBoxLit(g, i, 0.0f, -3.0f, 0.0f, 40.0f, 40.0f, 3.0f, MT, MB);
-    if (i + 36 <= cap) swBoxLit(g, i, 0.0f, -9.0f, 0.0f, 34.0f, 34.0f, 6.0f, RGBA(34, 30, 46, 255), RGBA(14, 12, 22, 255));
-    if (i + 36 <= cap) swBoxLit(g, i, 0.0f, -17.0f, 0.0f, 26.0f, 26.0f, 8.0f, RGBA(28, 24, 40, 255), RGBA(10, 8, 18, 255));
-    if (i + 36 <= cap) swBoxLit(g, i, 0.0f, -27.0f, 0.0f, 16.0f, 16.0f, 10.0f, RGBA(22, 18, 32, 255), RGBA(8, 6, 14, 255));
+    // losa de marmol negro de 80x80 (techo y=0) y la base escalonada que se hunde en la oscuridad
+    if (i + 36 <= cap) swBoxLit(g, i, 0.0f, -3.0f, 0.0f, 80.0f, 80.0f, 3.0f, MT, MB);
+    if (i + 36 <= cap) swBoxLit(g, i, 0.0f, -9.0f, 0.0f, 68.0f, 68.0f, 6.0f, RGBA(34, 30, 46, 255), RGBA(14, 12, 22, 255));
+    if (i + 36 <= cap) swBoxLit(g, i, 0.0f, -17.0f, 0.0f, 52.0f, 52.0f, 8.0f, RGBA(28, 24, 40, 255), RGBA(10, 8, 18, 255));
+    if (i + 36 <= cap) swBoxLit(g, i, 0.0f, -27.0f, 0.0f, 32.0f, 32.0f, 10.0f, RGBA(22, 18, 32, 255), RGBA(8, 6, 14, 255));
     // ribete dorado en el borde de la losa
     if (i + 120 <= cap) {
-        swBoxLit(g, i, 0.0f, -0.02f, -19.6f, 40.0f, 0.8f, 0.2f, BK_GOLD, BK_GOLDD);
-        swBoxLit(g, i, 0.0f, -0.02f, 19.6f, 40.0f, 0.8f, 0.2f, BK_GOLD, BK_GOLDD);
-        swBoxLit(g, i, -19.6f, -0.02f, 0.0f, 0.8f, 38.4f, 0.2f, BK_GOLD, BK_GOLDD);
-        swBoxLit(g, i, 19.6f, -0.02f, 0.0f, 0.8f, 38.4f, 0.2f, BK_GOLD, BK_GOLDD);
+        swBoxLit(g, i, 0.0f, -0.02f, -39.4f, 80.0f, 1.2f, 0.2f, BK_GOLD, BK_GOLDD);
+        swBoxLit(g, i, 0.0f, -0.02f, 39.4f, 80.0f, 1.2f, 0.2f, BK_GOLD, BK_GOLDD);
+        swBoxLit(g, i, -39.4f, -0.02f, 0.0f, 1.2f, 77.6f, 0.2f, BK_GOLD, BK_GOLDD);
+        swBoxLit(g, i, 39.4f, -0.02f, 0.0f, 1.2f, 77.6f, 0.2f, BK_GOLD, BK_GOLDD);
     }
     // vetas claras del marmol
-    for (int k = 0; k < 12; ++k) {
-        const float x0 = (swRand(k, 1, 41u) - 0.5f) * 34.0f, z0 = (swRand(k, 2, 42u) - 0.5f) * 34.0f;
-        const float a = swRand(k, 3, 43u) * BK_TAU, l = 3.0f + 6.0f * swRand(k, 4, 44u);
-        bk_FlatQuad(g, i, cap, x0, z0, x0 + sinf(a) * l, z0 + cosf(a) * l, 0.09f, 0.10f, RGBA(92, 88, 116, 255));
+    for (int k = 0; k < 24; ++k) {
+        const float x0 = (swRand(k, 1, 41u) - 0.5f) * 70.0f, z0 = (swRand(k, 2, 42u) - 0.5f) * 70.0f;
+        const float a = swRand(k, 3, 43u) * BK_TAU, l = 6.0f + 12.0f * swRand(k, 4, 44u);
+        bk_FlatQuad(g, i, cap, x0, z0, x0 + sinf(a) * l, z0 + cosf(a) * l, 0.14f, 0.10f, RGBA(92, 88, 116, 255));
+    }
+    // losetas: cuadricula tenue cada 8u (da sensacion de distancia al correr)
+    for (int k = -4; k <= 4; ++k) {
+        const float v = k * 8.0f;
+        bk_FlatQuad(g, i, cap, v, -38.0f, v, 38.0f, 0.12f, 0.09f, RGBA(74, 70, 96, 255));
+        bk_FlatQuad(g, i, cap, -38.0f, v, 38.0f, v, 0.12f, 0.09f, RGBA(74, 70, 96, 255));
     }
     // lineas doradas: anillos, estrella {8/3}, rayos y emblema de la balanza al centro
     const unsigned int GL = RGBA(206, 160, 64, 255), GB = RGBA(244, 204, 100, 255);
-    bk_FlatRing(g, i, cap, 0.0f, 0.0f, 17.5f, 0.5f, 0.14f, GL, 40);
-    bk_FlatRing(g, i, cap, 0.0f, 0.0f, 12.0f, 0.3f, 0.14f, GL, 40);
-    bk_FlatRing(g, i, cap, 0.0f, 0.0f, 6.0f, 0.3f, 0.14f, GL, 32);
+    bk_FlatRing(g, i, cap, 0.0f, 0.0f, 35.0f, 0.9f, 0.14f, GL, 72);
+    bk_FlatRing(g, i, cap, 0.0f, 0.0f, 24.0f, 0.6f, 0.14f, GL, 56);
+    bk_FlatRing(g, i, cap, 0.0f, 0.0f, 12.0f, 0.6f, 0.14f, GL, 40);
     for (int k = 0; k < 8; ++k) {
         const float a0 = BK_TAU * k / 8.0f + 0.3927f, a1 = BK_TAU * ((k + 3) % 8) / 8.0f + 0.3927f;
-        bk_FlatQuad(g, i, cap, sinf(a0) * 12.0f, cosf(a0) * 12.0f, sinf(a1) * 12.0f, cosf(a1) * 12.0f, 0.22f, 0.14f, GL);
+        bk_FlatQuad(g, i, cap, sinf(a0) * 24.0f, cosf(a0) * 24.0f, sinf(a1) * 24.0f, cosf(a1) * 24.0f, 0.44f, 0.14f, GL);
         const float b = BK_TAU * k / 8.0f;
-        bk_FlatQuad(g, i, cap, sinf(b) * 6.0f, cosf(b) * 6.0f, sinf(b) * 17.5f, cosf(b) * 17.5f, 0.2f, 0.14f, GL);
+        bk_FlatQuad(g, i, cap, sinf(b) * 12.0f, cosf(b) * 12.0f, sinf(b) * 35.0f, cosf(b) * 35.0f, 0.4f, 0.14f, GL);
     }
-    bk_FlatQuad(g, i, cap, -2.4f, -1.0f, 2.4f, -1.0f, 0.22f, 0.16f, GB);            // viga
-    bk_FlatQuad(g, i, cap, 0.0f, -1.0f, 0.0f, 2.2f, 0.26f, 0.16f, GB);              // poste
-    bk_FlatQuad(g, i, cap, -2.4f, -1.0f, -2.4f, -0.1f, 0.08f, 0.16f, GB);           // cadenas
-    bk_FlatQuad(g, i, cap, 2.4f, -1.0f, 2.4f, -0.1f, 0.08f, 0.16f, GB);
-    bk_FlatRing(g, i, cap, -2.4f, 0.4f, 0.7f, 0.2f, 0.16f, GB, 20);                  // platillos
-    bk_FlatRing(g, i, cap, 2.4f, 0.4f, 0.7f, 0.2f, 0.16f, GB, 20);
-    bk_FlatDisc(g, i, cap, 0.0f, 2.6f, 0.45f, 0.16f, GB, 12);                       // base
-    // 4 columnas negras con bandas doradas y un brasero de brasas, fuera de la losa
-    for (int a = 0; a < 4; ++a) {
-        const float x = (a & 1) ? 24.0f : -24.0f, z = (a & 2) ? 24.0f : -24.0f;
+    bk_FlatQuad(g, i, cap, -4.8f, -2.0f, 4.8f, -2.0f, 0.44f, 0.16f, GB);            // viga
+    bk_FlatQuad(g, i, cap, 0.0f, -2.0f, 0.0f, 4.4f, 0.52f, 0.16f, GB);              // poste
+    bk_FlatQuad(g, i, cap, -4.8f, -2.0f, -4.8f, -0.2f, 0.16f, 0.16f, GB);           // cadenas
+    bk_FlatQuad(g, i, cap, 4.8f, -2.0f, 4.8f, -0.2f, 0.16f, 0.16f, GB);
+    bk_FlatRing(g, i, cap, -4.8f, 0.8f, 1.4f, 0.4f, 0.16f, GB, 24);                  // platillos
+    bk_FlatRing(g, i, cap, 4.8f, 0.8f, 1.4f, 0.4f, 0.16f, GB, 24);
+    bk_FlatDisc(g, i, cap, 0.0f, 5.2f, 0.9f, 0.16f, GB, 12);                        // base
+    // 8 columnas negras con bandas doradas y un brasero de brasas, fuera de la losa
+    for (int a = 0; a < 8; ++a) {
+        float x, z;
+        if (a < 4) { x = (a & 1) ? 50.0f : -50.0f; z = (a & 2) ? 50.0f : -50.0f; }
+        else       { x = (a == 4) ? 54.0f : (a == 5) ? -54.0f : 0.0f; z = (a == 6) ? 54.0f : (a == 7) ? -54.0f : 0.0f; }
         if (i + 200 > cap) break;
-        swBoxLit(g, i, x, -16.0f, z, 3.4f, 3.4f, 56.0f, RGBA(44, 40, 60, 255), RGBA(14, 12, 22, 255));
-        swBoxLit(g, i, x, 4.0f, z, 3.9f, 3.9f, 0.7f, BK_GOLD, BK_GOLDD);
-        swBoxLit(g, i, x, 14.0f, z, 3.9f, 3.9f, 0.7f, BK_GOLD, BK_GOLDD);
-        swBoxLit(g, i, x, 24.0f, z, 3.9f, 3.9f, 0.7f, BK_GOLD, BK_GOLDD);
-        swBoxLit(g, i, x, 40.0f, z, 4.8f, 4.8f, 1.2f, BK_GOLD, BK_GOLDD);
-        swBoxLit(g, i, x, 41.2f, z, 2.0f, 2.0f, 1.5f, RGBA(255, 160, 44, 255), RGBA(200, 90, 20, 255));
+        swBoxLit(g, i, x, -16.0f, z, 5.0f, 5.0f, 72.0f, RGBA(44, 40, 60, 255), RGBA(14, 12, 22, 255));
+        swBoxLit(g, i, x, 6.0f, z, 5.8f, 5.8f, 1.0f, BK_GOLD, BK_GOLDD);
+        swBoxLit(g, i, x, 22.0f, z, 5.8f, 5.8f, 1.0f, BK_GOLD, BK_GOLDD);
+        swBoxLit(g, i, x, 38.0f, z, 5.8f, 5.8f, 1.0f, BK_GOLD, BK_GOLDD);
+        swBoxLit(g, i, x, 56.0f, z, 7.2f, 7.2f, 1.6f, BK_GOLD, BK_GOLDD);
+        swBoxLit(g, i, x, 57.6f, z, 3.0f, 3.0f, 2.2f, RGBA(255, 160, 44, 255), RGBA(200, 90, 20, 255));
     }
     // monolitos negros flotando a lo lejos (profundidad en la niebla)
-    for (int k = 0; k < 10; ++k) {
+    for (int k = 0; k < 16; ++k) {
         if (i + 40 > cap) break;
-        const float a = k * 0.6283f + swRand(k, 5, 51u) * 0.5f, r = 48.0f + 30.0f * swRand(k, 6, 52u);
-        const float w = 6.0f + 8.0f * swRand(k, 7, 53u), h = 18.0f + 30.0f * swRand(k, 8, 54u), y0 = -40.0f + 34.0f * swRand(k, 9, 55u);
+        const float a = k * 0.3927f + swRand(k, 5, 51u) * 0.3f, r = 85.0f + 55.0f * swRand(k, 6, 52u);
+        const float w = 10.0f + 14.0f * swRand(k, 7, 53u), h = 30.0f + 40.0f * swRand(k, 8, 54u), y0 = -60.0f + 50.0f * swRand(k, 9, 55u);
         swBoxLit(g, i, sinf(a) * r, y0, cosf(a) * r, w, w * (0.6f + 0.5f * swRand(k, 10, 56u)), h, RGBA(36, 30, 52, 255), RGBA(12, 8, 20, 255));
     }
 }
@@ -303,18 +314,19 @@ static void bk_Enter(BossIO &io, LineVertex *geo, int geoCap, int *geoN,
     bk_BuildStage(geo, i, geoCap);
     if (geoN) *geoN = i;
     int nb = 0;
-    if (boxes && boxCap > 0) boxes[nb++] = { 0.0f, 0.0f, 40.0f, 40.0f, 0.0f, RGBA(52, 50, 68, 255) };   // el suelo (techo y=0)
+    if (boxes && boxCap > 0) boxes[nb++] = { 0.0f, 0.0f, 80.0f, 80.0f, 0.0f, RGBA(52, 50, 68, 255) };   // el suelo (techo y=0)
     if (nBoxes) *nBoxes = nb;
     if (sx) *sx = 0.0f;
     if (sy) *sy = 0.2f;
-    if (sz) *sz = 15.0f;
+    if (sz) *sz = 30.0f;
     io.camYaw = 0.0f;
     sceKernelDcacheWritebackAll();
 
     bk_st = BK_INTRO; bk_stT = 0; bk_t = 0; bk_anim = 0;
     bk_hp = BK_HPMAX; bk_done = 0; bk_ph2Said = 0;
-    bk_ang = BK_PI; bk_rad = 36.0f; bk_dir = 1.0f; bk_spd = 0.0f; bk_ph = 0.0f; bk_amp = 0.0f; bk_bob = 0.0f;
-    bk_bx = BK_CX + sinf(bk_ang) * bk_rad; bk_bz = BK_CZ + cosf(bk_ang) * bk_rad; bk_by = 0.0f;
+    bk_cx = BK_CX0; bk_cz = BK_CZ0;
+    bk_ang = BK_PI; bk_rad = 72.0f; bk_dir = 1.0f; bk_spd = 0.0f; bk_ph = 0.0f; bk_amp = 0.0f; bk_bob = 0.0f;
+    bk_bx = bk_cx + sinf(bk_ang) * bk_rad; bk_bz = bk_cz + cosf(bk_ang) * bk_rad; bk_by = 0.0f;
     bk_yaw = atan2f(-bk_dir * cosf(bk_ang), bk_dir * sinf(bk_ang));
     bk_alpha = 0.0f; bk_raise = 0.0f; bk_raiseT = 0.0f; bk_beamTh = 0.0f; bk_beamTT = 0.0f; bk_scaleOn = 1;
     bk_diceT = 330; bk_atkT = 170; bk_orbs = 0; bk_orbT = 0; bk_windT = 0; bk_waveT = 0; bk_waveHit = 0;
@@ -325,18 +337,18 @@ static void bk_Enter(BossIO &io, LineVertex *geo, int geoCap, int *geoN,
 
 // ---- movimiento: trota en circulo; "stop" lo frena; "faceP" lo gira hacia el jugador
 static void bk_Move(BossIO &io, int stop, int faceP) {
-    const float tgt = stop ? 0.0f : 0.165f;
+    const float tgt = stop ? 0.0f : BK_SPEED;
     bk_spd += (tgt - bk_spd) * (stop ? 0.07f : 0.04f);
     if (stop && bk_spd < 0.003f) bk_spd = 0.0f;
     bk_ang += bk_dir * bk_spd / bk_rad;
     if (bk_ang > BK_TAU) bk_ang -= BK_TAU;
     if (bk_ang < 0.0f) bk_ang += BK_TAU;
-    bk_ph += bk_spd * 1.9f;
+    bk_ph += bk_spd * 1.6f;
     if (bk_ph > BK_TAU) bk_ph -= BK_TAU;
-    bk_amp = bk_spd / 0.165f;
+    bk_amp = bk_spd / BK_SPEED;
     if (bk_amp > 1.2f) bk_amp = 1.2f;
-    bk_bx = BK_CX + sinf(bk_ang) * bk_rad;
-    bk_bz = BK_CZ + cosf(bk_ang) * bk_rad;
+    bk_bx = bk_cx + sinf(bk_ang) * bk_rad;
+    bk_bz = bk_cz + cosf(bk_ang) * bk_rad;
     float want;
     if (faceP) want = atan2f(-(io.px - bk_bx), -(io.pz - bk_bz));
     else       want = atan2f(-bk_dir * cosf(bk_ang), bk_dir * sinf(bk_ang));
@@ -401,11 +413,11 @@ static void bk_Update(BossIO &io) {
     // -------------------------------------------------------------- entrada: galopa desde el vacio
     case BK_INTRO: {
         if (bk_t == 20) lvMessage("EL TERCER JINETE: HAMBRE", 170);
-        const float e = bk_Smooth(bk_t / 190.0f);
-        bk_rad = 36.0f - (36.0f - BK_RADIUS) * e;
-        bk_alpha = bk_Clamp01(bk_t / 70.0f);
+        const float e = bk_Smooth(bk_t / 240.0f);
+        bk_rad = 72.0f - (72.0f - BK_RADIUS) * e;
+        bk_alpha = bk_Clamp01(bk_t / 90.0f);
         bk_Move(io, 0, 0);
-        if (bk_t >= 200) { bk_st = BK_FIGHT; bk_stT = 0; bk_alpha = 1.0f; bk_rad = BK_RADIUS; }
+        if (bk_t >= 260) { bk_st = BK_FIGHT; bk_stT = 0; bk_alpha = 1.0f; bk_rad = BK_RADIUS; }
         break;
     }
     // -------------------------------------------------------------- pelea
@@ -413,6 +425,20 @@ static void bk_Update(BossIO &io) {
         const int ph2 = (bk_hp <= 50);
         if (ph2 && !bk_ph2Said) { bk_ph2Said = 1; lvMessage("EL HAMBRE SE VUELVE VORAZ", 120); }
         const int busy = (bk_windT > 0 || bk_waveT > 0 || bk_orbs > 0);
+        // el circulo de trote sigue al jugador despacio: no hay rincon donde quedarse quieto
+        {
+            float tx = io.px * 0.6f, tz = io.pz * 0.6f - 4.0f;
+            if (tx > 14.0f) tx = 14.0f;
+            if (tx < -14.0f) tx = -14.0f;
+            if (tz > 14.0f) tz = 14.0f;
+            if (tz < -14.0f) tz = -14.0f;
+            float ddx = tx - bk_cx, ddz = tz - bk_cz;
+            if (ddx > 0.06f) ddx = 0.06f;
+            if (ddx < -0.06f) ddx = -0.06f;
+            if (ddz > 0.06f) ddz = 0.06f;
+            if (ddz < -0.06f) ddz = -0.06f;
+            bk_cx += ddx; bk_cz += ddz;
+        }
         bk_Move(io, bk_windT > 0, bk_windT > 0);
         if (io.aiming) bk_Cam(io, 0.10f);              // con L la camara se fija en el
 
@@ -420,7 +446,7 @@ static void bk_Update(BossIO &io) {
         if (bk_windT > 0) {
             bk_raiseT = 1.0f;
             if (--bk_windT == 0) {
-                bk_waveN = ph2 ? 4 : 3; bk_waveSp = ph2 ? 48 : 56; bk_waveTot = ph2 ? 232 : 196;
+                bk_waveN = ph2 ? 4 : 3; bk_waveSp = ph2 ? 48 : 56; bk_waveTot = ph2 ? 268 : 236;
                 bk_waveT = bk_waveTot; bk_waveHit = 0; bk_waveX = bk_bx; bk_waveZ = bk_bz;
                 bk_raiseT = 0.0f; bk_shakeT = 18; g_lvFlash = 5;
             }
@@ -431,8 +457,8 @@ static void bk_Update(BossIO &io) {
             const float d = sqrtf((io.px - bk_waveX) * (io.px - bk_waveX) + (io.pz - bk_waveZ) * (io.pz - bk_waveZ));
             for (int w = 0; w < bk_waveN; ++w) {
                 const int st = w * bk_waveSp; if (el < st) continue;
-                const float R = (el - st) * 0.34f; if (R > 28.0f) continue;
-                if (!(bk_waveHit & (1 << w)) && fabsf(d - R) < 1.0f && io.py < 0.9f) {
+                const float R = (el - st) * BK_WAVE_V; if (R > BK_WAVE_MAX) continue;
+                if (!(bk_waveHit & (1 << w)) && fabsf(d - R) < 1.2f && io.py < 0.9f) {
                     bk_waveHit |= 1 << w; io.hp -= 12.0f; g_lvFlash = 10;
                 }
             }
@@ -441,18 +467,20 @@ static void bk_Update(BossIO &io) {
         // monedas y plumas oscuras
         if (bk_orbs > 0 && --bk_orbT <= 0) {
             float wx, wy, wz; bk_Loc2World(0.9f, 6.6f, -0.8f, wx, wy, wz);
-            lvFireOrb(wx, wy, wz, io.px, io.py + 1.7f, io.pz, 0.24f, (bk_orbs & 1) ? RGBA(210, 160, 40, 255) : RGBA(92, 52, 150, 255));
+            lvFireOrb(wx, wy, wz, io.px, io.py + 1.7f, io.pz, 0.30f, (bk_orbs & 1) ? RGBA(210, 160, 40, 255) : RGBA(92, 52, 150, 255));
             --bk_orbs; bk_orbT = 48;
         }
         // atropello: si te quedas en su camino
         if (bk_contactCd == 0 && bk_spd > 0.05f && io.py < 6.0f) {
             const float dx = io.px - bk_bx, dz = io.pz - bk_bz, l2 = dx * dx + dz * dz;
-            if (l2 < 3.0f * 3.0f) {
+            if (l2 < 3.5f * 3.5f) {
                 const float l = sqrtf(l2) + 0.001f;
                 io.hp -= 10.0f; g_lvFlash = 8; bk_contactCd = 70;
-                io.px += dx / l * 2.5f; io.pz += dz / l * 2.5f;
-                if (io.px > 19.0f) io.px = 19.0f; if (io.px < -19.0f) io.px = -19.0f;
-                if (io.pz > 19.0f) io.pz = 19.0f; if (io.pz < -19.0f) io.pz = -19.0f;
+                io.px += dx / l * 4.0f; io.pz += dz / l * 4.0f;
+                if (io.px > 38.0f) io.px = 38.0f;
+                if (io.px < -38.0f) io.px = -38.0f;
+                if (io.pz > 38.0f) io.pz = 38.0f;
+                if (io.pz < -38.0f) io.pz = -38.0f;
             }
         }
         // temporizadores: siguiente ataque / siguiente juego de dados
@@ -524,7 +552,7 @@ static void bk_Update(BossIO &io) {
     // -------------------------------------------------------------- muerte: la balanza se rompe y se desvanece
     case BK_DYING: {
         ++bk_stT;
-        bk_spd *= 0.90f; bk_amp = bk_spd / 0.165f;
+        bk_spd *= 0.90f; bk_amp = bk_spd / BK_SPEED;
         for (int k = 0; k < 3; ++k) {
             BkFrag &f = bk_frag[k];
             f.vy -= 0.03f; f.x += f.vx; f.y += f.vy; f.z += f.vz; f.ax += f.vax; f.az += f.vaz;
@@ -679,12 +707,12 @@ static void bk_DrawShadow() {
 
 // polvo dorado flotando por toda la losa (y chispas al morir)
 static void bk_DrawMotes() {
-    const int N = 36;
+    const int N = 56;
     LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30 * (N + 28)); int i = 0;
     for (int k = 0; k < N; ++k) {
-        const float a = swRand(k, 1, 5u) * BK_TAU, r = 4.0f + swRand(k, 2, 6u) * 24.0f;
+        const float a = swRand(k, 1, 5u) * BK_TAU, r = 4.0f + swRand(k, 2, 6u) * 50.0f;
         const float x = sinf(a) * r + 1.5f * sinf(bk_anim * 0.02f + k), z = cosf(a) * r + 1.5f * cosf(bk_anim * 0.017f + k * 1.3f);
-        const float y = fmodf(swRand(k, 3, 7u) * 16.0f + bk_anim * (0.02f + 0.03f * swRand(k, 4, 8u)), 16.0f);
+        const float y = fmodf(swRand(k, 3, 7u) * 20.0f + bk_anim * (0.02f + 0.03f * swRand(k, 4, 8u)), 20.0f);
         const float sz = 0.10f + 0.10f * swRand(k, 5, 9u);
         swBoxL(v, i, x, y, z, sz, sz, sz, (k & 3) ? RGBA(236, 190, 80, 255) : RGBA(150, 100, 190, 255));
     }
@@ -718,8 +746,8 @@ static void bk_Draw(float px, float py, float pz) {
             const int el = bk_waveTot - bk_waveT;
             for (int w = 0; w < bk_waveN; ++w) {
                 const int st = w * bk_waveSp; if (el < st) continue;
-                const float R = (el - st) * 0.34f; if (R > 28.0f) continue;
-                lvRing3D(bk_waveX, 0.22f, bk_waveZ, R, 1.0f, RGBA(176, 120, 28, 230));
+                const float R = (el - st) * BK_WAVE_V; if (R > BK_WAVE_MAX) continue;
+                lvRing3D(bk_waveX, 0.22f, bk_waveZ, R, 1.2f, RGBA(176, 120, 28, 230));
                 lvRing3D(bk_waveX, 0.26f, bk_waveZ, R, 0.3f, RGBA(255, 214, 120, 255));
             }
         }
@@ -779,7 +807,7 @@ static void bk_Backdrop() {
 }
 
 static unsigned int bk_Fog(float *nearF, float *farF) {
-    *nearF = 30.0f; *farF = 120.0f;
+    *nearF = 45.0f; *farF = 180.0f;
     return RGBA(40, 20, 50, 255);
 }
 

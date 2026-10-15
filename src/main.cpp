@@ -11,6 +11,14 @@
 #include <stdlib.h>
 #include <pspgu.h>
 #include <pspgum.h>
+// MEDIDOR DE CARGA: cuenta vertices y llamadas de dibujo 3D de CADA frame (incluidos los modulos
+// de los jefes) para estimar el rendimiento en la PSP sin la consola. SELECT lo muestra.
+static int g_vtxFrame = 0, g_drawFrame = 0, g_vtxLast = 0, g_drawLast = 0;
+static inline void noctisDrawArray(int prim, int vtype, int count, const void *ind, const void *verts) {
+    g_vtxFrame += count; ++g_drawFrame;
+    sceGumDrawArray(prim, vtype, count, ind, verts);
+}
+#define sceGumDrawArray(a, b, c, d, e) noctisDrawArray((a), (b), (c), (d), (e))
 #include <cmath>
 #include <cstdio>
 
@@ -2043,7 +2051,7 @@ int main(void) {
                     char t[8]; int k = 0; do { t[k++] = (char)('0' + q % 10); q /= 10; } while (q && k < 7);
                     while (k) pos[n++] = t[--k]; pos[n++] = ' ';
                 };
-                num('Z', playerZ); num('Y', playerY); pos[n] = 0; st.district = pos;
+                num('V', (float)g_vtxLast); num('D', (float)g_drawLast); pos[n] = 0; st.district = pos;   // carga del frame
             }
             st.objLabel = "OJOS "; st.matTaken = g_eyesKilled;
             st.matTotal = (g_lvFloor == 1 && g_eyesOn && g_lvUnlocked < 2) ? 30 : 0;
@@ -2119,6 +2127,7 @@ int main(void) {
         msGe  = msGe  * 0.9f + (float)(tGe  - tCpu  ) * 0.001f * 0.1f;
         msWait= msWait* 0.9f + (float)(tEnd - tGe   ) * 0.001f * 0.1f;
         tFrame = tEnd;
+        g_vtxLast = g_vtxFrame; g_drawLast = g_drawFrame; g_vtxFrame = g_drawFrame = 0;   // medidor de carga
         sceGuSwapBuffers();
     }
 

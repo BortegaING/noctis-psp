@@ -22,13 +22,16 @@
 
 static const float BW_PI  = 3.14159265f;
 static const float BW_TAU = 6.2831853f;
-static const float BW_R   = 18.0f;        // radio de la plataforma
-static const float BW_S   = 1.4f;         // escala del caballo
+static const float BW_R   = 40.0f;        // radio de la plataforma (arena grande: hay que correr y esquivar)
+static const float BW_S   = 2.0f;         // escala del caballo
 static const float BW_BY  = 3.4f;         // altura del centro del torso en el modelo (origen de giro)
 static const int   BW_HP  = 100;
 static const float BW_MASH_NEED = 6.0f;   // recorrido del analogo para despejarse
+static const float BW_ZR   = 3.6f;        // radio de cada zona de la lluvia de flechas
+static const float BW_HITR = 4.6f * BW_S; // radio (generoso) del blanco: caballo + jinete
+static const float BW_CENY = 1.1f * BW_S; // el centro del blanco, sobre el torso del caballo
 #define BW_NARR  16
-#define BW_NZONE 12
+#define BW_NZONE 16
 
 // paleta
 static const unsigned int BW_COAT  = RGBA(230, 228, 222, 255);
@@ -57,6 +60,7 @@ static float bwShakeAmp = 0.0f;
 static float bwTrail[8][3];
 static int   bwTrHead = 0, bwTrN = 0;
 static float bwLastPx = 0.0f, bwLastPz = 0.0f, bwLastHp = 100.0f;
+static float bwPvx = 0.0f, bwPvz = 0.0f;       // velocidad del jugador (u/frame): las flechas se le adelantan
 static unsigned int bwSeed = 0x1234ABCDu;
 static int   g_bwBuilt = 0, g_bwBodyN = 0, g_bwArrowN = 0;
 
@@ -298,36 +302,38 @@ static void bwBand(LineVertex *g, int &n, int cap, int N, float r0, float r1, fl
     }
 }
 static float bwUr(int ring, int k) {   // radio (con irregularidad) de los anillos de la roca de abajo
-    static const float ur[4] = { 18.0f, 13.5f, 7.5f, 0.0f };
+    const float K = BW_R / 18.0f;
+    const float ur[4] = { BW_R, 13.5f * K, 7.5f * K, 0.0f };
     if (ring == 0) return ur[0];
     if (ring == 3) return 0.0f;
     return ur[ring] * (0.86f + 0.28f * bwRnd(k, ring));
 }
 static void bwBuildStage(LineVertex *g, int cap, int &n) {
-    const int N = 28;
+    const int N = 40;
+    const float K = BW_R / 18.0f;     // todo el diseno esta pensado para radio 18: se escala por K
     const unsigned int cC = RGBA(252, 250, 244, 255), c1 = RGBA(246, 243, 235, 255), c2 = RGBA(238, 234, 223, 255), c3 = RGBA(228, 222, 206, 255);
-    // suelo: abanico central + 2 bandas
+    // suelo: abanico central + 2 bandas (las uniones doradas van un poco mas arriba: sin z-fighting a distancia)
     for (int k = 0; k < N && n + 3 <= cap; ++k) {
         const float a0 = BW_TAU * k / N, a1 = BW_TAU * (k + 1) / N;
-        g[n++] = { cC, 0.0f, 0.05f, 0.0f };
-        g[n++] = { bwLit(c1, a0, 0.05f), sinf(a0) * 7.0f, 0.05f, cosf(a0) * 7.0f };
-        g[n++] = { bwLit(c1, a1, 0.05f), sinf(a1) * 7.0f, 0.05f, cosf(a1) * 7.0f };
+        g[n++] = { cC, 0.0f, 0.0f, 0.0f };
+        g[n++] = { bwLit(c1, a0, 0.05f), sinf(a0) * 7.0f * K, 0.0f, cosf(a0) * 7.0f * K };
+        g[n++] = { bwLit(c1, a1, 0.05f), sinf(a1) * 7.0f * K, 0.0f, cosf(a1) * 7.0f * K };
     }
-    bwBand(g, n, cap, N, 7.0f, 13.0f, 0.05f, 0.05f, c1, c2, 0.05f);
-    bwBand(g, n, cap, N, 13.0f, 17.2f, 0.05f, 0.05f, c2, c3, 0.05f);
+    bwBand(g, n, cap, N, 7.0f * K, 13.0f * K, 0.0f, 0.0f, c1, c2, 0.05f);
+    bwBand(g, n, cap, N, 13.0f * K, 17.2f * K, 0.0f, 0.0f, c2, c3, 0.05f);
     // dorados: borde, anillo interior, emblema central y 8 rayos
-    bwBand(g, n, cap, N, 17.2f, 18.0f, 0.07f, 0.07f, BW_GOLD, BW_GOLDL, 0.05f);
-    bwBand(g, n, cap, N, 11.6f, 12.0f, 0.06f, 0.06f, BW_GOLD, BW_GOLD, 0.05f);
-    bwBand(g, n, cap, N, 2.2f, 2.6f, 0.06f, 0.06f, BW_GOLD, BW_GOLDL, 0.05f);
+    bwBand(g, n, cap, N, 17.2f * K, BW_R, 0.26f, 0.26f, BW_GOLD, BW_GOLDL, 0.05f);
+    bwBand(g, n, cap, N, 11.6f * K, 12.0f * K, 0.2f, 0.2f, BW_GOLD, BW_GOLD, 0.05f);
+    bwBand(g, n, cap, N, 2.2f * K, 2.6f * K, 0.22f, 0.22f, BW_GOLD, BW_GOLDL, 0.05f);
     for (int s = 0; s < 8 && n + 6 <= cap; ++s) {
-        const float a = BW_TAU * s / 8.0f + 0.3927f, rx = sinf(a), rz = cosf(a), px = rz * 0.13f, pz = -rx * 0.13f;
-        swQuadC(g, n, rx * 2.9f - px, 0.06f, rz * 2.9f - pz, BW_GOLD,  rx * 2.9f + px, 0.06f, rz * 2.9f + pz, BW_GOLD,
-                      rx * 11.2f + px, 0.06f, rz * 11.2f + pz, BW_GOLDL,  rx * 11.2f - px, 0.06f, rz * 11.2f - pz, BW_GOLDL);
+        const float a = BW_TAU * s / 8.0f + 0.3927f, rx = sinf(a), rz = cosf(a), px = rz * 0.13f * K, pz = -rx * 0.13f * K;
+        swQuadC(g, n, rx * 2.9f * K - px, 0.16f, rz * 2.9f * K - pz, BW_GOLD,  rx * 2.9f * K + px, 0.16f, rz * 2.9f * K + pz, BW_GOLD,
+                      rx * 11.2f * K + px, 0.16f, rz * 11.2f * K + pz, BW_GOLDL,  rx * 11.2f * K - px, 0.16f, rz * 11.2f * K - pz, BW_GOLDL);
     }
     // pared del borde
-    bwBand(g, n, cap, N, 18.0f, 18.0f, 0.0f, -1.8f, RGBA(226, 220, 204, 255), RGBA(176, 174, 176, 255), 0.10f);
+    bwBand(g, n, cap, N, BW_R, BW_R, 0.0f, -1.8f * K, RGBA(226, 220, 204, 255), RGBA(176, 174, 176, 255), 0.10f);
     // roca flotante de abajo: 3 anillos irregulares que se cierran en punta, azulando hacia el cielo
-    const float uy[4] = { -1.8f, -5.4f, -9.0f, -14.5f };
+    const float uy[4] = { -1.8f * K, -5.4f * K, -9.0f * K, -14.5f * K };
     const unsigned int uc[4] = { RGBA(190, 188, 190, 255), RGBA(166, 168, 180, 255), RGBA(176, 186, 206, 255), RGBA(214, 226, 246, 255) };
     for (int j = 0; j < 3; ++j) {
         for (int k = 0; k < N; ++k) {
@@ -342,31 +348,32 @@ static void bwBuildStage(LineVertex *g, int cap, int &n) {
         }
     }
 }
-// suelo (franjas en z que aproximan el circulo) y columnas rotas (decoracion + colision)
+// suelo (franjas de 2 u en z que aproximan el circulo) y columnas rotas (decoracion + colision)
 static void bwBuildColliders(CityBldg *bx, int &nb, int boxCap) {
-    for (int s = 0; s < 18 && nb < boxCap; ++s) {
-        const float zc = -17.0f + 2.0f * s;
+    for (int s = 0; s < 40 && nb < boxCap; ++s) {
+        const float zc = -BW_R + 1.0f + 2.0f * s;
         float hw = BW_R * BW_R - zc * zc; hw = hw > 1.0f ? sqrtf(hw) : 1.0f;
         bx[nb++] = { 0.0f, zc, hw * 2.0f + 0.6f, 2.0f, 0.0f, 0 };
     }
 }
 static void bwBuildColumns(LineVertex *g, int cap, int &n, CityBldg *bx, int &nb, int boxCap) {
     // el arco de adelante (donde estan el spawn, el guardado y el elevador) queda libre
-    static const float kAng[7] = { 70.0f, 106.7f, 143.3f, 180.0f, 216.7f, 253.3f, 290.0f };
-    static const float kH[7]   = { 3.4f, 1.3f, 2.8f, 3.8f, 1.1f, 2.4f, 3.0f };
+    static const float kAng[8] = { 60.0f, 95.0f, 130.0f, 165.0f, 200.0f, 235.0f, 270.0f, 305.0f };
+    static const float kH[8]   = { 5.2f, 2.0f, 4.4f, 6.0f, 1.7f, 3.8f, 4.8f, 2.6f };
+    const float cs = 1.6f;                         // escala de las piezas de cada columna
     const unsigned int cm = RGBA(226, 222, 212, 255), cw = RGBA(248, 246, 240, 255), cp = RGBA(214, 208, 192, 255);
-    for (int k = 0; k < 7; ++k) {
+    for (int k = 0; k < 8; ++k) {
         if (n + 520 > cap) break;
-        const float a = kAng[k] * 0.0174533f, rad = (k & 1) ? 12.6f : 14.4f, h = kH[k];
+        const float a = kAng[k] * 0.0174533f, rad = (k & 1) ? 25.0f : 33.0f, h = kH[k];
         const float x = sinf(a) * rad, z = cosf(a) * rad;
-        addLimb(g, n, x, 0.0f, z, x, 0.38f, z, 1.0f, 0.9f, 8, cp, RGBA(230, 224, 208, 255));          // plinto
-        addLimb(g, n, x, 0.38f, z, x + ((k & 1) ? 0.0f : 0.1f), h, z, 0.64f, 0.56f, 8, cm, cw);      // fuste
-        addLimb(g, n, x, 0.55f, z, x, 0.75f, z, 0.67f, 0.66f, 8, BW_GOLD, BW_GOLD);                   // banda dorada
-        if (k == 3) addLimb(g, n, x, h, z, x, h + 0.3f, z, 0.95f, 0.8f, 8, BW_GOLD, BW_GOLDL);        // la unica con capitel
-        else if (h > 2.2f) addLimb(g, n, x + 0.15f, h, z, x + 0.32f, h + 0.38f, z - 0.1f, 0.34f, 0.05f, 5, cm, cw);   // fractura
-        swBoxL(g, n, x + sinf(a + 0.5f) * 1.5f, 0.0f, z + cosf(a + 0.5f) * 1.5f, 0.7f, 0.6f, 0.45f, cp);   // escombro
-        if (k == 1 || k == 4) addLimb(g, n, x + 1.4f, 0.5f, z - 0.6f, x + 2.9f, 0.5f, z - 0.2f, 0.5f, 0.5f, 8, cm, cw);   // tambor caido
-        if (nb < boxCap) bx[nb++] = { x, z, 1.6f, 1.6f, h, cm };
+        addLimb(g, n, x, 0.0f, z, x, 0.38f * cs, z, 1.0f * cs, 0.9f * cs, 8, cp, RGBA(230, 224, 208, 255));            // plinto
+        addLimb(g, n, x, 0.38f * cs, z, x + ((k & 1) ? 0.0f : 0.1f * cs), h, z, 0.64f * cs, 0.56f * cs, 8, cm, cw);   // fuste
+        addLimb(g, n, x, 0.55f * cs, z, x, 0.75f * cs, z, 0.67f * cs, 0.66f * cs, 8, BW_GOLD, BW_GOLD);                // banda dorada
+        if (k == 3) addLimb(g, n, x, h, z, x, h + 0.3f * cs, z, 0.95f * cs, 0.8f * cs, 8, BW_GOLD, BW_GOLDL);          // la unica con capitel
+        else if (h > 3.5f) addLimb(g, n, x + 0.15f * cs, h, z, x + 0.32f * cs, h + 0.38f * cs, z - 0.1f * cs, 0.34f * cs, 0.05f * cs, 5, cm, cw);   // fractura
+        swBoxL(g, n, x + sinf(a + 0.5f) * 1.5f * cs, 0.0f, z + cosf(a + 0.5f) * 1.5f * cs, 0.7f * cs, 0.6f * cs, 0.45f * cs, cp);   // escombro
+        if (k == 1 || k == 4) addLimb(g, n, x + 1.4f * cs, 0.5f * cs, z - 0.6f * cs, x + 2.9f * cs, 0.5f * cs, z - 0.2f * cs, 0.5f * cs, 0.5f * cs, 8, cm, cw);   // tambor caido
+        if (nb < boxCap) bx[nb++] = { x, z, 1.6f * cs, 1.6f * cs, h, cm };
     }
 }
 
@@ -381,13 +388,23 @@ static void bwPlayerReset() {   // el jugador reaparecio: nada de flechas ni con
 }
 static void bwShoot(BossIO &io, float lateral) {
     float ox, oy, oz; bwXform(-1.05f, 6.15f, -3.3f, ox, oy, oz);     // la mano del arco
-    const float spd = 1.0f + 0.1f * bwPhase();
-    float dx = io.px + lateral - ox, dy = io.py + 1.7f - oy, dz = io.pz + lateral * 0.4f - oz;
+    const int ph = bwPhase();
+    const float spd = 1.5f + 0.15f * ph;
+    float tx = io.px, ty = io.py + 1.7f, tz = io.pz;
+    {   // adelanta el tiro hacia donde corre el jugador (mas en las fases altas): hay que cambiar de rumbo
+        const float k = (ph == 0) ? 0.0f : (ph == 1 ? 0.45f : 0.75f);
+        const float ex = tx - ox, ey = ty - oy, ez = tz - oz;
+        float T = sqrtf(ex * ex + ey * ey + ez * ez) / spd * k;
+        if (T > 40.0f) T = 40.0f;
+        tx += bwPvx * T; tz += bwPvz * T;
+    }
+    tx += lateral; tz += lateral * 0.4f;
+    const float dx = tx - ox, dy = ty - oy, dz = tz - oz;
     const float d = sqrtf(dx * dx + dy * dy + dz * dz) + 0.001f;
     for (int k = 0; k < BW_NARR; ++k) if (bwArr[k].life <= 0) {
         bwArr[k].x = ox; bwArr[k].y = oy; bwArr[k].z = oz;
         bwArr[k].vx = dx / d * spd; bwArr[k].vy = dy / d * spd; bwArr[k].vz = dz / d * spd;
-        bwArr[k].life = 260;
+        bwArr[k].life = 320;
         return;
     }
 }
@@ -406,12 +423,13 @@ static void bwStartAttack(BossIO &io) {
     if (pick == bwLastAtk && pick != 3) pick = (pick == 1) ? 2 : 1; // no repite
     bwAtk = pick; bwAtkT = 0; bwLastAtk = pick; bwTrumpDmg = 0;
     if (pick == 2) {                                                // lluvia: la primera cae sobre ti
-        bwNZ = 6 + 3 * ph;
+        bwNZ = 8 + 3 * ph;
         for (int k = 0; k < bwNZ; ++k) {
             float x = io.px, z = io.pz;
-            if (k > 0) { x += (bwRand() - 0.5f) * 20.0f; z += (bwRand() - 0.5f) * 20.0f; }
-            const float d = sqrtf(x * x + z * z);
-            if (d > 16.0f) { x *= 16.0f / d; z *= 16.0f / d; }
+            if (k == 0) { x += bwPvx * 45.0f; z += bwPvz * 45.0f; }                        // la primera, hacia donde corres
+            else { x += (bwRand() - 0.5f) * 46.0f; z += (bwRand() - 0.5f) * 46.0f; }       // el resto, repartidas por la arena
+            const float d = sqrtf(x * x + z * z), lim = BW_R * 0.9f;
+            if (d > lim) { x *= lim / d; z *= lim / d; }
             bwZ[k].x = x; bwZ[k].z = z; bwZ[k].t = -k * 6; bwZ[k].hit = 0;
         }
         lvMessage("¡LLUVIA DE FLECHAS!", 100);
@@ -440,7 +458,7 @@ static void bwAttackStep(BossIO &io) {
             bwPull = (float)(e % iv) / (float)iv;
             if (e % iv == 0 && e / iv < N) {
                 bwShoot(io, 0.0f);
-                if (ph >= 2) bwShoot(io, (e / iv & 1) ? 3.0f : -3.0f);
+                if (ph >= 2) bwShoot(io, (e / iv & 1) ? 6.0f : -6.0f);
                 bwPull = 0.0f;
             }
             if (e > N * iv + 10) bwEndAttack();
@@ -454,7 +472,7 @@ static void bwAttackStep(BossIO &io) {
             if (z.t == 78 && !z.hit) {
                 z.hit = 1;
                 const float dx = io.px - z.x, dz = io.pz - z.z;
-                if (dx * dx + dz * dz < 2.7f * 2.7f && io.py < 3.2f) { io.hp -= 14.0f; g_lvFlash = 8; }
+                if (dx * dx + dz * dz < BW_ZR * BW_ZR && io.py < 3.2f) { io.hp -= 14.0f; g_lvFlash = 8; }
             }
             if (z.t < 96) ++alive;
         }
@@ -476,9 +494,9 @@ static void bwPlace(float spdMul, int init) {
     bwAng += bwDir * (0.0115f + 0.0025f * ph) * spdMul;
     const float tt = bwAnim * 0.016f;
     float k = bwAnim / 160.0f; if (k > 1.0f) k = 1.0f; k = k * k * (3.0f - 2.0f * k);       // la entrada en picada
-    float R = 30.0f + 3.0f * sinf(tt * 0.7f), cy = 8.0f + 2.3f * sinf(tt * 1.1f + 1.0f);
-    R += (88.0f - R) * (1.0f - k);
-    cy += (48.0f - cy) * (1.0f - k);
+    float R = BW_R + 17.0f + 5.0f * sinf(tt * 0.7f), cy = 11.5f + 3.0f * sinf(tt * 1.1f + 1.0f);
+    R += (150.0f - R) * (1.0f - k);
+    cy += (75.0f - cy) * (1.0f - k);
     const float a = bwAng - (1.0f - k) * 1.2f;
     const float nx = sinf(a) * R, nz = cosf(a) * R, ny = cy + 0.3f * sinf(bwGal * 2.0f);
     if (init) { bwVx = cosf(a) * 0.35f * bwDir; bwVz = -sinf(a) * 0.35f * bwDir; bwVy = 0.0f; }
@@ -505,7 +523,7 @@ static void bwReset() {
     bwPull = 0.0f; bwFallV = 0.0f; bwShakeAmp = 0.0f; bwScale = BW_S; bwGal = 0.0f;
     bwAng = BW_PI + 0.6f; bwDir = 1.0f; bwYaw = 0.0f; bwPitch = 0.0f; bwRoll = 0.0f;
     bwTrHead = 0; bwTrN = 0; bwSeed = 0x1234ABCDu;
-    bwLastPx = 0.0f; bwLastPz = 9.0f; bwLastHp = 100.0f;
+    bwLastPx = 0.0f; bwLastPz = 30.0f; bwLastHp = 100.0f; bwPvx = bwPvz = 0.0f;
     bwClearShots();
     bwCX = bwCY = bwCZ = 0.0f;
     bwPlace(1.0f, 1);
@@ -526,7 +544,7 @@ static void bw_Enter(BossIO &io, LineVertex *geo, int geoCap, int *geoN, CityBld
     bwBuildColliders(boxes, nb, boxCap);
     bwBuildColumns(geo, geoCap, n, boxes, nb, boxCap);
     *geoN = n; *nBoxes = nb;
-    *sx = 0.0f; *sy = 0.0f; *sz = 9.0f;                 // el jugador de cara al cielo (-Z)
+    *sx = 0.0f; *sy = 0.0f; *sz = 30.0f;                // el jugador entra por el borde de la arena, de cara al centro (-Z)
     bwReset();
 }
 
@@ -539,7 +557,8 @@ static void bw_Update(BossIO &io) {
     // el jugador reaparecio (murio o cayo): se limpian flechas y confusion
     {
         const float jx = io.px - bwLastPx, jz = io.pz - bwLastPz;
-        if (bwT > 3 && (jx * jx + jz * jz > 144.0f || io.hp > bwLastHp + 20.0f)) bwPlayerReset();
+        if (bwT > 3 && (jx * jx + jz * jz > 144.0f || io.hp > bwLastHp + 20.0f)) { bwPlayerReset(); bwPvx = bwPvz = 0.0f; }
+        else { bwPvx += (jx - bwPvx) * 0.25f; bwPvz += (jz - bwPvz) * 0.25f; }
         bwLastPx = io.px; bwLastPz = io.pz; bwLastHp = io.hp;
     }
     if (bwT == 20) lvMessage("EL PRIMER JINETE: CONQUISTA", 170);
@@ -639,9 +658,9 @@ static void bw_Draw(float px, float py, float pz) {
     sceGuDisable(GU_CULL_FACE);
     const float tt = bwAnim * 0.016f;
     // motas de luz dorada que suben alrededor de la plataforma
-    for (int k = 0; k < 10; ++k) {
-        const float a = k * 2.2f + g_lvT * 0.004f * (1.0f + (float)(k % 3)), r = 5.0f + 12.0f * bwRnd(k, 3);
-        const float y = fmodf(g_lvT * 0.02f * (0.6f + bwRnd(k, 4)) + k * 1.7f, 11.0f) - 0.5f;
+    for (int k = 0; k < 14; ++k) {
+        const float a = k * 2.2f + g_lvT * 0.004f * (1.0f + (float)(k % 3)), r = 9.0f + 28.0f * bwRnd(k, 3);
+        const float y = fmodf(g_lvT * 0.02f * (0.6f + bwRnd(k, 4)) + k * 1.7f, 16.0f) - 0.5f;
         const float mx = sinf(a) * r, mz = cosf(a) * r;
         if (bwDepth(mx, y, mz) < 3.0f) continue;
         lvBox(mx, y, mz, 0.2f, 0.2f, lvMix(BW_GOLD, BW_GOLDL, bwRnd(k, 5)));
@@ -671,15 +690,15 @@ static void bw_Draw(float px, float py, float pz) {
         const BwArrow &a = bwArr[k];
         if (a.life <= 0 || bwDepth(a.x, a.y, a.z) < 4.0f) continue;
         float yaw, pitch; lvLookAngles(a.x, a.y, a.z, a.x + a.vx, a.y + a.vy, a.z + a.vz, yaw, pitch);
-        lvDrawAt(g_bwArrowV, g_bwArrowN, a.x, a.y, a.z, yaw, pitch, 1.0f, 0.0f);
+        lvDrawAt(g_bwArrowV, g_bwArrowN, a.x, a.y, a.z, yaw, pitch, 1.6f, 0.0f);
     }
     // flechas gigantes de la lluvia cayendo
     for (int k = 0; k < bwNZ; ++k) {
         const BwZone &z = bwZ[k];
         if (z.t < 60 || z.t >= 78) continue;
-        const float ay = 44.0f * (1.0f - (z.t - 60) / 18.0f) + 3.5f;
+        const float ay = 60.0f * (1.0f - (z.t - 60) / 18.0f) + 5.0f;
         if (bwDepth(z.x, ay, z.z) < 6.0f) continue;
-        lvDrawAt(g_bwArrowV, g_bwArrowN, z.x, ay, z.z, 0.0f, -BW_PI * 0.5f, 1.8f, 0.0f);
+        lvDrawAt(g_bwArrowV, g_bwArrowN, z.x, ay, z.z, 0.0f, -BW_PI * 0.5f, 2.6f, 0.0f);
     }
     // ---- pase con mezcla (sin escribir Z): avisos, estela, columnas de luz ----
     sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDepthMask(GU_TRUE);
@@ -690,7 +709,7 @@ static void bw_Draw(float px, float py, float pz) {
             const int idx = (bwTrHead - s) & 7;
             const int a0 = 150 - s * 21, a1 = 150 - (s + 1) * 21;
             bwRibbon(ax, ay, az, RGBA(255, 238, 176, a0 > 0 ? a0 : 0),
-                     bwTrail[idx][0], bwTrail[idx][1], bwTrail[idx][2], RGBA(255, 238, 176, a1 > 0 ? a1 : 0), 0.45f);
+                     bwTrail[idx][0], bwTrail[idx][1], bwTrail[idx][2], RGBA(255, 238, 176, a1 > 0 ? a1 : 0), 0.8f);
             ax = bwTrail[idx][0]; ay = bwTrail[idx][1]; az = bwTrail[idx][2];
         }
     }
@@ -701,25 +720,25 @@ static void bw_Draw(float px, float py, float pz) {
         if (bwDepth(z.x, 1.0f, z.z) < 5.0f) continue;               // pegada a la camara: se omite
         if (z.t < 78) {
             const float e = z.t / 60.0f > 1.0f ? 1.0f : z.t / 60.0f;
-            lvRing3D(z.x, 0.1f, z.z, 2.7f, 0.3f, RGBA(240, 96, 40, 150 + (int)(70.0f * e)));
-            lvRing3D(z.x, 0.12f, z.z, 2.7f * (1.0f - e) + 0.25f, 0.6f, RGBA(255, 196, 96, 200));
+            lvRing3D(z.x, 0.1f, z.z, BW_ZR, 0.45f, RGBA(240, 96, 40, 150 + (int)(70.0f * e)));
+            lvRing3D(z.x, 0.12f, z.z, BW_ZR * (1.0f - e) + 0.3f, 0.9f, RGBA(255, 196, 96, 200));
         } else {
             const float f = 1.0f - (z.t - 78) / 14.0f;
-            lvBox(z.x, 0.0f, z.z, 1.8f, 16.0f * f + 0.5f, RGBA(255, 244, 200, (int)(200.0f * f)));
-            lvRing3D(z.x, 0.12f, z.z, 2.7f * (2.0f - f), 0.4f * f + 0.1f, RGBA(255, 220, 140, (int)(200.0f * f)));
+            lvBox(z.x, 0.0f, z.z, 2.8f, 22.0f * f + 0.5f, RGBA(255, 244, 200, (int)(200.0f * f)));
+            lvRing3D(z.x, 0.12f, z.z, BW_ZR * (2.0f - f), 0.6f * f + 0.1f, RGBA(255, 220, 140, (int)(200.0f * f)));
         }
     }
     // cinta de punteria hacia el jugador durante el aviso de las flechas
     if (bwState == 0 && bwAtk == 1 && bwAtkT < 48) {
         float ox, oy, oz; bwXform(-1.05f, 6.15f, -3.3f, ox, oy, oz);
         const int al = 70 + (int)(60.0f * sinf(g_lvT * 0.5f) + 60.0f);
-        bwRibbon(ox, oy, oz, RGBA(255, 80, 40, al > 255 ? 255 : al), px, py + 1.7f, pz, RGBA(255, 200, 100, al / 2), 0.12f);
+        bwRibbon(ox, oy, oz, RGBA(255, 80, 40, al > 255 ? 255 : al), px, py + 1.7f, pz, RGBA(255, 200, 100, al / 2), 0.25f);
     }
     // estelas doradas de las flechas
     for (int k = 0; k < BW_NARR; ++k) {
         const BwArrow &a = bwArr[k];
         if (a.life <= 0) continue;
-        bwRibbon(a.x, a.y, a.z, RGBA(255, 236, 160, 210), a.x - a.vx * 6.0f, a.y - a.vy * 6.0f, a.z - a.vz * 6.0f, RGBA(255, 236, 160, 0), 0.16f);
+        bwRibbon(a.x, a.y, a.z, RGBA(255, 236, 160, 210), a.x - a.vx * 6.0f, a.y - a.vy * 6.0f, a.z - a.vz * 6.0f, RGBA(255, 236, 160, 0), 0.3f);
     }
     sceGuDepthMask(GU_FALSE); sceGuDisable(GU_BLEND);
     sceGumLoadIdentity();
@@ -731,10 +750,12 @@ static void bw_Hud(BossIO &io) {
     sceGuDisable(GU_DEPTH_TEST); sceGuDisable(GU_TEXTURE_2D);
     sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
     int sx = 0, sy = 0;
-    const int vis = (bwState < 2) ? lvProject(bwCX, bwCY + 1.5f, bwCZ, sx, sy) : 0;
+    const int vis = (bwState < 2) ? lvProject(bwCX, bwCY + BW_CENY, bwCZ, sx, sy) : 0;
     if (vis && bwState == 0) {                                 // aureola dorada: se lee sobre el cielo blanco
         const float p = sinf(g_lvT * 0.07f);
-        lvFan2D(sx, sy, 96 + (int)(8.0f * p), RGBA(255, 226, 140, 78), RGBA(255, 226, 140, 0), 22);
+        const float ex = bwCX - g_lvEye[0], ey = bwCY - g_lvEye[1], ez = bwCZ - g_lvEye[2];
+        int ar = (int)(2600.0f / (sqrtf(ex * ex + ey * ey + ez * ez) + 5.0f)) + 30; if (ar > 110) ar = 110;
+        lvFan2D(sx, sy, ar + (int)(8.0f * p), RGBA(255, 226, 140, 78), RGBA(255, 226, 140, 0), 22);
         if (bwHurt > 0) lvFan2D(sx, sy, 62, RGBA(255, 255, 255, 40 * bwHurt), RGBA(255, 255, 255, 0), 16);
         if (bwBlast > 0) {                                      // onda del estruendo
             int r = (30 - bwBlast) * 9 + 10; if (r > 260) r = 260;      // acotado: nada de vertices 2D lejisimos
@@ -779,14 +800,6 @@ static void bw_Hud(BossIO &io) {
 }
 
 // ---------------------------------------------------------------- cielo blanco luminoso (2D, sin Z)
-static short bwSh(float v) { if (v < -120.0f) v = -120.0f; if (v > 600.0f) v = 600.0f; return (short)v; }
-static void bwRay2D(int cx, int cy, float a, float half, int len, unsigned int cIn, unsigned int cOut) {
-    GradVertex *v = (GradVertex *)sceGuGetMemory(sizeof(GradVertex) * 3);
-    v[0] = { cIn,  (short)cx, (short)cy, 0 };
-    v[1] = { cOut, bwSh(cx + cosf(a - half) * len), bwSh(cy + sinf(a - half) * len), 0 };
-    v[2] = { cOut, bwSh(cx + cosf(a + half) * len), bwSh(cy + sinf(a + half) * len), 0 };
-    sceGuDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 3, 0, v);
-}
 static void bwCloud(int x, int y, int r, int a) {
     lvFan2D(x, y + r / 6, r, RGBA(255, 238, 200, a * 2 / 3), RGBA(255, 238, 200, 0), 14);       // base calida
     lvFan2D(x, y, r, RGBA(255, 255, 255, a), RGBA(255, 255, 255, 0), 16);
@@ -801,8 +814,7 @@ static void bw_Backdrop() {
     sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
     const float t = g_lvT * 0.016f;
     lvFan2D(240, 176, 330, RGBA(255, 236, 176, 120), RGBA(255, 236, 176, 0), 24);               // resplandor del horizonte
-    const int sunX = 352, sunY = 58;                                                           // sol: rayos que giran lento
-    for (int k = 0; k < 9; ++k) bwRay2D(sunX, sunY, k * 0.7f + t * 0.05f, 0.05f, 420, RGBA(255, 246, 200, 38), RGBA(255, 246, 200, 0));
+    const int sunX = 352, sunY = 58;                                                           // sol
     lvFan2D(sunX, sunY, 170, RGBA(255, 246, 208, 190), RGBA(255, 246, 208, 0), 24);
     lvFan2D(sunX, sunY, 56, RGBA(255, 255, 242, 230), RGBA(255, 255, 242, 0), 20);
     // nubes en 3 capas con paralaje segun hacia donde miras (periodo = vuelta completa: sin saltos)
@@ -829,7 +841,7 @@ static void bw_Backdrop() {
 }
 
 // niebla blanca luminosa: la plataforma (a <45 u) apenas se vela
-static unsigned int bw_Fog(float *nearF, float *farF) { *nearF = 40.0f; *farF = 200.0f; return RGBA(252, 248, 238, 255); }
+static unsigned int bw_Fog(float *nearF, float *farF) { *nearF = 60.0f; *farF = 300.0f; return RGBA(252, 248, 238, 255); }
 
 // blanco del autoapuntado: el jinete, un poco adelantado a donde va (la bala tarda)
 static int bw_AimTarget(float out[3]) {
@@ -837,15 +849,15 @@ static int bw_AimTarget(float out[3]) {
     const float ex = bwCX - g_lvEye[0], ey = bwCY - g_lvEye[1], ez = bwCZ - g_lvEye[2];
     float lead = sqrtf(ex * ex + ey * ey + ez * ez) / 1.8f;
     if (lead < 8.0f) lead = 8.0f;
-    if (lead > 22.0f) lead = 22.0f;
-    out[0] = bwCX + bwVx * lead; out[1] = bwCY + 1.5f + bwVy * lead; out[2] = bwCZ + bwVz * lead;
+    if (lead > 45.0f) lead = 45.0f;
+    out[0] = bwCX + bwVx * lead; out[1] = bwCY + BW_CENY + bwVy * lead; out[2] = bwCZ + bwVz * lead;
     return 1;
 }
-// impacto: esfera generosa (radio 6.5) sobre el conjunto caballo + jinete
+// impacto: esfera generosa (BW_HITR) sobre el conjunto caballo + jinete
 static bool bw_ShotHit(float x, float y, float z, int dmg) {
     if (bwState != 0 || bwT < 60) return false;
-    const float dx = x - bwCX, dy = y - (bwCY + 1.5f), dz = z - bwCZ;
-    if (dx * dx + dy * dy + dz * dz > 6.5f * 6.5f) return false;
+    const float dx = x - bwCX, dy = y - (bwCY + BW_CENY), dz = z - bwCZ;
+    if (dx * dx + dy * dy + dz * dz > BW_HITR * BW_HITR) return false;
     if (bwIFr > 0) return true;                                // la bala se gasta, sin dano doble
     if (dmg < 1) dmg = 1;
     bwHp -= dmg; bwHurt = 6; bwIFr = 2;
