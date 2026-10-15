@@ -373,7 +373,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
         if (edge & PSP_CTRL_UP)   { if (--g_lvMenuSel < 1) g_lvMenuSel = 12; }
         if (edge & PSP_CTRL_DOWN) { if (++g_lvMenuSel > 12) g_lvMenuSel = 1; }
         if (edge & PSP_CTRL_CIRCLE) g_lvMenu = 0;
-        if ((edge & PSP_CTRL_SELECT) && g_lvUnlocked < 2) { g_lvUnlocked = 2; lvMessage("PRUEBAS: PISO 2 ABIERTO", 90); }   // atajo de desarrollo
+        if ((edge & PSP_CTRL_SELECT) && g_lvUnlocked < 7) { g_lvUnlocked = 7; lvMessage("PRUEBAS: PISOS 1-7 ABIERTOS", 90); }   // atajo de desarrollo
         if (edge & PSP_CTRL_CROSS) {
             if (g_lvMenuSel > g_lvUnlocked) lvMessage("ESE PISO SIGUE CERRADO", 90);
             else if (g_lvMenuSel > 7)       lvMessage("PISO EN CONSTRUCCIÓN", 90);
