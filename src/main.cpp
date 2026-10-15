@@ -901,6 +901,7 @@ static void fontTexOn() {
 
 #include "hud.h"         // HUD nuevo: minimapa del sector REAL (usa drawRect/drawText/fontTexOn)
 #include "skyworld.h"    // MUNDO NUEVO: plataformas en el cielo por celdas, niebla HW, colosos de fondo
+#include "rig.h"         // hunter ARTICULADO: piernas/rodillas/brazos/codos/cabeza/faldon con su propio giro
 
 #if VIEWER_MODE
 // dibuja los 4 candidatos en fila sobre un turntable, sobre un piso oscuro.
@@ -1088,6 +1089,8 @@ int main(void) {
     int   paused = 0, prevStart = 0;
     float walkPhase = 0.0f, idleT = 0.0f;   // animacion del personaje
     float speed01 = 0.0f;                   // velocidad normalizada 0..1 para la pose de caminata
+    float landK = 0.0f;                     // 1 al aterrizar fuerte; decae (rig: agacharse y amortiguar)
+    float prevHeroYaw = 0.0f, turnLean = 0.0f;   // inclinarse hacia la curva al girar corriendo
     int   moving = 0;
     // ===== PRIMERA PERSONA: mirada + head-bob + sway del arma (constantes del agente de jugabilidad) =====
     float camPitch = 0.0f;                          // mirar arriba/abajo
@@ -1402,7 +1405,10 @@ int main(void) {
             playerY += velY;
             const float ghY = (prevY > playerY) ? prevY : playerY;
             const float gh  = groundHeight(playerX, playerZ, ghY);
-            if (playerY <= gh) { playerY = gh; velY = 0.0f; grounded = 1; } else grounded = 0;
+            if (playerY <= gh) {
+                if (!grounded && velY < -0.12f) landK = (velY < -0.40f) ? 1.0f : 0.6f;   // aterrizaje: el rig amortigua
+                playerY = gh; velY = 0.0f; grounded = 1;
+            } else grounded = 0;
             // ultima red: si aun asi quedo dentro de algo, sacarlo por la cara mas cercana
             unstick(playerX, playerY, playerZ);
             // ===== energia (EN) =====
@@ -1410,11 +1416,25 @@ int main(void) {
             if (en > EN_MAX) en = EN_MAX;
             if (en < 0.0f) en = 0.0f;
             // ===== animacion (segun velocidad real) =====
-            speed01 = sqrtf(velX * velX + velZ * velZ) / RUN_SPEED;
+            // Normalizado a FP_SPEED (la velocidad REAL a fondo, 0.11). Contra RUN_SPEED (0.22)
+            // nunca pasaba de 0.5: la marcha salia a media amplitud y se veia tiesa.
+            const float spdNow = sqrtf(velX * velX + velZ * velZ);
+            speed01 = spdNow / FP_SPEED;
             if (speed01 > 1.0f) speed01 = 1.0f;
-            moving = (velX * velX + velZ * velZ > 0.002f) ? 1 : 0;
-            if (moving) walkPhase += 0.17f;   // ritmo de paso acorde al RUN_SPEED bajo
+            moving = (velX * velX + velZ * velZ > 0.0004f) ? 1 : 0;
+            // La fase avanza con la DISTANCIA recorrida (1.4 rad por unidad ~ zancada de 4.5u
+            // por ciclo): los pies acompanan al suelo en vez de patinar a ritmo fijo.
+            if (moving && grounded) walkPhase += 1.4f * spdNow;
             idleT += 0.05f;
+            landK *= 0.84f; if (landK < 0.01f) landK = 0.0f;
+            {   // inclinarse hacia la curva (heroYaw crece = gira a la derecha = roll +)
+                float d = heroYaw - prevHeroYaw;
+                while (d >  3.14159265f) d -= 6.28318531f;
+                while (d < -3.14159265f) d += 6.28318531f;
+                float want = d * 5.0f; if (want > 0.30f) want = 0.30f; if (want < -0.30f) want = -0.30f;
+                turnLean += (want * speed01 - turnLean) * 0.18f;
+                prevHeroYaw = heroYaw;
+            }
             } else {
                 // ===== GRAVEDAD NO-ABAJO: caer/mover/saltar segun gravDir (wall-walk) =====
                 float rx, ry, rz, ffx, ffy, ffz, gx, gy, gz;
@@ -1710,6 +1730,11 @@ int main(void) {
         // volcar) y el balanceo tardaba dos ciclos en cerrar.
         {
             HunterPose pose = hunterPose(walkPhase, idleT, speed01, grounded);   // no llamarla hp: ensombrecia la VIDA del jugador
+            const int floatingNow = (!grounded && (pad.Buttons & PSP_CTRL_SQUARE) && en > 0.0f) ? 1 : 0;
+            // hunterRig ajusta tambien pose.bobY/lean (aterrizaje), por eso va ANTES del cuerpo
+            const HunterRig rig = hunterRig(pose, walkPhase, idleT, speed01, grounded, floatingNow,
+                                            aiming, meleeFx > 0 ? meleeFx / 8.0f : 0.0f, landK);
+            pose.roll += turnLean;                                  // se inclina hacia la curva
             const float HIP = 1.70f;
             sceGumLoadIdentity();
             ScePspFVector3 pp = { playerX, playerY, playerZ };
@@ -1727,7 +1752,7 @@ int main(void) {
             ScePspFVector3 body = { hunterPitchRad(pose), 0.0f, hunterRollRad(pose) };
             sceGumRotateXYZ(&body);
             ScePspFVector3 dn   = { 0.0f, -HIP, 0.0f }; sceGumTranslate(&dn);
-            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_heroV, 0, g_hero);
+            drawHunterRig(rig);   // antes: g_hero entero como una sola pieza rigida
         }
 
         // recursos: brillan al acercarse (seccion 12)

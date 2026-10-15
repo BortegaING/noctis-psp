@@ -4,6 +4,7 @@ Uso: python psp_eye.py [acciones...]
   ax:X:ms / ay:Y:ms -> nub analogico (-1..1) mantenido ms
   wait:ms           -> espera sin tocar nada
   hold:boton / free:boton -> mantiene / suelta un boton (ej. hold:l ... shot ... free:l)
+  sx:X / sy:Y       -> deja el nub inclinado hasta nuevo aviso (sy:-1 = adelante; sx:0 sy:0 suelta)
   shot[:nombre]     -> guarda el frame REAL del juego en build/<nombre>.png (gpu.buffer.screenshot)
 Si no hay ningun shot, al final guarda build/eye.png.
 Ej: python psp_eye.py shot:antes "ay:-1.0:1500" shot:despues
@@ -107,17 +108,26 @@ def screenshot(s, name, scale=2):
     _png(path, SCR_W * scale, SCR_H * scale, rows)
     return "build\\%s.png %dx%d fmt=%d" % (name, SCR_W * scale, SCR_H * scale, fmt)
 
+ALIAS = {"l": "ltrigger", "r": "rtrigger"}   # nombres del debugger de PPSSPP para los gatillos
+
 def main():
     port = find_port()
     s = ws_connect(port)
     out, shots = [], 0
+    stick = [0.0, 0.0]
     for arg in sys.argv[1:]:
         parts = arg.split(":")
         k = parts[0].lower()
+        if len(parts) > 1 and k in ("hold", "free"): parts[1] = ALIAS.get(parts[1].lower(), parts[1])
+        k = ALIAS.get(k, k)
         if k == "shot":
             out.append(screenshot(s, parts[1] if len(parts) > 1 else "eye")); shots += 1
         elif k == "wait":
             time.sleep(int(parts[1]) / 1000.0)
+        elif k in ("sx", "sy"):        # deja el nub INCLINADO (para sacar fotos en plena marcha); sx:0 sy:0 lo suelta
+            stick[0 if k == "sx" else 1] = float(parts[1])
+            ws_send(s, {"event": "input.analog.send", "stick": "left", "x": stick[0], "y": stick[1]})
+            time.sleep(0.05)
         elif k in ("hold", "free"):   # mantener/soltar un boton entre otras acciones (L apuntando, SELECT...)
             ws_send(s, {"event": "input.buttons.send", "buttons": {parts[1].lower(): k == "hold"}})
             time.sleep(0.05)
