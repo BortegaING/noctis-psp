@@ -1416,7 +1416,9 @@ int main(void) {
                     for (int b = 0; b < wf.spread; ++b) {
                         float off = (wf.spread > 1) ? ((float)b - (wf.spread - 1) * 0.5f) * 0.11f : 0.0f;
                         float ya = heroYaw + off, fx = sinf(ya), fz = -cosf(ya);
-                        float mx = playerX + fx * 0.7f, my = playerY + (locked ? 2.6f : 1.5f), mz = playerZ + fz * 0.7f;
+                        // sale de la BOCA de la pistola (mano izquierda al frente, a la altura del hombro)
+                        float mx = playerX + fx * 1.25f - cosf(heroYaw) * 0.45f, my = playerY + 2.6f,
+                              mz = playerZ + fz * 1.25f - sinf(heroYaw) * 0.45f;
                         float dx = fx, dy = 0.0f, dz = fz; int life = SHOT_LIFE;
                         if (locked) {
                             dx = aimT[0] - mx; dy = aimT[1] - my; dz = aimT[2] - mz;
@@ -1433,7 +1435,8 @@ int main(void) {
                             break;
                         }
                     }
-                    ammoMag[curRanged]--; en -= (float)cost; fireCD = wf.fireFrames;
+                    // cadencia 1.7x mas lenta (y el dano por bala sube a 2: levels.h LV_SHOT_DMG)
+                    ammoMag[curRanged]--; en -= (float)cost; fireCD = NOCTIS_SKYWORLD ? (wf.fireFrames * 17) / 10 : wf.fireFrames;
                     muzzle = 4; muzzleCol = weaponMuzzle(curRanged);
                 } else if (ammoMag[curRanged] == 0) {   // recarga automatica
                     ammoMag[curRanged] = kRanged[curRanged].magazine;
@@ -1882,25 +1885,49 @@ int main(void) {
         // hacia donde encara el heroe: lo usan el fogonazo del canon y el arco de melee
         const float fx = sinf(heroYaw), fz = -cosf(heroYaw);
 
-        // ---- balas (tracer brillante) ----
+        // ---- balas: TRAZADORA de energia (nucleo blanco alargado en la direccion del vuelo +
+        //      halo del color del arma, luz SUMADA, sin escribir Z). Antes: un cubo de color ----
+        sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xFFFFFFFF); sceGuDepthMask(GU_TRUE);
         for (int s = 0; s < 24; ++s) {
             if (g_shots[s].life <= 0) continue;
-            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
-            int vi = 0;
-            float bsz = g_shots[s].size;
-            addSolidBox(v, vi, g_shots[s].x, g_shots[s].y - bsz * 0.5f, g_shots[s].z,
-                        bsz, bsz, bsz, g_shots[s].col);
+            const Shot &b = g_shots[s];
+            float dx = b.vx, dy = b.vy, dz = b.vz;
+            const float L = sqrtf(dx * dx + dy * dy + dz * dz) + 1e-4f; dx /= L; dy /= L; dz /= L;
+            float ax = -dz, az = dx, al = sqrtf(ax * ax + az * az);           // perpendicular horizontal
+            if (al < 1e-3f) { ax = 1.0f; az = 0.0f; al = 1.0f; }
+            ax /= al; az /= al;
+            const float bx2 = dy * az, by2 = dz * ax - dx * az, bz2 = -dy * ax;  // d x a (perpendicular vertical)
+            const float len = 2.4f, w = b.size * 1.6f;
+            const float tx = b.x - dx * len, ty = b.y - dy * len, tz = b.z - dz * len;
+            const unsigned int halo = (b.col & 0x00FFFFFFu) | (150u << 24), core = RGBA(255, 255, 245, 255);
+            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 24); int vi = 0;
+            for (int pass = 0; pass < 2; ++pass) {
+                const float ww = pass ? w * 0.32f : w;                    // halo ancho / nucleo fino
+                const unsigned int c = pass ? core : halo;
+                swQuadC(v, vi, b.x + ax * ww, b.y, b.z + az * ww, c, tx + ax * ww * 0.25f, ty, tz + az * ww * 0.25f, c,
+                               tx - ax * ww * 0.25f, ty, tz - az * ww * 0.25f, c, b.x - ax * ww, b.y, b.z - az * ww, c);
+                swQuadC(v, vi, b.x + bx2 * ww, b.y + by2 * ww, b.z + bz2 * ww, c, tx + bx2 * ww * 0.25f, ty + by2 * ww * 0.25f, tz + bz2 * ww * 0.25f, c,
+                               tx - bx2 * ww * 0.25f, ty - by2 * ww * 0.25f, tz - bz2 * ww * 0.25f, c, b.x - bx2 * ww, b.y - by2 * ww, b.z - bz2 * ww, c);
+            }
             sceGumLoadIdentity();
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
         }
+        sceGuDepthMask(GU_FALSE); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
         // ---- fogonazo del canon ----
-        if (muzzle > 0) {
-            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
-            int vi = 0;
-            addSolidBox(v, vi, playerX + fx * 0.7f, playerY + 1.5f - 0.12f, playerZ + fz * 0.7f,
-                        0.24f, 0.24f, 0.24f, muzzleCol);
+        if (muzzle > 0) {   // fogonazo: estrella de luz SUMADA en la boca de la pistola
+            const float mx = playerX + fx * 1.35f - cosf(heroYaw) * 0.45f, my = playerY + 2.6f,
+                        mz = playerZ + fz * 1.35f - sinf(heroYaw) * 0.45f;
+            const float r = 0.35f + 0.12f * muzzle;
+            const unsigned int c = (muzzleCol & 0x00FFFFFFu) | (200u << 24), w = RGBA(255, 255, 240, 255);
+            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 24); int vi = 0;
+            swQuadC(v, vi, mx - r, my, mz, c, mx, my + r, mz, c, mx + r, my, mz, c, mx, my - r, mz, c);
+            swQuadC(v, vi, mx, my, mz - r, c, mx, my + r, mz, c, mx, my, mz + r, c, mx, my - r, mz, c);
+            swQuadC(v, vi, mx - r * 0.35f, my, mz, w, mx, my + r * 0.35f, mz, w, mx + r * 0.35f, my, mz, w, mx, my - r * 0.35f, mz, w);
+            swQuadC(v, vi, mx, my, mz - r * 0.35f, w, mx, my + r * 0.35f, mz, w, mx, my, mz + r * 0.35f, w, mx, my - r * 0.35f, mz, w);
+            sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xFFFFFFFF); sceGuDepthMask(GU_TRUE);
             sceGumLoadIdentity();
             sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
+            sceGuDepthMask(GU_FALSE); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
         }
         // ---- chispas de impacto (robot derribado) ----
         for (int q = 0; q < 12; ++q) {
@@ -2003,7 +2030,10 @@ int main(void) {
               st.grv = g1; }
             st.gravName = kGravName[gravG];
             st.px = playerX; st.pz = playerZ; st.yaw = heroYaw;
-            st.district = !NOCTIS_SKYWORLD ? "CAMPANARIO" : (g_lvFloor == 0 ? "CIELO" : g_lvFloor == 1 ? "PISO 1" : "PISO 2");
+            {
+                static const char *kZone[8] = { "CIELO", "PISO 1", "PISO 2", "PISO 3", "PISO 4", "PISO 5", "PISO 6", "PISO 7" };
+                st.district = !NOCTIS_SKYWORLD ? "CAMPANARIO" : kZone[(g_lvFloor >= 0 && g_lvFloor < 8) ? g_lvFloor : 0];
+            }
             st.matTaken = objMaterialsTaken(); st.matTotal = objMaterialCount();
 #if NOCTIS_SKYWORLD
             if (pad.Buttons & PSP_CTRL_SELECT) {   // depuracion: posicion en la etiqueta de zona (Z y Y)

@@ -163,6 +163,15 @@ static int build_hunter(LineVertex *buf)
     g_hnMark[7] = i;
     hn_limb(buf,i, -0.235f,1.145f,-0.065f, -0.232f,0.885f,-0.130f, 0.060f,0.042f, 5, coatDk, coat);    // antebrazo izq
     hn_ball(buf,i, -0.232f,0.848f,-0.145f, 0.050f,0.056f,0.050f, 2,5, skin);                           // mano izq
+    {   // PISTOLA DE PULSOS en la mano izquierda (va con el antebrazo: al apuntar sube con el)
+        const unsigned int gun = RGBA(58, 62, 74, 255), gunLit = cp_scale(gun, 1.6f), gunDk = cp_scale(gun, 0.6f);
+        const unsigned int glow = RGBA(120, 220, 255, 255);
+        hn_limb(buf,i, -0.232f,0.868f,-0.110f, -0.232f,0.868f,-0.268f, 0.042f,0.036f, 6, gun, gunLit);    // cuerpo
+        hn_limb(buf,i, -0.232f,0.846f,-0.160f, -0.232f,0.840f,-0.352f, 0.026f,0.022f, 6, gunDk, gun);     // canon
+        hn_limb(buf,i, -0.232f,0.846f,-0.250f, -0.232f,0.846f,-0.290f, 0.034f,0.034f, 6, brass, brassDk); // anillo
+        hn_limb(buf,i, -0.232f,0.856f,-0.112f, -0.238f,0.770f,-0.088f, 0.024f,0.020f, 5, grip, gripLit);  // culata
+        hn_ball(buf,i, -0.232f,0.840f,-0.356f, 0.020f,0.020f,0.020f, 2,5, glow);                           // boca de luz
+    }
     g_hnMark[8] = i;
     hn_limb(buf,i,  0.195f,1.420f,-0.025f,  0.255f,1.140f,-0.060f, 0.072f,0.056f, 6, coat,   coatLit); // brazo der
     g_hnMark[9] = i;

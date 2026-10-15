@@ -129,9 +129,9 @@ static HunterRig hunterRig(HunterPose &p, float walkPhase, float idleT, float sp
         r.skirtX = -0.08f + 0.10f * f; r.skirtZ = 0.06f * sinf(idleT * 0.9f);
         r.head = 0.18f;                                    // mira hacia abajo, al vacio
     }
-    if (aiming) {                                          // APUNTAR: brazo derecho al frente
-        r.armR = 1.42f; r.elbowR = 0.05f; r.outR = -0.10f;
-        r.armL = 0.35f; r.elbowL = 0.60f; r.outL = 0.25f;   // el izquierdo acompana
+    if (aiming) {                                          // APUNTAR: la PISTOLA (mano izq) al frente
+        r.armL = 1.42f; r.elbowL = 0.05f; r.outL = -0.10f;
+        r.armR = 0.30f; r.elbowR = 0.50f; r.outR = 0.22f;   // el sable queda abajo, listo
         r.head = -0.05f;
     }
     if (meleeT > 0.0f) {                                   // TAJO: de arriba-adelante a abajo-atras

@@ -155,6 +155,16 @@ Siguiente: autoapuntado, enemigos para el cielo, detalle de superficie barato, F
   `tools/make_icons.py`); el piso y los pisos abiertos van en NoctisSave.eventFlags (bit 31 = mundo nuevo).
 - PRUEBAS: SELECT dentro del menu del elevador abre el piso 2. psp_eye: `sy:1` = stick ARRIBA.
 
+**PISOS 3..7 (2026-10-15, 13:00)** -- `src/boss_api.h` (contrato + UI comun: bxDialog, bxChoices,
+bxBossBar, BxMash, bxTint) y un modulo por jefe, escritos por agentes en paralelo:
+`boss_baphomet.h` (3 cueva, fogata, conversacion, poder DETENER EL TIEMPO, Padre Nuestro),
+`boss_white.h` (4 arco, trompeta), `boss_red.h` (5 embestida + grito), `boss_black.h` (6 balanza
+y dados), `boss_pale.h` (7 + Hades, 7 moscas, no deja curarse). levels.h despacha con LV_BOSS;
+si falta un modulo, LV_STUB lo reemplaza (arena vacia, piso superado). Mejoras PERMANENTES:
+rosario (TRIANGULO) y detener el tiempo (CUADRADO, 2 s, espera 15 s), guardadas en eventFlags
+bits 8 y 9. Disparo 1.7x mas lento y 2 de dano; balas = trazadoras aditivas; pistola en la mano
+izquierda (apunta con ese brazo); sol en el cielo; vineta suave.
+
 ## Pendiente, en orden
 1. **FPS real** en la PSP del ultimo build (solo lo mide Benjamin en la consola).
 2. ~~Cerrar el bucle autonomo de prueba~~ HECHO (2026-10-15): `tools/emu/psp_eye.py` manda
