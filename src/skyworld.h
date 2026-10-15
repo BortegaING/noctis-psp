@@ -31,7 +31,7 @@ static const float SW_TREAD  = 1.1f;     // huella de escalon
 // La niebla termina ANTES de donde nacen las celdas nuevas (anillo 2: su contenido empieza a
 // ~72-80u): asi aparecen ya disueltas en la bruma, no de golpe.
 static const float SW_FOG_NEAR = 20.0f, SW_FOG_FAR = 86.0f;
-static const unsigned int SW_HAZE = RGBA(186, 192, 198, 255);
+static const unsigned int SW_HAZE = RGBA(142, 146, 152, 255);   // bruma GRIS de tormenta (antes 186,192,198)
 
 // ---------------------------------------------------------------- hash / azar
 static unsigned int swHash(int x, int z, unsigned int salt) {
@@ -88,7 +88,8 @@ struct SwOut {
 // abajo: oclusion ambiental en el pie de cada muro, o la bruma subiendo en los colosos.
 // Sentido de las caras: el INVERSO de addSolidBox(T), que con NOCTIS_FRONTFACE y cull ON se
 // veia desde ADENTRO ("veo dentro de las escaleras").
-static const float SW_SUN_TOP = 1.10f, SW_SUN_W = 0.96f, SW_SUN_N = 0.80f, SW_SUN_S = 0.68f, SW_SUN_E = 0.54f;
+// cielo NUBLADO: luz difusa, caras mas parejas (antes 1.10 / 0.96 / 0.80 / 0.68 / 0.54)
+static const float SW_SUN_TOP = 1.04f, SW_SUN_W = 0.92f, SW_SUN_N = 0.82f, SW_SUN_S = 0.74f, SW_SUN_E = 0.64f;
 static void swQuadC(LineVertex *b, int &i, float ax, float ay, float az, unsigned int ca,
                     float bx, float by, float bz, unsigned int cb, float cx_, float cy_, float cz_, unsigned int cc,
                     float dx, float dy, float dz, unsigned int cd) {
@@ -151,7 +152,7 @@ static void swRing(LineVertex *buf, int &i, int cap, float cx, float cy, float c
 }
 
 // ---------------------------------------------------------------- una celda
-static const unsigned int SW_C_SLAB  = RGBA(184, 184, 180, 255);   // techo x1.15 = gris claro, no blanco quemado
+static const unsigned int SW_C_SLAB  = RGBA(164, 165, 166, 255);   // hormigon bajo cielo gris   // techo x1.15 = gris claro, no blanco quemado
 static const unsigned int SW_C_MONO  = RGBA(150, 151, 150, 255);
 static const unsigned int SW_C_PIL   = RGBA( 92,  97, 106, 255);
 static const unsigned int SW_C_LOW   = RGBA(150, 156, 164, 255);
@@ -386,8 +387,9 @@ static bool swFallRespawn(float &px, float &py, float &pz, int grounded) {
 
 // ---------------------------------------------------------------- dibujo
 static void swBackdrop() {   // cielo (2D): azul grisaceo arriba, blanco de bruma en el horizonte
-    gradQuad(0, 120, RGBA(122, 138, 156, 255), RGBA(190, 196, 202, 255));
-    gradQuad(120, SCR_HEIGHT, RGBA(190, 196, 202, 255), RGBA(170, 177, 186, 255));
+    // gris plomo de tormenta: oscuro arriba, el horizonte apenas mas claro (va a llover)
+    gradQuad(0, 120, RGBA(78, 83, 92, 255), RGBA(142, 146, 152, 255));
+    gradQuad(120, SCR_HEIGHT, RGBA(142, 146, 152, 255), RGBA(118, 122, 130, 255));
 }
 
 static int g_swVtx = 0;   // vertices dibujados este frame (SELECT lo muestra en miles: KV)

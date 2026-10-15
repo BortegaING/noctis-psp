@@ -945,9 +945,9 @@ static void lvBackdrop() {
         int sx, sy;
         if (lvProject(g_lvEye[0] + dx * 300.0f, g_lvEye[1] + dy * 300.0f, g_lvEye[2] + dz * 300.0f, sx, sy)) {
             sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xFFFFFFFF);
-            lvFan2D(sx, sy, 150, RGBA(255, 236, 196, 110), RGBA(255, 226, 170, 0), 24);
-            lvFan2D(sx, sy, 46, RGBA(255, 248, 226, 200), RGBA(255, 240, 200, 0), 20);
-            lvFan2D(sx, sy, 15, RGBA(255, 255, 250, 255), RGBA(255, 252, 236, 230), 16);
+            // cielo nublado: el sol es solo un resplandor debil detras de las nubes
+            lvFan2D(sx, sy, 150, RGBA(220, 222, 226, 45), RGBA(200, 204, 210, 0), 24);
+            lvFan2D(sx, sy, 46, RGBA(232, 234, 238, 60), RGBA(220, 222, 228, 0), 20);
             sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
         }
         // NUBES (cielo real, menos "cuadrado"): un MAR de nubes debajo de las losas, anclado al mundo
@@ -969,9 +969,12 @@ static void lvBackdrop() {
                         const float d = sqrtf((wx - ex) * (wx - ex) + (wy - ey) * (wy - ey) + (wz - ez) * (wz - ez)) + 1.0f;
                         int rr = (int)((a ? 48.0f : 70.0f) * 209.0f / d * (0.8f + 0.5f * swRand(cx, cz, 126)));
                         if (rr < 12) continue; if (rr > 230) rr = 230;
-                        const int al = a ? 200 : 150;
-                        lvFan2D(sx, sy, rr, RGBA(255, 255, 255, al), RGBA(236, 240, 246, 0), 16);
-                        lvFan2D(sx + rr / 2, sy + rr / 8, rr * 2 / 3, RGBA(250, 251, 253, al * 3 / 4), RGBA(236, 240, 246, 0), 12);
+                        // nubes de TORMENTA: grises, las altas mas oscuras y densas (manto de lluvia)
+                        const int al = a ? 200 : 185;
+                        const unsigned int ci = a ? RGBA(178, 182, 188, al) : RGBA(104, 108, 116, al);
+                        const unsigned int co = a ? RGBA(150, 154, 160, 0) : RGBA(96, 100, 108, 0);
+                        lvFan2D(sx, sy, rr, ci, co, 16);
+                        lvFan2D(sx + rr / 2, sy + rr / 8, rr * 2 / 3, ci, co, 12);
                     }
         }
         sceGuDisable(GU_BLEND);
