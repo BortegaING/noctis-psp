@@ -53,6 +53,15 @@ static int g_lvGeoN = 0, g_lvElevN = 0, g_lvEyeN = 0, g_lvSerBodyN = 0, g_lvSerW
 struct LvEye { float bx, by, bz, x, y, z, ph; int hp, alive, delay, die, cd; };
 static LvEye g_eyes[30];
 static int   g_eyesOn = 0, g_eyesKilled = 0;
+static float g_f1Dark = 0.0f;   // piso 1: 0 = cielo pintado .. 1 = cielo NEGRO (cuando llegan los ojos)
+static int   g_f1DarkSaid = 0;
+
+// mezcla de colores RGBA empaquetados (para apagar el cielo hacia el negro)
+static unsigned int lvMix(unsigned int a, unsigned int b, float t) {
+    const int ar = a & 0xFF, ag = (a >> 8) & 0xFF, ab = (a >> 16) & 0xFF;
+    const int br = b & 0xFF, bg = (b >> 8) & 0xFF, bb = (b >> 16) & 0xFF;
+    return RGBA(ar + (int)((br - ar) * t), ag + (int)((bg - ag) * t), ab + (int)((bb - ab) * t), 255);
+}
 struct LvOrb { float x, y, z, vx, vy, vz; int life; unsigned int col; };
 static LvOrb g_orbs[16];
 
@@ -113,12 +122,13 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
         g_lvSaveX = -9.0f; g_lvSaveY = 0.0f; g_lvSaveZ = 44.0f;
         g_lvElevX = 13.0f; g_lvElevY = 0.0f; g_lvElevZ = 0.0f;
         g_lvElevOn = (g_lvUnlocked >= 2); g_lvElevRise = g_lvElevOn ? 1.0f : 0.0f;
-        g_eyesOn = 0; g_eyesKilled = 0;
+        g_eyesOn = 0; g_eyesKilled = 0; g_f1Dark = 0.0f; g_f1DarkSaid = 0;
         for (int k = 0; k < 30; ++k) {                        // reparto en espiral aurea sobre el campo
             LvEye &e = g_eyes[k];
             const float a = k * 2.39996f, r = 14.0f + 34.0f * ((k * 7) % 30) / 29.0f;
             e.bx = sinf(a) * r; e.bz = cosf(a) * r; e.by = 16.0f + (float)((k * 13) % 29);
-            e.ph = k * 0.7f; e.hp = 2; e.alive = (g_lvUnlocked < 2); e.delay = k * 6; e.die = 0; e.cd = 180 + (k * 37) % 300;
+            // los ojos se abren DESPUES de que el cielo termina de apagarse (~3 s), uno tras otro
+            e.ph = k * 0.7f; e.hp = 2; e.alive = (g_lvUnlocked < 2); e.delay = 190 + k * 6; e.die = 0; e.cd = 180 + (k * 37) % 300;
         }
         if (g_lvUnlocked >= 2) g_eyesKilled = 30;
     } else {
@@ -263,7 +273,11 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
     // ---- piso 1: los ojos ----
     if (g_lvFloor == 1 && g_lvUnlocked < 2) {
         if (!g_eyesOn && (g_lvT > 600 || px * px + pz * pz < 30.0f * 30.0f)) {
-            g_eyesOn = 1; lvMessage("EL CIELO SE LLENA DE OJOS", 150);
+            g_eyesOn = 1; lvMessage("EL CIELO SE APAGA", 150);
+        }
+        if (g_eyesOn && g_eyesKilled < 30) {          // el cielo se va a NEGRO en ~3 s
+            g_f1Dark += 1.0f / 180.0f; if (g_f1Dark > 1.0f) g_f1Dark = 1.0f;
+            if (g_f1Dark >= 1.0f && !g_f1DarkSaid) { g_f1DarkSaid = 1; lvMessage("Y SE LLENA DE OJOS", 150); }
         }
         if (g_eyesOn) {
             int volleys = 0;
@@ -286,6 +300,8 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
         }
     }
     if (g_lvElevOn && g_lvElevRise < 1.0f) { g_lvElevRise += 1.0f / 120.0f; if (g_lvElevRise > 1.0f) g_lvElevRise = 1.0f; }
+    // sin ojos, el cielo vuelve a aclararse (~4 s)
+    if (g_lvFloor == 1 && g_eyesKilled >= 30 && g_f1Dark > 0.0f) { g_f1Dark -= 1.0f / 240.0f; if (g_f1Dark < 0.0f) g_f1Dark = 0.0f; }
 
     // ---- piso 2: el serafin ----
     if (g_lvFloor == 2) {
@@ -387,7 +403,11 @@ static void lvBox(float x, float y, float z, float w, float h, unsigned int col)
 static void lvDraw(float px, float py, float pz) {
     sceGuDisable(GU_CULL_FACE);
     if (g_lvFloor >= 1) {
-        sceGuFog(30.0f, g_lvFloor == 1 ? 170.0f : 240.0f, g_lvFloor == 1 ? RGBA(196, 214, 232, 255) : RGBA(232, 236, 244, 255));
+        // piso 1 con el cielo apagado: la niebla se vuelve NEGRA y corta -> los muros de cielo
+        // pintado se hunden en la oscuridad y solo queda el pasto y el arbol cerca
+        const float k = (g_lvFloor == 1) ? g_f1Dark : 0.0f;
+        sceGuFog(30.0f - 20.0f * k, g_lvFloor == 1 ? 170.0f - 110.0f * k : 240.0f,
+                 g_lvFloor == 1 ? lvMix(RGBA(196, 214, 232, 255), RGBA(0, 0, 0, 255), k) : RGBA(232, 236, 244, 255));
         sceGuEnable(GU_FOG);
         sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_lvGeoN, 0, g_lvGeo);
         sceGuDisable(GU_FOG);
@@ -447,9 +467,11 @@ static void lvDraw(float px, float py, float pz) {
 // cielo 2D de cada piso
 static void lvBackdrop() {
     if (g_lvFloor == 0) { swBackdrop(); return; }
-    if (g_lvFloor == 1) {   // cielo "pintado": azul limpio, como un decorado
-        gradQuad(0, 140, RGBA(92, 140, 196, 255), RGBA(196, 214, 232, 255));
-        gradQuad(140, SCR_HEIGHT, RGBA(196, 214, 232, 255), RGBA(170, 190, 210, 255));
+    if (g_lvFloor == 1) {   // cielo "pintado": azul limpio, como un decorado... hasta que se APAGA
+        const unsigned int K = RGBA(0, 0, 0, 255);
+        const float k = g_f1Dark;
+        gradQuad(0, 140, lvMix(RGBA(92, 140, 196, 255), K, k), lvMix(RGBA(196, 214, 232, 255), K, k));
+        gradQuad(140, SCR_HEIGHT, lvMix(RGBA(196, 214, 232, 255), K, k), lvMix(RGBA(170, 190, 210, 255), K, k));
     } else {                // cielo abierto de nubes blancas (la referencia del ofanim)
         gradQuad(0, 120, RGBA(176, 190, 214, 255), RGBA(236, 238, 244, 255));
         gradQuad(120, SCR_HEIGHT, RGBA(236, 238, 244, 255), RGBA(214, 220, 232, 255));
