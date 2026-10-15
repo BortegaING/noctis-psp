@@ -24,6 +24,10 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 // en una PSP-2000/3000 eso son ~50 MB en vez de los ~22 del modo de 32 MB.
 PSP_HEAP_THRESHOLD_SIZE_KB(1024);
 
+// MUNDO: 1 = megaestructura de plataformas en el cielo por celdas (skyworld.h, 2026-10-15);
+//        0 = el sector cerrado gotico de antes (queda intacto como avance).
+#define NOCTIS_SKYWORLD 1
+
 #define BUF_WIDTH  512
 #define SCR_WIDTH  480
 #define SCR_HEIGHT 272
@@ -563,7 +567,7 @@ static void buildSolidWorld() {
 // altura del suelo bajo el jugador (0, o el techo de una estructura si esta
 // por encima de el). Permite pararse en azoteas al caer sobre ellas.
 static float groundHeight(float px, float pz, float py) {
-    float g = 0.0f;   // suelo/plaza en y=0; los TECHOS de los edificios se pueden pisar
+    float g = NOCTIS_SKYWORLD ? -1.0e6f : 0.0f;   // suelo/plaza en y=0 (en el cielo: vacio); los TECHOS se pueden pisar
     for (int s = 0; s < g_cityCount; ++s) {
         const CityBldg &b = g_city[s];
         const float x0 = b.x - b.w * 0.5f, x1 = b.x + b.w * 0.5f;
@@ -579,7 +583,7 @@ static float groundHeight(float px, float pz, float py) {
 // de una estructura y por DEBAJO de su techo (no bloquea al estar encima).
 static bool blocked(float px, float pz, float py) {
     const float r = 1.1f;
-    if (px * px + pz * pz > 200.0f * 200.0f) return true; // (era 82 = radio de la PLAZA vieja; el balcon esta en r~118 -> bloqueaba TODO movimiento)
+    if (!NOCTIS_SKYWORLD && px * px + pz * pz > 200.0f * 200.0f) return true; // (era 82 = radio de la PLAZA vieja; el balcon esta en r~118 -> bloqueaba TODO movimiento)
     for (int s = 0; s < g_cityCount; ++s) {
         const CityBldg &b = g_city[s];
         if (py < b.h - 0.8f) {
@@ -896,6 +900,7 @@ static void fontTexOn() {
 }
 
 #include "hud.h"         // HUD nuevo: minimapa del sector REAL (usa drawRect/drawText/fontTexOn)
+#include "skyworld.h"    // MUNDO NUEVO: plataformas en el cielo por celdas, niebla HW, colosos de fondo
 
 #if VIEWER_MODE
 // dibuja los 4 candidatos en fila sobre un turntable, sobre un piso oscuro.
@@ -1026,7 +1031,9 @@ int main(void) {
     // y dos lineas mas abajo buildSolidWorld() llama a buildSectorCollision(), que
     // arranca en n = 0 y lo sobreescribe entero. Nunca existieron.
     buildIndTex();  // textura industrial del pozo (antes de renderizar)
+#if !NOCTIS_SKYWORLD
     buildSolidWorld();
+#endif
     // buildApron() quitado con su dibujado (ver el pase de render)
     buildHero();
 #if VIEWER_MODE
@@ -1183,11 +1190,17 @@ int main(void) {
             }
         }
     }
+#if NOCTIS_SKYWORLD
+    swInit(&playerX, &playerY, &playerZ);   // el guardado es del sector viejo: aqui se arranca en la losa (0,0)
+#endif
     float gvr = 0.0f, gvf = 0.0f, gvg = 0.0f;   // vel en el plano (right,fwd) + a lo largo de la gravedad
     static const char *kGravName[6] = { "ABAJO", "ARRIBA", "+X", "-X", "+Z", "-Z" };
 
     while (!g_exit) {
         sceCtrlReadBufferPositive(&pad, 1);
+#if NOCTIS_SKYWORLD
+        swUpdate(playerX, playerZ, 1);   // 1 celda nueva por frame como mucho: sin tirones al cruzar
+#endif
         // START = pausa (toggle con deteccion de flanco). Ya NO sale. HOME sale.
         int startNow = (pad.Buttons & PSP_CTRL_START) ? 1 : 0;
         if (startNow && !prevStart) paused = !paused;
@@ -1252,10 +1265,12 @@ int main(void) {
             // empujon incondicional aplicado DESPUES de blocked() metia al jugador dentro
             // de la huella inflada de las masas. Los 4 muros ya frenan en blocked(); esto
             // solo atrapa el caso de escaparse por un hueco.
+#if !NOCTIS_SKYWORLD
             if (playerX >  COURT) playerX =  COURT;
             if (playerX < -COURT) playerX = -COURT;
             if (playerZ >  COURT) playerZ =  COURT;
             if (playerZ < -COURT) playerZ = -COURT;
+#endif
             // -- EL PERSONAJE GIRA HACIA DONDE CAMINA. Esto es lo que faltaba: antes
             // aqui habia heroYaw = camYaw, o sea que encaraba SIEMPRE el mismo angulo que
             // la camara y por eso no se le veia girar jamas. El giro va suavizado para que
@@ -1468,6 +1483,13 @@ int main(void) {
                 grounded = 1; hp = HP_MAX;
             }
             if (hurtFlash > 0) --hurtFlash;
+#if NOCTIS_SKYWORLD
+            // cielo: sin anclas/materiales/robots del sector. Caer al vacio = volver al ultimo
+            // punto pisado.
+            if (swFallRespawn(playerX, playerY, playerZ, grounded)) {
+                velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f; grounded = 1;
+            }
+#else
             if (objAnchorTouch(playerX, playerY, playerZ) >= 0) { snap(); saveAuto(sv); }  // ancla NUEVA = autoguardado
             objMaterialTouch(playerX, playerY, playerZ);      // recoger sube la EN maxima
             EN_MAX = objEnergyMax();
@@ -1507,6 +1529,7 @@ int main(void) {
                     pickTimer = 120;
                 }
             }
+#endif
             if (pickTimer > 0) pickTimer--;
 
             // ===== balas: mover, caducar y reventar contra la piedra =====
@@ -1544,7 +1567,11 @@ int main(void) {
 
         // fondo brumoso (2D, sin profundidad): neblina en el horizonte
         sceGuDisable(GU_DEPTH_TEST);
+#if NOCTIS_SKYWORLD
+        swBackdrop();
+#else
         drawSky();   // cielo gotico dramatico (2D): luna, gradiente, nubes, silueta del horizonte
+#endif
         sceGuEnable(GU_DEPTH_TEST);
 
 #if VIEWER_MODE
@@ -1634,6 +1661,10 @@ int main(void) {
         // sola atadura de textura por grupo: cada sceGuTexImage invalida la cache de la GE.
         // (Se limpiaron 11 dibujados de 0 vertices y 4 texturas muertas que quedaban de los
         //  mundos anteriores: catedrales, agujas de fondo, ventanas y metal del mirador.)
+#if NOCTIS_SKYWORLD
+        swDraw(playerX, playerZ, fwdX, fwdZ);
+        sceGuDisable(GU_CULL_FACE);
+#else
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexMode(GU_PSM_5650, 0, 0, GU_TRUE);   // 16 bits + SWIZZLED: mitad de lectura por pixel
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
@@ -1670,6 +1701,7 @@ int main(void) {
         sceGuDisable(GU_CULL_FACE);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
         sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_envVerts, 0, g_env);
+#endif
 
         // ---- 3RA PERSONA: el HUNTER con ciclo de caminata (anim.h) ----
         // Orden importante: gravedad -> encare -> bob (ya en el cuerpo) -> inclinacion
@@ -1699,7 +1731,7 @@ int main(void) {
         }
 
         // recursos: brillan al acercarse (seccion 12)
-        for (int r = 0; r < kResourceCount && r < 64; ++r) {
+        for (int r = 0; r < kResourceCount && r < 64 && !NOCTIS_SKYWORLD; ++r) {
             if (collected[r]) continue;
             float dx = kResources[r].x * WSCALE - playerX, dz = kResources[r].z * WSCALE - playerZ;
             float d = sqrtf(dx * dx + dz * dz);
@@ -1840,7 +1872,7 @@ int main(void) {
               st.grv = g1; }
             st.gravName = kGravName[gravG];
             st.px = playerX; st.pz = playerZ; st.yaw = heroYaw;
-            st.district = "CAMPANARIO";
+            st.district = NOCTIS_SKYWORLD ? "CIELO" : "CAMPANARIO";
             st.matTaken = objMaterialsTaken(); st.matTotal = objMaterialCount();
             st.pickTimer = pickTimer;
             st.pickName = (pickedType >= 0 && pickedType < kMaterialCount) ? kMaterials[pickedType].name : 0;
@@ -1877,7 +1909,7 @@ int main(void) {
                 hud[n++] = (char)('0' + t % 10);
                 hud[n++] = ' ';
             };
-            put("CPU ", msCpu); put("GE ", msGe); put("ESP ", msWait); put("CAM ", dbgCamBack); put("RAM ", ramFreeMB);
+            put("CPU ", msCpu); put("GE ", msGe); put("ESP ", msWait); put("CAM ", dbgCamBack); put("RAM ", ramFreeMB); put("KV ", g_swVtx * 0.001f);
             hud[n] = 0;
             // Como leerlo: a 30 fps el presupuesto es 33.3 ms. Si manda ESP, sobra
             // tiempo. Si manda GE, el cuello es la GPU (relleno o vertices). Si manda

@@ -161,6 +161,7 @@ static void hudDraw(const HudState &st) {
     hudBar(r1, enF,    RGBA( 72, 142, 208, 255), RGBA(16, 28, 44, 190));
     hudBar(r2, st.grv, RGBA(158, 120, 210, 255), RGBA(28, 20, 42, 190));
 
+#if !NOCTIS_SKYWORLD   // el minimapa dibuja el sector cerrado: no aplica al mundo por celdas
     // --- minimapa REAL del sector (arriba derecha) ---
     // fondo + marco + las 4 masas de 36x36. El pasillo en cruz, el perimetral
     // y los ventanales son el HUECO: no cuestan un solo pixel.
@@ -187,6 +188,7 @@ static void hudDraw(const HudState &st) {
         drawRect(bx + (int)(dx * 4.0f) - 1, bz + (int)(dz * 4.0f) - 1, 2, 2,
                  RGBA(255, 244, 232, 255));
     }
+#endif
 
     // --- objetivo (abajo izquierda) + arma (abajo derecha) ---
     // 80 px de ancho = "MAT 10/10" (9 caracteres) + margen.

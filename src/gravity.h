@@ -243,7 +243,7 @@ static const int   GRAV_SWITCH_CD = 18;     // frames de bloqueo entre cambios (
 static const float GRAV_FLOOR_Y   =   0.0f; // plano del suelo            (== y=0)
 static const float GRAV_CEIL_Y    =  60.0f; // plano del techo            (== SEC_CEIL)
 static const float GRAV_SECT_HALF =  54.0f; // cara INTERIOR de los muros (== SEC_HALF)
-static const float GRAV_WORLD_LIM = 200.0f; // red de seguridad en XZ (igual que blocked())
+static const float GRAV_WORLD_LIM = NOCTIS_SKYWORLD ? 1.0e7f : 200.0f; // red de seguridad en XZ (igual que blocked())
 
 // --- tolerancias del jugador --------------------------------------------------
 static const float GRAV_BODY_H     =  3.0f; // alto del cuerpo (== g_playerBox: 1.4x1.4x3.0).

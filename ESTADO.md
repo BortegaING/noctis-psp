@@ -130,6 +130,14 @@ en cola: autoapuntado al apuntar con armas a distancia; personaje/mundo menos "c
 (referencia de diseno: Nightmare Creatures, PS1: detalle pintado en textura, niebla que
 recorta la distancia); arreglar la camara (ver abajo).
 
+**HECHO (2026-10-15): `src/skyworld.h`**, activo con `#define NOCTIS_SKYWORLD 1` en main.cpp
+(0 = el sector gotico, intacto). Celdas de 48u por hash, malla 5x5 alrededor del jugador,
+1 celda nueva por frame, LOD en el anillo exterior, niebla HW 26..100, colision 3x3 desde la
+misma funcion que la malla, fondo de colosos que sigue al jugador. ~6.9k vertices/frame
+(el sector viejo ~33k). Techos: `swBoxT/swBoxL` invierten el techo de addSolidBox(T), que con
+cull ON desaparecia visto desde arriba. Sin textura a proposito (hormigon liso + menos relleno).
+Siguiente: autoapuntado, enemigos para el cielo, detalle de superficie barato, FPS en consola.
+
 ## Pendiente, en orden
 1. **FPS real** en la PSP del ultimo build (solo lo mide Benjamin en la consola).
 2. ~~Cerrar el bucle autonomo de prueba~~ HECHO (2026-10-15): `tools/emu/psp_eye.py` manda
