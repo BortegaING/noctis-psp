@@ -145,7 +145,7 @@ static void bpFacet(BpBuf &b, const float *p, const float *q, const float *r, un
     const float ll = sqrtf(lx * lx + ly * ly + lz * lz) + 0.0001f;
     const float ndl = fabsf((nx * lx + ny * ly + nz * lz) / ll);
     const float gl = bpGlow(cx, cy, cz);
-    float lit = (0.25f + 1.25f * gl * (0.40f + 0.60f * ndl)) * (0.82f + 0.36f * bpRnd(seed, 17, 9));
+    float lit = (0.42f + 1.30f * gl * (0.40f + 0.60f * ndl)) * (0.82f + 0.36f * bpRnd(seed, 17, 9));
     lit *= 1.0f - 0.014f * bpClampf(cy, 0.0f, 30.0f);
     const unsigned int c = bpRockCol(base, lit, gl);
     b.v[b.n++] = { c, p[0], p[1], p[2] }; b.v[b.n++] = { c, q[0], q[1], q[2] }; b.v[b.n++] = { c, r[0], r[1], r[2] };
@@ -939,7 +939,7 @@ static void bp_Update(BossIO &io) {
     switch (g_bpSt) {
     case BPS_IDLE: {
         const float dx = io.px - g_bpX, dz = io.pz - g_bpZ;
-        if (dx * dx + dz * dz < 15.5f * 15.5f) bpSay("BAPHOMET", "¿Por qué estás aquí? Conversemos.", "", BPN_CHOICE);
+        if (dx * dx + dz * dz < 17.5f * 17.5f) bpSay("BAPHOMET", "¿Por qué estás aquí? Conversemos.", "", BPN_CHOICE);
     } break;
     case BPS_SAY:
         if (io.edge & PSP_CTRL_CROSS) bpAdvance(g_bpNext);
@@ -1083,7 +1083,7 @@ static void bp_Backdrop() {
     gradQuad(0, 136, RGBA(10, 6, 5, 255), RGBA(26, 14, 9, 255));
     gradQuad(136, SCR_HEIGHT, RGBA(26, 14, 9, 255), RGBA(12, 7, 5, 255));
 }
-static unsigned int bp_Fog(float *nearF, float *farF) { *nearF = 14.0f; *farF = 78.0f; return RGBA(16, 10, 7, 255); }
+static unsigned int bp_Fog(float *nearF, float *farF) { *nearF = 18.0f; *farF = 120.0f; return RGBA(26, 16, 10, 255); }
 static int bp_AimTarget(float out[3]) {
     if (g_bpSt == BPS_FIGHT && g_bpCharge > 0) { out[0] = g_bpX; out[1] = 3.5f; out[2] = g_bpZ; return 1; }
     return 0;

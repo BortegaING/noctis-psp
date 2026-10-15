@@ -390,3 +390,5 @@ que capa lo rompio, en vez de adivinar entre veinte.
 13. RECOGE UN MATERIAL y mira que la energia maxima sube. Con los 10, el faro.
 
 Si algo de esto falla, decir CUAL numero: cada uno apunta a un archivo distinto.
+
+- PENDIENTE (15-10 13:30): en los pisos 3..7 aparece a veces un poligono/linea NEGRA gigante que parte del personaje hacia arriba (visto en el renderizador por SOFTWARE del emulador; sin confirmar en GPU ni en PSP). No es el elevador (se movio y sigue). Sospechosos: algo cercano a la camara en el spawn o recorte de plano cercano del software renderer.

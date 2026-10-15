@@ -240,7 +240,9 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
         lvBossEnter(io, &sx, &sy, &sz);
         g_lvSpawnX = sx; g_lvSpawnY = sy; g_lvSpawnZ = sz;
         g_lvSaveX = sx - 5.0f; g_lvSaveY = sy; g_lvSaveZ = sz + 2.0f;
-        g_lvElevX = sx + 6.0f; g_lvElevY = sy; g_lvElevZ = sz;   // aparece al vencer al jefe
+        // aparece al vencer al jefe. ADELANTE-izquierda del spawn: pegado al jugador (sx+6) la camara
+        // quedaba casi dentro de la cabina y sus triangulos salian como poligonos negros gigantes
+        g_lvElevX = sx - 8.0f; g_lvElevY = sy; g_lvElevZ = sz - 8.0f;
         g_lvElevOn = (g_lvUnlocked > floor); g_lvElevRise = g_lvElevOn ? 1.0f : 0.0f;
     } else {
         int nb = 0;

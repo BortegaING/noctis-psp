@@ -614,6 +614,27 @@ static void bw_Update(BossIO &io) {
     bwShakeAmp = sh;
 }
 
+// profundidad respecto a la camara. Un poligono que cruza el plano cercano o queda detras del ojo
+// se rasteriza como un TRIANGULO GIGANTE: todo lo dinamico se omite o se recorta cerca del ojo.
+static float bwDepth(float x, float y, float z) {
+    return (x - g_lvEye[0]) * g_lvFwd[0] + (y - g_lvEye[1]) * g_lvFwd[1] + (z - g_lvEye[2]) * g_lvFwd[2];
+}
+// cinta (dos planos cruzados) de a a b, recortada contra el plano cercano; ca/cb = color de cada extremo
+static void bwRibbon(float ax, float ay, float az, unsigned int ca, float bx, float by, float bz, unsigned int cb, float hw) {
+    const float ND = 2.5f;
+    const float da = bwDepth(ax, ay, az), db = bwDepth(bx, by, bz);
+    if (da < ND && db < ND) return;
+    if (da < ND) { const float t = (ND - da) / (db - da); ax += (bx - ax) * t; ay += (by - ay) * t; az += (bz - az) * t; }
+    else if (db < ND) { const float t = (ND - db) / (da - db); bx += (ax - bx) * t; by += (ay - by) * t; bz += (az - bz) * t; }
+    const float dx = bx - ax, dz = bz - az, ll = sqrtf(dx * dx + dz * dz);
+    float lx = hw, lz = 0.0f;
+    if (ll > 0.001f) { lx = -dz / ll * hw; lz = dx / ll * hw; }
+    LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 12); int i = 0;
+    swQuadC(v, i, ax - lx, ay, az - lz, ca, ax + lx, ay, az + lz, ca, bx + lx, by, bz + lz, cb, bx - lx, by, bz - lz, cb);
+    swQuadC(v, i, ax, ay - hw, az, ca, ax, ay + hw, az, ca, bx, by + hw, bz, cb, bx, by - hw, bz, cb);
+    sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, i, 0, v);
+}
+
 static void bw_Draw(float px, float py, float pz) {
     sceGuDisable(GU_CULL_FACE);
     const float tt = bwAnim * 0.016f;
@@ -621,7 +642,9 @@ static void bw_Draw(float px, float py, float pz) {
     for (int k = 0; k < 10; ++k) {
         const float a = k * 2.2f + g_lvT * 0.004f * (1.0f + (float)(k % 3)), r = 5.0f + 12.0f * bwRnd(k, 3);
         const float y = fmodf(g_lvT * 0.02f * (0.6f + bwRnd(k, 4)) + k * 1.7f, 11.0f) - 0.5f;
-        lvBox(sinf(a) * r, y, cosf(a) * r, 0.2f, 0.2f, lvMix(BW_GOLD, BW_GOLDL, bwRnd(k, 5)));
+        const float mx = sinf(a) * r, mz = cosf(a) * r;
+        if (bwDepth(mx, y, mz) < 3.0f) continue;
+        lvBox(mx, y, mz, 0.2f, 0.2f, lvMix(BW_GOLD, BW_GOLDL, bwRnd(k, 5)));
     }
     if (bwState < 2) {
         bwDrawModel(g_bwBody, g_bwBodyN);
@@ -638,20 +661,25 @@ static void bw_Draw(float px, float py, float pz) {
         for (int k = 0; k < 16; ++k) {
             const float a = k * 2.399f, up = bwRnd(k, 7) * 2.0f - 0.6f, r = 1.0f + bwDeadT * (0.08f + 0.1f * bwRnd(k, 8));
             const float s = 0.7f * f + 0.1f;
-            lvBox(bwCX + sinf(a) * r, bwCY + up * r * 0.6f, bwCZ + cosf(a) * r, s, s, lvMix(BW_GOLDL, RGBA(255, 255, 255, 255), bwRnd(k, 9)));
+            const float mx = bwCX + sinf(a) * r, my = bwCY + up * r * 0.6f, mz = bwCZ + cosf(a) * r;
+            if (bwDepth(mx, my, mz) < 3.0f) continue;
+            lvBox(mx, my, mz, s, s, lvMix(BW_GOLDL, RGBA(255, 255, 255, 255), bwRnd(k, 9)));
         }
     }
-    // flechas en vuelo (modelo opaco)
+    // flechas en vuelo (modelo opaco; si pasan pegadas a la camara no se dibujan)
     for (int k = 0; k < BW_NARR; ++k) {
         const BwArrow &a = bwArr[k];
-        if (a.life <= 0) continue;
+        if (a.life <= 0 || bwDepth(a.x, a.y, a.z) < 4.0f) continue;
         float yaw, pitch; lvLookAngles(a.x, a.y, a.z, a.x + a.vx, a.y + a.vy, a.z + a.vz, yaw, pitch);
         lvDrawAt(g_bwArrowV, g_bwArrowN, a.x, a.y, a.z, yaw, pitch, 1.0f, 0.0f);
     }
     // flechas gigantes de la lluvia cayendo
     for (int k = 0; k < bwNZ; ++k) {
         const BwZone &z = bwZ[k];
-        if (z.t >= 60 && z.t < 78) lvDrawAt(g_bwArrowV, g_bwArrowN, z.x, 44.0f * (1.0f - (z.t - 60) / 18.0f) + 3.5f, z.z, 0.0f, -BW_PI * 0.5f, 1.8f, 0.0f);
+        if (z.t < 60 || z.t >= 78) continue;
+        const float ay = 44.0f * (1.0f - (z.t - 60) / 18.0f) + 3.5f;
+        if (bwDepth(z.x, ay, z.z) < 6.0f) continue;
+        lvDrawAt(g_bwArrowV, g_bwArrowN, z.x, ay, z.z, 0.0f, -BW_PI * 0.5f, 1.8f, 0.0f);
     }
     // ---- pase con mezcla (sin escribir Z): avisos, estela, columnas de luz ----
     sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDepthMask(GU_TRUE);
@@ -661,20 +689,8 @@ static void bw_Draw(float px, float py, float pz) {
         for (int s = 0; s < bwTrN && s < 7; ++s) {
             const int idx = (bwTrHead - s) & 7;
             const int a0 = 150 - s * 21, a1 = 150 - (s + 1) * 21;
-            // cinta (dos planos cruzados)
-            float dx = bwTrail[idx][0] - ax, dy = bwTrail[idx][1] - ay, dz = bwTrail[idx][2] - az;
-            float lx = -dz, lz = dx; const float ll = sqrtf(lx * lx + lz * lz);
-            if (ll > 0.001f) {
-                lx = lx / ll * 0.45f; lz = lz / ll * 0.45f;
-                LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 12); int i = 0;
-                const unsigned int c0 = RGBA(255, 238, 176, a0 > 0 ? a0 : 0), c1 = RGBA(255, 238, 176, a1 > 0 ? a1 : 0);
-                swQuadC(v, i, ax - lx, ay, az - lz, c0, ax + lx, ay, az + lz, c0,
-                              bwTrail[idx][0] + lx, bwTrail[idx][1], bwTrail[idx][2] + lz, c1, bwTrail[idx][0] - lx, bwTrail[idx][1], bwTrail[idx][2] - lz, c1);
-                swQuadC(v, i, ax, ay - 0.45f, az, c0, ax, ay + 0.45f, az, c0,
-                              bwTrail[idx][0], bwTrail[idx][1] + 0.45f, bwTrail[idx][2], c1, bwTrail[idx][0], bwTrail[idx][1] - 0.45f, bwTrail[idx][2], c1);
-                sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, i, 0, v);
-            }
-            (void)dy;
+            bwRibbon(ax, ay, az, RGBA(255, 238, 176, a0 > 0 ? a0 : 0),
+                     bwTrail[idx][0], bwTrail[idx][1], bwTrail[idx][2], RGBA(255, 238, 176, a1 > 0 ? a1 : 0), 0.45f);
             ax = bwTrail[idx][0]; ay = bwTrail[idx][1]; az = bwTrail[idx][2];
         }
     }
@@ -682,6 +698,7 @@ static void bw_Draw(float px, float py, float pz) {
     for (int k = 0; k < bwNZ; ++k) {
         const BwZone &z = bwZ[k];
         if (z.t < 0 || z.t >= 92) continue;
+        if (bwDepth(z.x, 1.0f, z.z) < 5.0f) continue;               // pegada a la camara: se omite
         if (z.t < 78) {
             const float e = z.t / 60.0f > 1.0f ? 1.0f : z.t / 60.0f;
             lvRing3D(z.x, 0.1f, z.z, 2.7f, 0.3f, RGBA(240, 96, 40, 150 + (int)(70.0f * e)));
@@ -695,31 +712,14 @@ static void bw_Draw(float px, float py, float pz) {
     // cinta de punteria hacia el jugador durante el aviso de las flechas
     if (bwState == 0 && bwAtk == 1 && bwAtkT < 48) {
         float ox, oy, oz; bwXform(-1.05f, 6.15f, -3.3f, ox, oy, oz);
-        const float tx = px, ty = py + 1.7f, tz = pz;
-        float dx = tx - ox, dz = tz - oz; const float ll = sqrtf(dx * dx + dz * dz);
-        if (ll > 0.01f) {
-            const float lx = -dz / ll * 0.12f, lz = dx / ll * 0.12f;
-            const int al = 70 + (int)(60.0f * sinf(g_lvT * 0.5f) + 60.0f);
-            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 12); int i = 0;
-            const unsigned int c0 = RGBA(255, 80, 40, al > 255 ? 255 : al), c1 = RGBA(255, 200, 100, al / 2);
-            swQuadC(v, i, ox - lx, oy, oz - lz, c0, ox + lx, oy, oz + lz, c0, tx + lx, ty, tz + lz, c1, tx - lx, ty, tz - lz, c1);
-            swQuadC(v, i, ox, oy - 0.12f, oz, c0, ox, oy + 0.12f, oz, c0, tx, ty + 0.12f, tz, c1, tx, ty - 0.12f, tz, c1);
-            sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, i, 0, v);
-        }
+        const int al = 70 + (int)(60.0f * sinf(g_lvT * 0.5f) + 60.0f);
+        bwRibbon(ox, oy, oz, RGBA(255, 80, 40, al > 255 ? 255 : al), px, py + 1.7f, pz, RGBA(255, 200, 100, al / 2), 0.12f);
     }
     // estelas doradas de las flechas
     for (int k = 0; k < BW_NARR; ++k) {
         const BwArrow &a = bwArr[k];
         if (a.life <= 0) continue;
-        const float bx = a.x - a.vx * 6.0f, by = a.y - a.vy * 6.0f, bz = a.z - a.vz * 6.0f;
-        float lx = -a.vz, lz = a.vx; const float ll = sqrtf(lx * lx + lz * lz);
-        if (ll < 0.001f) { lx = 1.0f; lz = 0.0f; } else { lx /= ll; lz /= ll; }
-        lx *= 0.16f; lz *= 0.16f;
-        LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 12); int i = 0;
-        const unsigned int c0 = RGBA(255, 236, 160, 210), c1 = RGBA(255, 236, 160, 0);
-        swQuadC(v, i, a.x - lx, a.y, a.z - lz, c0, a.x + lx, a.y, a.z + lz, c0, bx + lx, by, bz + lz, c1, bx - lx, by, bz - lz, c1);
-        swQuadC(v, i, a.x, a.y - 0.16f, a.z, c0, a.x, a.y + 0.16f, a.z, c0, bx, by + 0.16f, bz, c1, bx, by - 0.16f, bz, c1);
-        sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, i, 0, v);
+        bwRibbon(a.x, a.y, a.z, RGBA(255, 236, 160, 210), a.x - a.vx * 6.0f, a.y - a.vy * 6.0f, a.z - a.vz * 6.0f, RGBA(255, 236, 160, 0), 0.16f);
     }
     sceGuDepthMask(GU_FALSE); sceGuDisable(GU_BLEND);
     sceGumLoadIdentity();
@@ -737,7 +737,7 @@ static void bw_Hud(BossIO &io) {
         lvFan2D(sx, sy, 96 + (int)(8.0f * p), RGBA(255, 226, 140, 78), RGBA(255, 226, 140, 0), 22);
         if (bwHurt > 0) lvFan2D(sx, sy, 62, RGBA(255, 255, 255, 40 * bwHurt), RGBA(255, 255, 255, 0), 16);
         if (bwBlast > 0) {                                      // onda del estruendo
-            const int r = (30 - bwBlast) * 14 + 10;
+            int r = (30 - bwBlast) * 9 + 10; if (r > 260) r = 260;      // acotado: nada de vertices 2D lejisimos
             lvFan2D(sx, sy, r, RGBA(255, 240, 180, 0), RGBA(255, 240, 180, 110), 28);
         }
     }
@@ -779,11 +779,12 @@ static void bw_Hud(BossIO &io) {
 }
 
 // ---------------------------------------------------------------- cielo blanco luminoso (2D, sin Z)
+static short bwSh(float v) { if (v < -120.0f) v = -120.0f; if (v > 600.0f) v = 600.0f; return (short)v; }
 static void bwRay2D(int cx, int cy, float a, float half, int len, unsigned int cIn, unsigned int cOut) {
     GradVertex *v = (GradVertex *)sceGuGetMemory(sizeof(GradVertex) * 3);
     v[0] = { cIn,  (short)cx, (short)cy, 0 };
-    v[1] = { cOut, (short)(cx + cosf(a - half) * len), (short)(cy + sinf(a - half) * len), 0 };
-    v[2] = { cOut, (short)(cx + cosf(a + half) * len), (short)(cy + sinf(a + half) * len), 0 };
+    v[1] = { cOut, bwSh(cx + cosf(a - half) * len), bwSh(cy + sinf(a - half) * len), 0 };
+    v[2] = { cOut, bwSh(cx + cosf(a + half) * len), bwSh(cy + sinf(a + half) * len), 0 };
     sceGuDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 3, 0, v);
 }
 static void bwCloud(int x, int y, int r, int a) {
@@ -801,7 +802,7 @@ static void bw_Backdrop() {
     const float t = g_lvT * 0.016f;
     lvFan2D(240, 176, 330, RGBA(255, 236, 176, 120), RGBA(255, 236, 176, 0), 24);               // resplandor del horizonte
     const int sunX = 352, sunY = 58;                                                           // sol: rayos que giran lento
-    for (int k = 0; k < 9; ++k) bwRay2D(sunX, sunY, k * 0.7f + t * 0.05f, 0.05f, 560, RGBA(255, 246, 200, 38), RGBA(255, 246, 200, 0));
+    for (int k = 0; k < 9; ++k) bwRay2D(sunX, sunY, k * 0.7f + t * 0.05f, 0.05f, 420, RGBA(255, 246, 200, 38), RGBA(255, 246, 200, 0));
     lvFan2D(sunX, sunY, 170, RGBA(255, 246, 208, 190), RGBA(255, 246, 208, 0), 24);
     lvFan2D(sunX, sunY, 56, RGBA(255, 255, 242, 230), RGBA(255, 255, 242, 0), 20);
     // nubes en 3 capas con paralaje segun hacia donde miras (periodo = vuelta completa: sin saltos)
