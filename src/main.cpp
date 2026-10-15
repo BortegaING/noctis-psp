@@ -36,6 +36,12 @@ PSP_HEAP_THRESHOLD_SIZE_KB(1024);
 //        0 = el sector cerrado gotico de antes (queda intacto como avance).
 #define NOCTIS_SKYWORLD 1
 
+// PRUEBA del ritmo fijo (frameskip): microsegundos extra por frame dibujado, para que el
+// emulador se porte como una PSP que no llega a 60. 0 = apagado (SIEMPRE asi al commitear).
+#ifndef NOCTIS_SLOWSIM
+#define NOCTIS_SLOWSIM 0
+#endif
+
 #define BUF_WIDTH  512
 #define SCR_WIDTH  480
 #define SCR_HEIGHT 272
@@ -1079,6 +1085,32 @@ static void initGu() {
     sceGuDisplay(GU_TRUE);
 }
 
+// ===== RITMO FIJO DEL JUEGO: la velocidad no depende de la consola =====
+// La logica avanza UN paso por vuelta del bucle, y todo esta afinado a 60 pasos por
+// segundo (FP_SPEED, gravedad, temporizadores y ataques de los jefes). En el emulador
+// siempre llega a 60, pero la PSP real no: un frame que tarda 17 ms ya pierde el vblank
+// y espera al siguiente (30 fps). Sin esto el juego entero iria en CAMARA LENTA, a la
+// mitad. Solucion clasica de consola: se compara la logica con el reloj de la pantalla
+// (los vblanks, 60 por segundo exactos) y, si quedo atras, la vuelta siguiente actualiza
+// SIN dibujar. Se ve a 30 (o a 20), pero el jinete pega al mismo ritmo que en el emulador.
+static const int FS_MAX_RUN = 2;   // vueltas seguidas sin dibujar: 2 = la imagen no baja de 20 fps
+static const int FS_REBASE  = 8;   // deuda mas grande = hubo una pausa (dialogo de guardado,
+                                   // carga): se perdona en vez de correr medio segundo a ciegas
+static unsigned int g_fsVc0 = 0, g_fsSteps = 0;   // vblank de referencia y pasos de logica desde ahi
+static int g_fsRun = 0, g_fsSkipNext = 0;
+static int g_fsSkipAcc = 0, g_fsSkipSec = 0;      // saltos en el ultimo segundo (medidor de SELECT)
+
+static void fsReset() { g_fsVc0 = sceDisplayGetVcount(); g_fsSteps = 0; g_fsRun = 0; g_fsSkipNext = 0; }
+
+// Al final de CADA vuelta (dibujada o no): un paso de logica mas y decide la siguiente.
+static void fsAfterStep(int drew) {
+    g_fsSteps++;
+    g_fsRun = drew ? 0 : g_fsRun + 1;
+    int behind = (int)(sceDisplayGetVcount() - g_fsVc0) - (int)g_fsSteps;   // vblanks de atraso
+    if (behind > FS_REBASE || behind < 0) { fsReset(); behind = 0; }
+    g_fsSkipNext = (behind >= 1 && g_fsRun < FS_MAX_RUN);
+}
+
 int main(void) {
     setupCallbacks();
     sceCtrlSetSamplingCycle(0);
@@ -1264,6 +1296,7 @@ int main(void) {
     float gvr = 0.0f, gvf = 0.0f, gvg = 0.0f;   // vel en el plano (right,fwd) + a lo largo de la gravedad
     static const char *kGravName[6] = { "ABAJO", "ARRIBA", "+X", "-X", "+Z", "-Z" };
 
+    fsReset();   // la carga de arriba tarda: el reloj del ritmo fijo arranca recien aqui
     while (!g_exit) {
         sceCtrlReadBufferPositive(&pad, 1);
 #if NOCTIS_SKYWORLD
@@ -1676,460 +1709,498 @@ int main(void) {
             for (int q = 0; q < 12; ++q) if (g_sparks[q].life > 0) g_sparks[q].life--;
         }
 
-        // FPS
-        frameAccum++;
-        long long now = sceKernelGetSystemTimeWide();
-        if (now - lastTick >= 1000000) { fps = frameAccum; frameAccum = 0; lastTick = now; }
+        // RITMO FIJO: si la logica quedo atras del reloj de la pantalla, esta vuelta solo
+        // actualiza y NO dibuja (ver fsAfterStep). En el emulador nunca salta: siempre llega.
+        const int drawThis = !g_fsSkipNext;
+        long long tCpu = 0, tGe = 0;
+        if (drawThis) {
+            // FPS: cuenta lo que de verdad se DIBUJA (con frameskip, menos que los pasos de logica)
+            frameAccum++;
+            long long now = sceKernelGetSystemTimeWide();
+            if (now - lastTick >= 1000000) { fps = frameAccum; frameAccum = 0; lastTick = now; g_fsSkipSec = g_fsSkipAcc; g_fsSkipAcc = 0; }
 
-        // ---------- render ----------
-        sceGuStart(GU_DIRECT, g_list);
-        sceGuClearColor(CLEAR_COLOR);
-        sceGuClearDepth(0);
-        sceGuClear(GU_COLOR_BUFFER_BIT | GU_DEPTH_BUFFER_BIT);
+            // ---------- render ----------
+            sceGuStart(GU_DIRECT, g_list);
+            sceGuClearColor(CLEAR_COLOR);
+            sceGuClearDepth(0);
+            sceGuClear(GU_COLOR_BUFFER_BIT | GU_DEPTH_BUFFER_BIT);
 
-        // fondo brumoso (2D, sin profundidad): neblina en el horizonte
-        sceGuDisable(GU_DEPTH_TEST);
+            // fondo brumoso (2D, sin profundidad): neblina en el horizonte
+            sceGuDisable(GU_DEPTH_TEST);
 #if NOCTIS_SKYWORLD
-        lvBackdrop();
+            lvBackdrop();
 #else
-        drawSky();   // cielo gotico dramatico (2D): luna, gradiente, nubes, silueta del horizonte
+            drawSky();   // cielo gotico dramatico (2D): luna, gradiente, nubes, silueta del horizonte
 #endif
-        sceGuEnable(GU_DEPTH_TEST);
+            sceGuEnable(GU_DEPTH_TEST);
 
 #if VIEWER_MODE
-        drawCandidates();
+            drawCandidates();
 #else
-        sceGumMatrixMode(GU_PROJECTION);
-        sceGumLoadIdentity();
-        sceGumPerspective(66.0f, 16.0f / 9.0f, 1.0f, 640.0f); // 640: entran enteros los engranajes lejanos del cielo (r 400..470, R hasta 150)
+            sceGumMatrixMode(GU_PROJECTION);
+            sceGumLoadIdentity();
+            sceGumPerspective(66.0f, 16.0f / 9.0f, 1.0f, 640.0f); // 640: entran enteros los engranajes lejanos del cielo (r 400..470, R hasta 150)
 
-        sceGumMatrixMode(GU_VIEW);
-        sceGumLoadIdentity();
-        {
-#if FLYCAM
-            ScePspFVector3 rot    = { DEG2RAD(48.0f), 0.0f, 0.0f };   // mira el PISO del mundo (adoquin)
-            ScePspFVector3 camOff = { 0.0f, -20.0f, -10.0f };
-            ScePspFVector3 pOff   = { 0.0f, -2.0f, -34.0f };
-            sceGumTranslate(&camOff);
-            sceGumRotateXYZ(&rot);
-            sceGumTranslate(&pOff);
-#else
-            // PRIMERA PERSONA (lookAt): el "adelante" del movimiento y de la camara son
-            // el MISMO vector por construccion -> sin bugs de signo al girar. Ojo a la
-            // altura de la cabeza + head-bob; pivota en el ojo (pitch natural).
-            // 3RA PERSONA con GRAVEDAD: "arriba" = -gravedad; adelante en el plano de la gravedad.
-            // Con gravedad normal el nub gira la vista (camYaw); con gravedad cambiada la vista
-            // queda fija al plano (el nub mueve en el plano) -> siempre consistente con el movimiento.
-            (void)bobX; (void)bobY; (void)EYE_H;
-            float gx, gy, gz, rx, ry, rz, fx, fy, fz;
-            gravDirVec(gravG, &gx, &gy, &gz); gravBasis(gravG, &rx, &ry, &rz, &fx, &fy, &fz);
-            // camYaw SIEMPRE, con cualquier gravedad. Antes se anulaba fuera de la
-            // gravedad normal (s=0, c=1) y la camara quedaba SOLDADA al eje del mundo:
-            // caminando por una pared no se podia mirar alrededor. La base de gravBasis
-            // es ortonormal en las 6 direcciones, asi que componer con camYaw es valido
-            // en todas.
-            const float s = sinf(camYaw), c = cosf(camYaw);
-            float fX = fx * c + rx * s, fY = fy * c + ry * s, fZ = fz * c + rz * s;
-            float uX = -gx, uY = -gy, uZ = -gz;
-            // COLISION DE CAMARA: iba 9 unidades atras a ciegas y se metia DENTRO de los
-            // muros y las columnas. Ahora avanza desde el hombro hacia atras y se corta en
-            // el ultimo punto libre, con margen para no rozar la piedra.
-            const float CAM_BACK = 9.0f, CAM_UP = 4.5f, CAM_R = 0.9f;
-            float camBack = CAM_BACK;
+            sceGumMatrixMode(GU_VIEW);
+            sceGumLoadIdentity();
             {
-                const float ox = playerX + uX * CAM_UP, oy = playerY + uY * CAM_UP, oz = playerZ + uZ * CAM_UP;
-                for (int stp = 1; stp <= 9; ++stp) {
-                    const float d = CAM_BACK * (float)stp * (1.0f / 9.0f);
-                    if (gravBlocked(gravG, ox - fX * d, oy - fY * d, oz - fZ * d, CAM_R)) {
-                        camBack = CAM_BACK * (float)(stp - 1) * (1.0f / 9.0f);
-                        break;
+#if FLYCAM
+                ScePspFVector3 rot    = { DEG2RAD(48.0f), 0.0f, 0.0f };   // mira el PISO del mundo (adoquin)
+                ScePspFVector3 camOff = { 0.0f, -20.0f, -10.0f };
+                ScePspFVector3 pOff   = { 0.0f, -2.0f, -34.0f };
+                sceGumTranslate(&camOff);
+                sceGumRotateXYZ(&rot);
+                sceGumTranslate(&pOff);
+#else
+                // PRIMERA PERSONA (lookAt): el "adelante" del movimiento y de la camara son
+                // el MISMO vector por construccion -> sin bugs de signo al girar. Ojo a la
+                // altura de la cabeza + head-bob; pivota en el ojo (pitch natural).
+                // 3RA PERSONA con GRAVEDAD: "arriba" = -gravedad; adelante en el plano de la gravedad.
+                // Con gravedad normal el nub gira la vista (camYaw); con gravedad cambiada la vista
+                // queda fija al plano (el nub mueve en el plano) -> siempre consistente con el movimiento.
+                (void)bobX; (void)bobY; (void)EYE_H;
+                float gx, gy, gz, rx, ry, rz, fx, fy, fz;
+                gravDirVec(gravG, &gx, &gy, &gz); gravBasis(gravG, &rx, &ry, &rz, &fx, &fy, &fz);
+                // camYaw SIEMPRE, con cualquier gravedad. Antes se anulaba fuera de la
+                // gravedad normal (s=0, c=1) y la camara quedaba SOLDADA al eje del mundo:
+                // caminando por una pared no se podia mirar alrededor. La base de gravBasis
+                // es ortonormal en las 6 direcciones, asi que componer con camYaw es valido
+                // en todas.
+                const float s = sinf(camYaw), c = cosf(camYaw);
+                float fX = fx * c + rx * s, fY = fy * c + ry * s, fZ = fz * c + rz * s;
+                float uX = -gx, uY = -gy, uZ = -gz;
+                // COLISION DE CAMARA: iba 9 unidades atras a ciegas y se metia DENTRO de los
+                // muros y las columnas. Ahora avanza desde el hombro hacia atras y se corta en
+                // el ultimo punto libre, con margen para no rozar la piedra.
+                const float CAM_BACK = 9.0f, CAM_UP = 4.5f, CAM_R = 0.9f;
+                float camBack = CAM_BACK;
+                {
+                    const float ox = playerX + uX * CAM_UP, oy = playerY + uY * CAM_UP, oz = playerZ + uZ * CAM_UP;
+                    for (int stp = 1; stp <= 9; ++stp) {
+                        const float d = CAM_BACK * (float)stp * (1.0f / 9.0f);
+                        if (gravBlocked(gravG, ox - fX * d, oy - fY * d, oz - fZ * d, CAM_R)) {
+                            camBack = CAM_BACK * (float)(stp - 1) * (1.0f / 9.0f);
+                            break;
+                        }
+                    }
+                    // El minimo hay que PROBARLO, no imponerlo. Subir a 2.2 a ciegas era el
+                    // caso mas frecuente del juego (de espaldas a un muro del pasillo) y metia
+                    // el ojo 1.1 DENTRO de la piedra: se veia a traves del muro hacia el vacio.
+                    if (camBack < 2.2f)
+                        camBack = gravBlocked(gravG, ox - fX * 2.2f, oy - fY * 2.2f, oz - fZ * 2.2f, CAM_R)
+                                ? 0.0f : 2.2f;
+                }
+                dbgCamBack = camBack;
+                ScePspFVector3 eye = { playerX - fX * camBack + uX * CAM_UP, playerY - fY * camBack + uY * CAM_UP, playerZ - fZ * camBack + uZ * CAM_UP };
+                // LA VISTA AHORA SIGUE AL CABECEO. Antes habia un (void)camPitch: la camara
+                // tenia un angulo FIJO mientras el rayo de gravedad SI usaba camPitch, que el
+                // D-pad mueve casi 74 grados arriba y abajo. O sea que "la gravedad va a la
+                // cara que miras" era mentira: la imagen no se movia, el rayo si, y acababas
+                // saltando a una cara que no estabas mirando.
+                // Se inclina el objetivo, no el ojo: la camara no orbita ni se mete en sitios
+                // raros al mirar al cenit, y el rayo y la imagen ya apuntan a lo mismo.
+                const float cpv = cosf(camPitch), spv = sinf(camPitch);
+                const float aX = fX * cpv + uX * spv, aY = fY * cpv + uY * spv, aZ = fZ * cpv + uZ * spv;
+                ScePspFVector3 ctr = { playerX + aX * 4.0f + uX * 1.8f, playerY + aY * 4.0f + uY * 1.8f, playerZ + aZ * 4.0f + uZ * 1.8f };
+                ScePspFVector3 up  = { uX, uY, uZ };
+#if NOCTIS_SKYWORLD
+                {   // temblor: el serafin habla / su luz estalla
+                    const float a = g_optShake ? lvShakeAmp() : 0.0f;   // opcion TEMBLOR DE PANTALLA
+                    if (a > 0.0f) {
+                        const float sx = a * sinf(g_lvT * 1.7f), sy = a * cosf(g_lvT * 2.3f);
+                        eye.x += sx; eye.y += sy; ctr.x += sx * 0.5f; ctr.y += sy * 0.5f;
                     }
                 }
-                // El minimo hay que PROBARLO, no imponerlo. Subir a 2.2 a ciegas era el
-                // caso mas frecuente del juego (de espaldas a un muro del pasillo) y metia
-                // el ojo 1.1 DENTRO de la piedra: se veia a traves del muro hacia el vacio.
-                if (camBack < 2.2f)
-                    camBack = gravBlocked(gravG, ox - fX * 2.2f, oy - fY * 2.2f, oz - fZ * 2.2f, CAM_R)
-                            ? 0.0f : 2.2f;
-            }
-            dbgCamBack = camBack;
-            ScePspFVector3 eye = { playerX - fX * camBack + uX * CAM_UP, playerY - fY * camBack + uY * CAM_UP, playerZ - fZ * camBack + uZ * CAM_UP };
-            // LA VISTA AHORA SIGUE AL CABECEO. Antes habia un (void)camPitch: la camara
-            // tenia un angulo FIJO mientras el rayo de gravedad SI usaba camPitch, que el
-            // D-pad mueve casi 74 grados arriba y abajo. O sea que "la gravedad va a la
-            // cara que miras" era mentira: la imagen no se movia, el rayo si, y acababas
-            // saltando a una cara que no estabas mirando.
-            // Se inclina el objetivo, no el ojo: la camara no orbita ni se mete en sitios
-            // raros al mirar al cenit, y el rayo y la imagen ya apuntan a lo mismo.
-            const float cpv = cosf(camPitch), spv = sinf(camPitch);
-            const float aX = fX * cpv + uX * spv, aY = fY * cpv + uY * spv, aZ = fZ * cpv + uZ * spv;
-            ScePspFVector3 ctr = { playerX + aX * 4.0f + uX * 1.8f, playerY + aY * 4.0f + uY * 1.8f, playerZ + aZ * 4.0f + uZ * 1.8f };
-            ScePspFVector3 up  = { uX, uY, uZ };
-#if NOCTIS_SKYWORLD
-            {   // temblor: el serafin habla / su luz estalla
-                const float a = g_optShake ? lvShakeAmp() : 0.0f;   // opcion TEMBLOR DE PANTALLA
-                if (a > 0.0f) {
-                    const float sx = a * sinf(g_lvT * 1.7f), sy = a * cosf(g_lvT * 2.3f);
-                    eye.x += sx; eye.y += sy; ctr.x += sx * 0.5f; ctr.y += sy * 0.5f;
-                }
-            }
 #endif
-            lvCineCam(eye, ctr);         // cinematica de jefe: la camara la manda levels.h
-            sceGumLookAt(&eye, &ctr, &up);
-            lvSetCamera(eye, ctr, up);   // autoapuntado, "lo estas mirando?" y proyeccion del HUD
+                lvCineCam(eye, ctr);         // cinematica de jefe: la camara la manda levels.h
+                sceGumLookAt(&eye, &ctr, &up);
+                lvSetCamera(eye, ctr, up);   // autoapuntado, "lo estas mirando?" y proyeccion del HUD
 #endif
-        }
+            }
 
-        sceGumMatrixMode(GU_MODEL);
-        sceGumLoadIdentity();
+            sceGumMatrixMode(GU_MODEL);
+            sceGumLoadIdentity();
 
-        // vector ADELANTE de la camara en XZ (yaw=0 mira -Z). Cull direccional: descarta
-        // estructuras cuyo footprint quedo detras de la mirada (funciona en cualquier giro).
-        const float fwdX = sinf(camYaw);
-        const float fwdZ = -cosf(camYaw);
+            // vector ADELANTE de la camara en XZ (yaw=0 mira -Z). Cull direccional: descarta
+            // estructuras cuyo footprint quedo detras de la mirada (funciona en cualquier giro).
+            const float fwdX = sinf(camYaw);
+            const float fwdZ = -cosf(camYaw);
 
-        // ===== MUNDO SOLIDO =====
-        // Orden: OCLUSORES primero. El z-buffer descarta la escritura de color de todo el
-        // suelo y el techo que queda detras de una masa, en vez de pintarlo y taparlo. Y una
-        // sola atadura de textura por grupo: cada sceGuTexImage invalida la cache de la GE.
-        // (Se limpiaron 11 dibujados de 0 vertices y 4 texturas muertas que quedaban de los
-        //  mundos anteriores: catedrales, agujas de fondo, ventanas y metal del mirador.)
+            // ===== MUNDO SOLIDO =====
+            // Orden: OCLUSORES primero. El z-buffer descarta la escritura de color de todo el
+            // suelo y el techo que queda detras de una masa, en vez de pintarlo y taparlo. Y una
+            // sola atadura de textura por grupo: cada sceGuTexImage invalida la cache de la GE.
+            // (Se limpiaron 11 dibujados de 0 vertices y 4 texturas muertas que quedaban de los
+            //  mundos anteriores: catedrales, agujas de fondo, ventanas y metal del mirador.)
 #if NOCTIS_SKYWORLD
-        if (g_lvFloor == 0) swDraw(playerX, playerZ, fwdX, fwdZ);
-        lvDraw(playerX, playerY, playerZ);
-        sceGuDisable(GU_CULL_FACE);
+            if (g_lvFloor == 0) swDraw(playerX, playerZ, fwdX, fwdZ);
+            lvDraw(playerX, playerY, playerZ);
+            sceGuDisable(GU_CULL_FACE);
 #else
-        sceGuEnable(GU_TEXTURE_2D);
-        sceGuTexMode(GU_PSM_5650, 0, 0, GU_TRUE);   // 16 bits + SWIZZLED: mitad de lectura por pixel
-        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
-        sceGuTexFilter(GU_NEAREST, GU_NEAREST);     // 1 texel/pixel
-        sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+            sceGuEnable(GU_TEXTURE_2D);
+            sceGuTexMode(GU_PSM_5650, 0, 0, GU_TRUE);   // 16 bits + SWIZZLED: mitad de lectura por pixel
+            sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
+            sceGuTexFilter(GU_NEAREST, GU_NEAREST);     // 1 texel/pixel
+            sceGuTexWrap(GU_REPEAT, GU_REPEAT);
 
-        // 1) MUROS, MASAS, ARCADA, BOVEDA y TRACERIA (los que tapan): cull ON
-        sceGuEnable(GU_CULL_FACE);
-        sceGuTexImage(0, STEX, STEX, STEX, g_indTexS);
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_wallEnd - g_wallStart, 0, g_solidWorld + g_wallStart);
+            // 1) MUROS, MASAS, ARCADA, BOVEDA y TRACERIA (los que tapan): cull ON
+            sceGuEnable(GU_CULL_FACE);
+            sceGuTexImage(0, STEX, STEX, STEX, g_indTexS);
+            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_wallEnd - g_wallStart, 0, g_solidWorld + g_wallStart);
 
-        // 2) SUELO y TECHO: quads de UNA cara (winding propio) -> sin cull.
-        //    El apron va PRIMERO porque esta 0.03 mas arriba: gana el z-test y el suelo
-        //    grueso de debajo se descarta en vez de repintarse.
-        sceGuDisable(GU_CULL_FACE);
-        sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);
-        // APRON QUITADO. Era un parche de suelo de 40x40 que seguia al jugador, y existia
-        // por una sola razon: sin recorte contra el plano cercano, una celda de suelo con
-        // un vertice detras de la camara se descartaba entera y dejaba un agujero a los
-        // pies. Desde que se habilito GU_CLIP_PLANES eso no puede pasar, asi que el apron
-        // solo estaba rasterizando por segunda vez los mismos pixeles que el suelo bueno.
-        // Medido por la auditoria: media pantalla de relleno redundante, 1.176 vertices y
-        // un draw call por frame, para no mostrar nada nuevo.
-        sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_ledgeEnd - g_ledgeStart, 0, g_solidWorld + g_ledgeStart);
-        sceGuDisable(GU_TEXTURE_2D);
+            // 2) SUELO y TECHO: quads de UNA cara (winding propio) -> sin cull.
+            //    El apron va PRIMERO porque esta 0.03 mas arriba: gana el z-test y el suelo
+            //    grueso de debajo se descarta en vez de repintarse.
+            sceGuDisable(GU_CULL_FACE);
+            sceGuTexImage(0, STEX, STEX, STEX, g_groundTexS);
+            // APRON QUITADO. Era un parche de suelo de 40x40 que seguia al jugador, y existia
+            // por una sola razon: sin recorte contra el plano cercano, una celda de suelo con
+            // un vertice detras de la camara se descartaba entera y dejaba un agujero a los
+            // pies. Desde que se habilito GU_CLIP_PLANES eso no puede pasar, asi que el apron
+            // solo estaba rasterizando por segunda vez los mismos pixeles que el suelo bueno.
+            // Medido por la auditoria: media pantalla de relleno redundante, 1.176 vertices y
+            // un draw call por frame, para no mostrar nada nuevo.
+            sceGumDrawArray(GU_TRIANGLES, TEX_FLAGS, g_ledgeEnd - g_ledgeStart, 0, g_solidWorld + g_ledgeStart);
+            sceGuDisable(GU_TEXTURE_2D);
 
-        // 3) SIN textura. Con cull: objetivo, telon de agujas y props (cajas).
-        sceGuEnable(GU_CULL_FACE);
-        g_objMarkVerts = objBuildMarkers(g_objMark, idleT);
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_objMarkVerts, 0, g_objMark);
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_spireVerts, 0, g_spire);
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);
-        // Sin cull: robots y braseros usan addLimb/addBall, cuyo winding es el OPUESTO.
-        sceGuDisable(GU_CULL_FACE);
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
-        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_envVerts, 0, g_env);
+            // 3) SIN textura. Con cull: objetivo, telon de agujas y props (cajas).
+            sceGuEnable(GU_CULL_FACE);
+            g_objMarkVerts = objBuildMarkers(g_objMark, idleT);
+            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_objMarkVerts, 0, g_objMark);
+            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_spireVerts, 0, g_spire);
+            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_vpropsVerts, 0, g_vprops);
+            // Sin cull: robots y braseros usan addLimb/addBall, cuyo winding es el OPUESTO.
+            sceGuDisable(GU_CULL_FACE);
+            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_npcVerts, 0, g_npc);
+            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_envVerts, 0, g_env);
 #endif
 
-        // ---- 3RA PERSONA: el HUNTER con ciclo de caminata (anim.h) ----
-        // Orden importante: gravedad -> encare -> bob (ya en el cuerpo) -> inclinacion
-        // pivotando en la CADERA. Corrige tres fallos del bloque viejo: inclinaba hacia
-        // ATRAS, el pitch se aplicaba en el eje del MUNDO (corriendo de lado parecia
-        // volcar) y el balanceo tardaba dos ciclos en cerrar.
-        {
-            HunterPose pose = hunterPose(walkPhase, idleT, speed01, grounded);   // no llamarla hp: ensombrecia la VIDA del jugador
-            const int floatingNow = (!NOCTIS_SKYWORLD && !grounded && (pad.Buttons & PSP_CTRL_SQUARE) && en > 0.0f) ? 1 : 0;
-            {   // sombra de contacto sobre lo que haya debajo (si es vacio, no hay sombra)
-                const float gy = groundHeight(playerX, playerZ, playerY + 0.5f);
-                if (gy > -1000.0f) drawBlobShadow(playerX, gy, playerZ, playerY - gy);
-            }
-            // hunterRig ajusta tambien pose.bobY/lean (aterrizaje), por eso va ANTES del cuerpo
-            const HunterRig rig = hunterRig(pose, walkPhase, idleT, speed01, grounded, floatingNow,
-                                            aiming, meleeFx > 0 ? meleeFx / 8.0f : 0.0f, landK);
-            pose.roll += turnLean;                                  // se inclina hacia la curva
-            const float HIP = 1.70f;
-            sceGumLoadIdentity();
-            ScePspFVector3 pp = { playerX, playerY, playerZ };
-            sceGumTranslate(&pp);
-            ScePspFVector3 gm = { 0.0f, 0.0f, 0.0f };           // pies hacia la gravedad
-            if (gravG == 1) gm.z = 3.14159f; else if (gravG == 2) gm.z = -1.5708f;
-            else if (gravG == 3) gm.z = 1.5708f; else if (gravG == 4) gm.x = 1.5708f;
-            else if (gravG == 5) gm.x = -1.5708f;
-            sceGumRotateXYZ(&gm);
-            ScePspFVector3 fy = { 0.0f, heroYaw + pose.yawSway, 0.0f };
-            sceGumRotateXYZ(&fy);
-            ScePspFVector3 bob = { pose.bobX * HUNTER_BOB_SCALE, pose.bobY * HUNTER_BOB_SCALE, 0.0f };
-            sceGumTranslate(&bob);
-            ScePspFVector3 up   = { 0.0f,  HIP, 0.0f }; sceGumTranslate(&up);
-            ScePspFVector3 body = { hunterPitchRad(pose), 0.0f, hunterRollRad(pose) };
-            sceGumRotateXYZ(&body);
-            ScePspFVector3 dn   = { 0.0f, -HIP, 0.0f }; sceGumTranslate(&dn);
-            drawHunterRig(rig);   // antes: g_hero entero como una sola pieza rigida
-        }
-
-        // recursos: brillan al acercarse (seccion 12)
-        for (int r = 0; r < kResourceCount && r < 64 && !NOCTIS_SKYWORLD; ++r) {
-            if (collected[r]) continue;
-            float dx = kResources[r].x * WSCALE - playerX, dz = kResources[r].z * WSCALE - playerZ;
-            float d = sqrtf(dx * dx + dz * dz);
-            if (d > 16.0f) continue;                          // gema lejos -> sin draw-call/matriz por gema
-            if (dx * fwdX + dz * fwdZ < -1.5f) continue;      // gema detras de la mirada
-            float t = (d < 14.0f) ? (1.0f - d / 14.0f) : 0.0f; // 0 lejos .. 1 cerca
-            int br = 60 + (int)(190 * t);
-            unsigned int col = RGBA(br, 90 + (int)(95 * t), 140 + (int)(95 * t), 255);
-            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 40);
-            int vi = 0;
-            addSolidBox(v, vi, kResources[r].x * WSCALE, kResources[r].y + 0.2f, kResources[r].z * WSCALE,
-                        0.7f, 0.7f, 0.7f, col); // gema solida que brilla al acercarse
-            sceGumLoadIdentity();
-            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
-        }
-
-        // hacia donde encara el heroe: lo usan el fogonazo del canon y el arco de melee
-        const float fx = sinf(heroYaw), fz = -cosf(heroYaw);
-
-        // ---- balas: TRAZADORA de energia (nucleo blanco alargado en la direccion del vuelo +
-        //      halo del color del arma, luz SUMADA, sin escribir Z). Antes: un cubo de color ----
-        sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xFFFFFFFF); sceGuDepthMask(GU_TRUE);
-        for (int s = 0; s < 24; ++s) {
-            if (g_shots[s].life <= 0) continue;
-            const Shot &b = g_shots[s];
-            float dx = b.vx, dy = b.vy, dz = b.vz;
-            const float L = sqrtf(dx * dx + dy * dy + dz * dz) + 1e-4f; dx /= L; dy /= L; dz /= L;
-            float ax = -dz, az = dx, al = sqrtf(ax * ax + az * az);           // perpendicular horizontal
-            if (al < 1e-3f) { ax = 1.0f; az = 0.0f; al = 1.0f; }
-            ax /= al; az /= al;
-            const float bx2 = dy * az, by2 = dz * ax - dx * az, bz2 = -dy * ax;  // d x a (perpendicular vertical)
-            const float len = 2.4f, w = b.size * 1.6f;
-            const float tx = b.x - dx * len, ty = b.y - dy * len, tz = b.z - dz * len;
-            const unsigned int halo = (b.col & 0x00FFFFFFu) | (150u << 24), core = RGBA(255, 255, 245, 255);
-            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 24); int vi = 0;
-            for (int pass = 0; pass < 2; ++pass) {
-                const float ww = pass ? w * 0.32f : w;                    // halo ancho / nucleo fino
-                const unsigned int c = pass ? core : halo;
-                swQuadC(v, vi, b.x + ax * ww, b.y, b.z + az * ww, c, tx + ax * ww * 0.25f, ty, tz + az * ww * 0.25f, c,
-                               tx - ax * ww * 0.25f, ty, tz - az * ww * 0.25f, c, b.x - ax * ww, b.y, b.z - az * ww, c);
-                swQuadC(v, vi, b.x + bx2 * ww, b.y + by2 * ww, b.z + bz2 * ww, c, tx + bx2 * ww * 0.25f, ty + by2 * ww * 0.25f, tz + bz2 * ww * 0.25f, c,
-                               tx - bx2 * ww * 0.25f, ty - by2 * ww * 0.25f, tz - bz2 * ww * 0.25f, c, b.x - bx2 * ww, b.y - by2 * ww, b.z - bz2 * ww, c);
-            }
-            sceGumLoadIdentity();
-            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
-        }
-        sceGuDepthMask(GU_FALSE); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
-        // ---- fogonazo del canon ----
-        if (muzzle > 0) {   // fogonazo: estrella de luz SUMADA en la boca de la pistola
-            const float mx = playerX + fx * 1.35f - cosf(heroYaw) * 0.45f, my = playerY + 2.6f,
-                        mz = playerZ + fz * 1.35f - sinf(heroYaw) * 0.45f;
-            const float r = 0.35f + 0.12f * muzzle;
-            const unsigned int c = (muzzleCol & 0x00FFFFFFu) | (200u << 24), w = RGBA(255, 255, 240, 255);
-            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 24); int vi = 0;
-            swQuadC(v, vi, mx - r, my, mz, c, mx, my + r, mz, c, mx + r, my, mz, c, mx, my - r, mz, c);
-            swQuadC(v, vi, mx, my, mz - r, c, mx, my + r, mz, c, mx, my, mz + r, c, mx, my - r, mz, c);
-            swQuadC(v, vi, mx - r * 0.35f, my, mz, w, mx, my + r * 0.35f, mz, w, mx + r * 0.35f, my, mz, w, mx, my - r * 0.35f, mz, w);
-            swQuadC(v, vi, mx, my, mz - r * 0.35f, w, mx, my + r * 0.35f, mz, w, mx, my, mz + r * 0.35f, w, mx, my - r * 0.35f, mz, w);
-            sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xFFFFFFFF); sceGuDepthMask(GU_TRUE);
-            sceGumLoadIdentity();
-            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
-            sceGuDepthMask(GU_FALSE); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
-        }
-        // ---- chispas de impacto (robot derribado) ----
-        for (int q = 0; q < 12; ++q) {
-            if (g_sparks[q].life <= 0) continue;
-            float t = (float)g_sparks[q].life / 16.0f;       // 1..0
-            float sz = 0.25f + (1.0f - t) * 0.9f;            // crece al estallar
-            int br = (int)(120 + 135 * t);
-            unsigned int col = RGBA(255, br, 60 + (int)(80 * t), 255);
-            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
-            int vi = 0;
-            addSolidBox(v, vi, g_sparks[q].x, g_sparks[q].y - sz * 0.5f, g_sparks[q].z, sz, sz, sz, col);
-            sceGumLoadIdentity();
-            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
-        }
-
-        // ---- TAJO de la espada (Circulo) ----
-        // Era literalmente un addSolidBox: por eso "se sigue viendo como un cuadrado en
-        // la pantalla". No era un arco mal hecho, es que nunca fue un arco.
-        // Ahora es una cinta curva que BARRE delante del personaje durante los 8 frames
-        // que dura el golpe: la cabeza va por delante, ancha y clara, y la cola la sigue
-        // afilandose. El filo ademas CAE al avanzar, asi que es un tajo diagonal y no un
-        // disco plano, que es lo que lo hace leerse como un sablazo y no como un aro.
-        if (meleeFx > 0) {
-            const float reach = kMelee[curMelee].reach * 0.20f;
-            const float p     = 1.0f - (float)meleeFx / 8.0f;   // 0 al golpear -> 1 al final
-            const float TAIL  = 0.45f;                          // largo de la estela
-            float h1 = 0.10f + p * 1.05f; if (h1 > 1.0f) h1 = 1.0f;   // cabeza del tajo
-            float h0 = h1 - TAIL;         if (h0 < 0.0f) h0 = 0.0f;   // cola
-            const int NS = 8;
-            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * (NS * 6));
-            int vi = 0;
-            const float SWEEP = 2.35f;                          // radianes que abarca
-            const float aBase = heroYaw - SWEEP * 0.5f;
-            const float span  = (h1 - h0) > 0.001f ? (h1 - h0) : 0.001f;
-            for (int k = 0; k < NS; ++k) {
-                const float f0 = h0 + span * ((float)k        / (float)NS);
-                const float f1 = h0 + span * ((float)(k + 1)  / (float)NS);
-                const float A0 = aBase + SWEEP * f0, A1 = aBase + SWEEP * f1;
-                const float y0 = playerY + 1.55f - 0.95f * f0 * f0;
-                const float y1 = playerY + 1.55f - 0.95f * f1 * f1;
-                const float w0 = 0.26f + 0.64f * f0, w1 = 0.26f + 0.64f * f1;
-                const float ri0 = reach * (1.02f - w0 * 0.5f), ro0 = reach * (1.02f + w0 * 0.5f);
-                const float ri1 = reach * (1.02f - w1 * 0.5f), ro1 = reach * (1.02f + w1 * 0.5f);
-                const float s0 = sinf(A0), c0 = -cosf(A0), s1 = sinf(A1), c1 = -cosf(A1);
-                const float g0 = 0.30f + 0.70f * ((f0 - h0) / span);   // apagado en la cola
-                const float g1 = 0.30f + 0.70f * ((f1 - h0) / span);
-                const unsigned int cA = RGBA(40 + (int)(150.0f * g0), 45 + (int)(190.0f * g0),
-                                             25 + (int)(225.0f * g0), 255);
-                const unsigned int cB = RGBA(40 + (int)(150.0f * g1), 45 + (int)(190.0f * g1),
-                                             25 + (int)(225.0f * g1), 255);
-                v[vi++] = { cA, playerX + s0 * ri0, y0, playerZ + c0 * ri0 };
-                v[vi++] = { cA, playerX + s0 * ro0, y0, playerZ + c0 * ro0 };
-                v[vi++] = { cB, playerX + s1 * ro1, y1, playerZ + c1 * ro1 };
-                v[vi++] = { cA, playerX + s0 * ri0, y0, playerZ + c0 * ri0 };
-                v[vi++] = { cB, playerX + s1 * ro1, y1, playerZ + c1 * ro1 };
-                v[vi++] = { cB, playerX + s1 * ri1, y1, playerZ + c1 * ri1 };
-            }
-            sceGumLoadIdentity();
-            sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
-        }
-
-        // ---- viewmodel: APAGADO en 3ra persona ----
-        // Costaba un borrado del buffer de profundidad a pantalla completa + 3 matrices
-        // + generar 640 verts por CPU cada frame, todo para un dibujado "if (0)".
-        // Cuando vuelva la 1ra persona, recuperar el bloque del historial de git.
-        sceGuDisable(GU_TEXTURE_2D);
-
-        // ---------- HUD (2D) ----------
-        sceGuDisable(GU_DEPTH_TEST);
-        sceGuEnable(GU_BLEND);
-        sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-        sceGuDisable(GU_TEXTURE_2D);
-
-        // ---- DESTELLO DE DANO. hurtFlash se ponia a 12 y se decrementaba, pero no lo
-        // dibujaba nadie: una gargola te mordia, la vida bajaba y en pantalla no pasaba
-        // absolutamente nada. Velo rojo que se apaga solo, mas fuerte cuanto menos vida
-        // queda, para que el ultimo mordisco se note de verdad.
-        if (hurtFlash > 0) {
-            const float t  = (float)hurtFlash / 12.0f;
-            const float lo = 1.0f - (hp / HP_MAX);                  // 0 con la vida llena
-            int a = (int)(t * (54.0f + 90.0f * lo));
-            if (a > 160) a = 160;
-            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 6);
-            const unsigned int c = RGBA(150, 18, 22, a);
-            v[0] = { c,   0.0f,   0.0f, 0.0f }; v[1] = { c, 480.0f,   0.0f, 0.0f };
-            v[2] = { c, 480.0f, 272.0f, 0.0f }; v[3] = { c,   0.0f,   0.0f, 0.0f };
-            v[4] = { c, 480.0f, 272.0f, 0.0f }; v[5] = { c,   0.0f, 272.0f, 0.0f };
-            sceGumDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D, 6, 0, v);
-        }
-        {
-            HudState st{};
-            st.hp = hp; st.hpMax = HP_MAX;
-            st.en = en;     st.enMax = EN_MAX;           // EN_MAX sube con cada material
-            // La barra GRV media un literal 1.0f: pintaba un medidor SIEMPRE lleno, la
-            // misma trampa decorativa que el "1200" escrito a mano de la vida. Ahora mide
-            // lo unico que de verdad limita la gravedad: si te queda un cambio. Llena
-            // mientras puedas cambiar, y solo se vacia en los ultimos GRAV_EN_SWITCH,
-            // que es justo el aviso util (el siguiente salto te deja sin mecanica).
-            { float g1 = en / GRAV_EN_SWITCH; if (g1 > 1.0f) g1 = 1.0f; if (g1 < 0.0f) g1 = 0.0f;
-              st.grv = g1; }
-            st.gravName = kGravName[gravG];
-            st.px = playerX; st.pz = playerZ; st.yaw = heroYaw;
+            // ---- 3RA PERSONA: el HUNTER con ciclo de caminata (anim.h) ----
+            // Orden importante: gravedad -> encare -> bob (ya en el cuerpo) -> inclinacion
+            // pivotando en la CADERA. Corrige tres fallos del bloque viejo: inclinaba hacia
+            // ATRAS, el pitch se aplicaba en el eje del MUNDO (corriendo de lado parecia
+            // volcar) y el balanceo tardaba dos ciclos en cerrar.
             {
-                static const char *kZone[8] = { "CIELO", "PISO 1", "PISO 2", "PISO 3", "PISO 4", "PISO 5", "PISO 6", "PISO 7" };
-                st.district = !NOCTIS_SKYWORLD ? "CAMPANARIO" : kZone[(g_lvFloor >= 0 && g_lvFloor < 8) ? g_lvFloor : 0];
+                HunterPose pose = hunterPose(walkPhase, idleT, speed01, grounded);   // no llamarla hp: ensombrecia la VIDA del jugador
+                const int floatingNow = (!NOCTIS_SKYWORLD && !grounded && (pad.Buttons & PSP_CTRL_SQUARE) && en > 0.0f) ? 1 : 0;
+                {   // sombra de contacto sobre lo que haya debajo (si es vacio, no hay sombra)
+                    const float gy = groundHeight(playerX, playerZ, playerY + 0.5f);
+                    if (gy > -1000.0f) drawBlobShadow(playerX, gy, playerZ, playerY - gy);
+                }
+                // hunterRig ajusta tambien pose.bobY/lean (aterrizaje), por eso va ANTES del cuerpo
+                const HunterRig rig = hunterRig(pose, walkPhase, idleT, speed01, grounded, floatingNow,
+                                                aiming, meleeFx > 0 ? meleeFx / 8.0f : 0.0f, landK);
+                pose.roll += turnLean;                                  // se inclina hacia la curva
+                const float HIP = 1.70f;
+                sceGumLoadIdentity();
+                ScePspFVector3 pp = { playerX, playerY, playerZ };
+                sceGumTranslate(&pp);
+                ScePspFVector3 gm = { 0.0f, 0.0f, 0.0f };           // pies hacia la gravedad
+                if (gravG == 1) gm.z = 3.14159f; else if (gravG == 2) gm.z = -1.5708f;
+                else if (gravG == 3) gm.z = 1.5708f; else if (gravG == 4) gm.x = 1.5708f;
+                else if (gravG == 5) gm.x = -1.5708f;
+                sceGumRotateXYZ(&gm);
+                ScePspFVector3 fy = { 0.0f, heroYaw + pose.yawSway, 0.0f };
+                sceGumRotateXYZ(&fy);
+                ScePspFVector3 bob = { pose.bobX * HUNTER_BOB_SCALE, pose.bobY * HUNTER_BOB_SCALE, 0.0f };
+                sceGumTranslate(&bob);
+                ScePspFVector3 up   = { 0.0f,  HIP, 0.0f }; sceGumTranslate(&up);
+                ScePspFVector3 body = { hunterPitchRad(pose), 0.0f, hunterRollRad(pose) };
+                sceGumRotateXYZ(&body);
+                ScePspFVector3 dn   = { 0.0f, -HIP, 0.0f }; sceGumTranslate(&dn);
+                drawHunterRig(rig);   // antes: g_hero entero como una sola pieza rigida
             }
-            st.matTaken = objMaterialsTaken(); st.matTotal = objMaterialCount();
+
+            // recursos: brillan al acercarse (seccion 12)
+            for (int r = 0; r < kResourceCount && r < 64 && !NOCTIS_SKYWORLD; ++r) {
+                if (collected[r]) continue;
+                float dx = kResources[r].x * WSCALE - playerX, dz = kResources[r].z * WSCALE - playerZ;
+                float d = sqrtf(dx * dx + dz * dz);
+                if (d > 16.0f) continue;                          // gema lejos -> sin draw-call/matriz por gema
+                if (dx * fwdX + dz * fwdZ < -1.5f) continue;      // gema detras de la mirada
+                float t = (d < 14.0f) ? (1.0f - d / 14.0f) : 0.0f; // 0 lejos .. 1 cerca
+                int br = 60 + (int)(190 * t);
+                unsigned int col = RGBA(br, 90 + (int)(95 * t), 140 + (int)(95 * t), 255);
+                LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 40);
+                int vi = 0;
+                addSolidBox(v, vi, kResources[r].x * WSCALE, kResources[r].y + 0.2f, kResources[r].z * WSCALE,
+                            0.7f, 0.7f, 0.7f, col); // gema solida que brilla al acercarse
+                sceGumLoadIdentity();
+                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
+            }
+
+            // hacia donde encara el heroe: lo usan el fogonazo del canon y el arco de melee
+            const float fx = sinf(heroYaw), fz = -cosf(heroYaw);
+
+            // ---- balas: TRAZADORA de energia (nucleo blanco alargado en la direccion del vuelo +
+            //      halo del color del arma, luz SUMADA, sin escribir Z). Antes: un cubo de color ----
+            sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xFFFFFFFF); sceGuDepthMask(GU_TRUE);
+            for (int s = 0; s < 24; ++s) {
+                if (g_shots[s].life <= 0) continue;
+                const Shot &b = g_shots[s];
+                float dx = b.vx, dy = b.vy, dz = b.vz;
+                const float L = sqrtf(dx * dx + dy * dy + dz * dz) + 1e-4f; dx /= L; dy /= L; dz /= L;
+                float ax = -dz, az = dx, al = sqrtf(ax * ax + az * az);           // perpendicular horizontal
+                if (al < 1e-3f) { ax = 1.0f; az = 0.0f; al = 1.0f; }
+                ax /= al; az /= al;
+                const float bx2 = dy * az, by2 = dz * ax - dx * az, bz2 = -dy * ax;  // d x a (perpendicular vertical)
+                const float len = 2.4f, w = b.size * 1.6f;
+                const float tx = b.x - dx * len, ty = b.y - dy * len, tz = b.z - dz * len;
+                const unsigned int halo = (b.col & 0x00FFFFFFu) | (150u << 24), core = RGBA(255, 255, 245, 255);
+                LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 24); int vi = 0;
+                for (int pass = 0; pass < 2; ++pass) {
+                    const float ww = pass ? w * 0.32f : w;                    // halo ancho / nucleo fino
+                    const unsigned int c = pass ? core : halo;
+                    swQuadC(v, vi, b.x + ax * ww, b.y, b.z + az * ww, c, tx + ax * ww * 0.25f, ty, tz + az * ww * 0.25f, c,
+                                   tx - ax * ww * 0.25f, ty, tz - az * ww * 0.25f, c, b.x - ax * ww, b.y, b.z - az * ww, c);
+                    swQuadC(v, vi, b.x + bx2 * ww, b.y + by2 * ww, b.z + bz2 * ww, c, tx + bx2 * ww * 0.25f, ty + by2 * ww * 0.25f, tz + bz2 * ww * 0.25f, c,
+                                   tx - bx2 * ww * 0.25f, ty - by2 * ww * 0.25f, tz - bz2 * ww * 0.25f, c, b.x - bx2 * ww, b.y - by2 * ww, b.z - bz2 * ww, c);
+                }
+                sceGumLoadIdentity();
+                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
+            }
+            sceGuDepthMask(GU_FALSE); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
+            // ---- fogonazo del canon ----
+            if (muzzle > 0) {   // fogonazo: estrella de luz SUMADA en la boca de la pistola
+                const float mx = playerX + fx * 1.35f - cosf(heroYaw) * 0.45f, my = playerY + 2.6f,
+                            mz = playerZ + fz * 1.35f - sinf(heroYaw) * 0.45f;
+                const float r = 0.35f + 0.12f * muzzle;
+                const unsigned int c = (muzzleCol & 0x00FFFFFFu) | (200u << 24), w = RGBA(255, 255, 240, 255);
+                LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 24); int vi = 0;
+                swQuadC(v, vi, mx - r, my, mz, c, mx, my + r, mz, c, mx + r, my, mz, c, mx, my - r, mz, c);
+                swQuadC(v, vi, mx, my, mz - r, c, mx, my + r, mz, c, mx, my, mz + r, c, mx, my - r, mz, c);
+                swQuadC(v, vi, mx - r * 0.35f, my, mz, w, mx, my + r * 0.35f, mz, w, mx + r * 0.35f, my, mz, w, mx, my - r * 0.35f, mz, w);
+                swQuadC(v, vi, mx, my, mz - r * 0.35f, w, mx, my + r * 0.35f, mz, w, mx, my, mz + r * 0.35f, w, mx, my - r * 0.35f, mz, w);
+                sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xFFFFFFFF); sceGuDepthMask(GU_TRUE);
+                sceGumLoadIdentity();
+                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
+                sceGuDepthMask(GU_FALSE); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
+            }
+            // ---- chispas de impacto (robot derribado) ----
+            for (int q = 0; q < 12; ++q) {
+                if (g_sparks[q].life <= 0) continue;
+                float t = (float)g_sparks[q].life / 16.0f;       // 1..0
+                float sz = 0.25f + (1.0f - t) * 0.9f;            // crece al estallar
+                int br = (int)(120 + 135 * t);
+                unsigned int col = RGBA(255, br, 60 + (int)(80 * t), 255);
+                LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
+                int vi = 0;
+                addSolidBox(v, vi, g_sparks[q].x, g_sparks[q].y - sz * 0.5f, g_sparks[q].z, sz, sz, sz, col);
+                sceGumLoadIdentity();
+                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
+            }
+
+            // ---- TAJO de la espada (Circulo) ----
+            // Era literalmente un addSolidBox: por eso "se sigue viendo como un cuadrado en
+            // la pantalla". No era un arco mal hecho, es que nunca fue un arco.
+            // Ahora es una cinta curva que BARRE delante del personaje durante los 8 frames
+            // que dura el golpe: la cabeza va por delante, ancha y clara, y la cola la sigue
+            // afilandose. El filo ademas CAE al avanzar, asi que es un tajo diagonal y no un
+            // disco plano, que es lo que lo hace leerse como un sablazo y no como un aro.
+            if (meleeFx > 0) {
+                const float reach = kMelee[curMelee].reach * 0.20f;
+                const float p     = 1.0f - (float)meleeFx / 8.0f;   // 0 al golpear -> 1 al final
+                const float TAIL  = 0.45f;                          // largo de la estela
+                float h1 = 0.10f + p * 1.05f; if (h1 > 1.0f) h1 = 1.0f;   // cabeza del tajo
+                float h0 = h1 - TAIL;         if (h0 < 0.0f) h0 = 0.0f;   // cola
+                const int NS = 8;
+                LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * (NS * 6));
+                int vi = 0;
+                const float SWEEP = 2.35f;                          // radianes que abarca
+                const float aBase = heroYaw - SWEEP * 0.5f;
+                const float span  = (h1 - h0) > 0.001f ? (h1 - h0) : 0.001f;
+                for (int k = 0; k < NS; ++k) {
+                    const float f0 = h0 + span * ((float)k        / (float)NS);
+                    const float f1 = h0 + span * ((float)(k + 1)  / (float)NS);
+                    const float A0 = aBase + SWEEP * f0, A1 = aBase + SWEEP * f1;
+                    const float y0 = playerY + 1.55f - 0.95f * f0 * f0;
+                    const float y1 = playerY + 1.55f - 0.95f * f1 * f1;
+                    const float w0 = 0.26f + 0.64f * f0, w1 = 0.26f + 0.64f * f1;
+                    const float ri0 = reach * (1.02f - w0 * 0.5f), ro0 = reach * (1.02f + w0 * 0.5f);
+                    const float ri1 = reach * (1.02f - w1 * 0.5f), ro1 = reach * (1.02f + w1 * 0.5f);
+                    const float s0 = sinf(A0), c0 = -cosf(A0), s1 = sinf(A1), c1 = -cosf(A1);
+                    const float g0 = 0.30f + 0.70f * ((f0 - h0) / span);   // apagado en la cola
+                    const float g1 = 0.30f + 0.70f * ((f1 - h0) / span);
+                    const unsigned int cA = RGBA(40 + (int)(150.0f * g0), 45 + (int)(190.0f * g0),
+                                                 25 + (int)(225.0f * g0), 255);
+                    const unsigned int cB = RGBA(40 + (int)(150.0f * g1), 45 + (int)(190.0f * g1),
+                                                 25 + (int)(225.0f * g1), 255);
+                    v[vi++] = { cA, playerX + s0 * ri0, y0, playerZ + c0 * ri0 };
+                    v[vi++] = { cA, playerX + s0 * ro0, y0, playerZ + c0 * ro0 };
+                    v[vi++] = { cB, playerX + s1 * ro1, y1, playerZ + c1 * ro1 };
+                    v[vi++] = { cA, playerX + s0 * ri0, y0, playerZ + c0 * ri0 };
+                    v[vi++] = { cB, playerX + s1 * ro1, y1, playerZ + c1 * ro1 };
+                    v[vi++] = { cB, playerX + s1 * ri1, y1, playerZ + c1 * ri1 };
+                }
+                sceGumLoadIdentity();
+                sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
+            }
+
+            // ---- viewmodel: APAGADO en 3ra persona ----
+            // Costaba un borrado del buffer de profundidad a pantalla completa + 3 matrices
+            // + generar 640 verts por CPU cada frame, todo para un dibujado "if (0)".
+            // Cuando vuelva la 1ra persona, recuperar el bloque del historial de git.
+            sceGuDisable(GU_TEXTURE_2D);
+
+            // ---------- HUD (2D) ----------
+            sceGuDisable(GU_DEPTH_TEST);
+            sceGuEnable(GU_BLEND);
+            sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+            sceGuDisable(GU_TEXTURE_2D);
+
+            // ---- DESTELLO DE DANO. hurtFlash se ponia a 12 y se decrementaba, pero no lo
+            // dibujaba nadie: una gargola te mordia, la vida bajaba y en pantalla no pasaba
+            // absolutamente nada. Velo rojo que se apaga solo, mas fuerte cuanto menos vida
+            // queda, para que el ultimo mordisco se note de verdad.
+            if (hurtFlash > 0) {
+                const float t  = (float)hurtFlash / 12.0f;
+                const float lo = 1.0f - (hp / HP_MAX);                  // 0 con la vida llena
+                int a = (int)(t * (54.0f + 90.0f * lo));
+                if (a > 160) a = 160;
+                LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 6);
+                const unsigned int c = RGBA(150, 18, 22, a);
+                v[0] = { c,   0.0f,   0.0f, 0.0f }; v[1] = { c, 480.0f,   0.0f, 0.0f };
+                v[2] = { c, 480.0f, 272.0f, 0.0f }; v[3] = { c,   0.0f,   0.0f, 0.0f };
+                v[4] = { c, 480.0f, 272.0f, 0.0f }; v[5] = { c,   0.0f, 272.0f, 0.0f };
+                sceGumDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D, 6, 0, v);
+            }
+            {
+                HudState st{};
+                st.hp = hp; st.hpMax = HP_MAX;
+                st.en = en;     st.enMax = EN_MAX;           // EN_MAX sube con cada material
+                // La barra GRV media un literal 1.0f: pintaba un medidor SIEMPRE lleno, la
+                // misma trampa decorativa que el "1200" escrito a mano de la vida. Ahora mide
+                // lo unico que de verdad limita la gravedad: si te queda un cambio. Llena
+                // mientras puedas cambiar, y solo se vacia en los ultimos GRAV_EN_SWITCH,
+                // que es justo el aviso util (el siguiente salto te deja sin mecanica).
+                { float g1 = en / GRAV_EN_SWITCH; if (g1 > 1.0f) g1 = 1.0f; if (g1 < 0.0f) g1 = 0.0f;
+                  st.grv = g1; }
+                st.gravName = kGravName[gravG];
+                st.px = playerX; st.pz = playerZ; st.yaw = heroYaw;
+                {
+                    static const char *kZone[8] = { "CIELO", "PISO 1", "PISO 2", "PISO 3", "PISO 4", "PISO 5", "PISO 6", "PISO 7" };
+                    st.district = !NOCTIS_SKYWORLD ? "CAMPANARIO" : kZone[(g_lvFloor >= 0 && g_lvFloor < 8) ? g_lvFloor : 0];
+                }
+                st.matTaken = objMaterialsTaken(); st.matTotal = objMaterialCount();
 #if NOCTIS_SKYWORLD
-            if (pad.Buttons & PSP_CTRL_SELECT) {   // depuracion: posicion en la etiqueta de zona (Z y Y)
-                static char pos[24]; int n = 0;
-                auto num = [&](char tag, float v) {
-                    pos[n++] = tag; int q = (int)(v < 0 ? -v : v); if (v < 0) pos[n++] = '-';
-                    char t[8]; int k = 0; do { t[k++] = (char)('0' + q % 10); q /= 10; } while (q && k < 7);
-                    while (k) pos[n++] = t[--k]; pos[n++] = ' ';
+                if (pad.Buttons & PSP_CTRL_SELECT) {   // depuracion: posicion en la etiqueta de zona (Z y Y)
+                    static char pos[24]; int n = 0;
+                    auto num = [&](char tag, float v) {
+                        pos[n++] = tag; int q = (int)(v < 0 ? -v : v); if (v < 0) pos[n++] = '-';
+                        char t[8]; int k = 0; do { t[k++] = (char)('0' + q % 10); q /= 10; } while (q && k < 7);
+                        while (k) pos[n++] = t[--k]; pos[n++] = ' ';
+                    };
+                    num('V', (float)g_vtxLast); num('D', (float)g_drawLast); pos[n] = 0; st.district = pos;   // carga del frame
+                }
+                st.objLabel = "OJOS "; st.matTaken = g_eyesKilled;
+                st.matTotal = (g_lvFloor == 1 && g_eyesOn && g_lvUnlocked < 2) ? 30 : 0;
+                if (g_lvFloor == 2 && g_bs == BS_FIGHT) { st.objLabel = "LUZ "; st.matTaken = g_bsHp; st.matTotal = BS_HP; }
+#endif
+                st.pickTimer = pickTimer;
+                st.pickName = (pickedType >= 0 && pickedType < kMaterialCount) ? kMaterials[pickedType].name : 0;
+                st.weaponName = kRanged[curRanged].name;
+                st.ammo = ammoMag[curRanged]; st.ammoMax = kRanged[curRanged].magazine;
+                st.reloading = (reloadCD > 0);
+                st.fps = (NOCTIS_SKYWORLD && !g_optFps) ? -1 : fps;   // opcion MOSTRAR FPS
+                st.aiming = (aiming != 0);
+                st.paused = (paused != 0);
+                if (!NOCTIS_SKYWORLD || (!g_menu && !g_cine)) hudDraw(st);   // en el menu principal no hay HUD
+#if NOCTIS_SKYWORLD
+                lvHud(aiming, hp, HP_MAX);
+                // lvHud (y el HUD de los jefes) terminan ENCENDIENDO la prueba de profundidad
+                // para el 3D del frame siguiente: el texto que va despues (medidor de SELECT,
+                // dialogos) se recortaba contra el piso y salia a pedazos.
+                sceGuDisable(GU_DEPTH_TEST);
+                if ((pad.Buttons & PSP_CTRL_SELECT) && !g_menu && !g_cine) {
+                    // 2da linea del medidor: C = CPU y G = GE en ms por frame dibujado (presupuesto:
+                    // 16.6 para 60 fps, 33.3 para 30), S = frames que el ritmo fijo salto en el
+                    // ultimo segundo. En el emulador S es siempre 0: el dato que vale es el de la PSP.
+                    static char ln[32]; int n = 0;
+                    auto ms = [&](char tag, float v) {
+                        int t = (int)(v * 10.0f + 0.5f); if (t > 999) t = 999;
+                        ln[n++] = tag;
+                        if (t >= 100) ln[n++] = (char)('0' + t / 100);
+                        ln[n++] = (char)('0' + (t / 10) % 10); ln[n++] = '.'; ln[n++] = (char)('0' + t % 10);
+                        ln[n++] = ' ';
+                    };
+                    ms('C', msCpu); ms('G', msGe);
+                    ln[n++] = 'S'; if (g_fsSkipSec >= 10) ln[n++] = (char)('0' + (g_fsSkipSec / 10) % 10);
+                    ln[n++] = (char)('0' + g_fsSkipSec % 10); ln[n] = 0;
+                    fontTexOn();
+                    hudTextR(HUD_MM_X + HUD_MM, HUD_MM_Y + HUD_MM + 14, HUD_C_DIM, ln);
+                    sceGuDisable(GU_TEXTURE_2D);
+                }
+#endif
+            }
+            // ---- DIALOGO de los robots: nombre y linea, con desvanecido al final ----
+            // hudDraw() termina con GU_TEXTURE_2D apagada: sin fontTexOn() cada glifo sale como
+            // un rectangulo macizo, y el dialogo se veia como dos barras (beige + clara).
+            if ((dlgTimer > 0 && dlgLine) || (pad.Buttons & PSP_CTRL_SELECT)) fontTexOn();
+            if (dlgTimer > 0 && dlgLine) {
+                int a = 255;
+                if (dlgTimer < 60) a = dlgTimer * 4;       // se apaga en el ultimo segundo
+                drawText(24, 196, 1.0f, RGBA(196, 170, 120, a), dlgWho);
+                drawText(24, 208, 1.0f, RGBA(228, 222, 206, a), dlgLine);
+            }
+
+            // ---- REPARTO DEL FRAME (mantener SELECT). Sin sprintf: en PSP arrastra medio
+            // stdio al binario, y aqui solo hacen falta tres numeros con un decimal.
+            if (pad.Buttons & PSP_CTRL_SELECT) {
+                int n = 0;
+                auto put = [&](const char *lbl, float ms) {
+                    while (*lbl && n < 70) hud[n++] = *lbl++;
+                    int t = (int)(ms * 10.0f + 0.5f); if (t > 9999) t = 9999;
+                    if (t >= 1000) hud[n++] = (char)('0' + (t / 1000) % 10);
+                    if (t >= 100)  hud[n++] = (char)('0' + (t / 100)  % 10);
+                    hud[n++] = (char)('0' + (t / 10) % 10);
+                    hud[n++] = '.';
+                    hud[n++] = (char)('0' + t % 10);
+                    hud[n++] = ' ';
                 };
-                num('V', (float)g_vtxLast); num('D', (float)g_drawLast); pos[n] = 0; st.district = pos;   // carga del frame
+                put("CPU ", msCpu); put("GE ", msGe); put("ESP ", msWait); put("CAM ", dbgCamBack); put("RAM ", ramFreeMB); put("KV ", g_swVtx * 0.001f); put("Z-", -playerZ);
+                hud[n] = 0;
+                // Como leerlo: a 30 fps el presupuesto es 33.3 ms. Si manda ESP, sobra
+                // tiempo. Si manda GE, el cuello es la GPU (relleno o vertices). Si manda
+                // CPU, el cuello es el codigo y optimizar el dibujado no sirve de nada.
+                drawText(8, 250, 1.0f, RGBA(235, 225, 190, 255), hud);
             }
-            st.objLabel = "OJOS "; st.matTaken = g_eyesKilled;
-            st.matTotal = (g_lvFloor == 1 && g_eyesOn && g_lvUnlocked < 2) ? 30 : 0;
-            if (g_lvFloor == 2 && g_bs == BS_FIGHT) { st.objLabel = "LUZ "; st.matTaken = g_bsHp; st.matTotal = BS_HP; }
-#endif
-            st.pickTimer = pickTimer;
-            st.pickName = (pickedType >= 0 && pickedType < kMaterialCount) ? kMaterials[pickedType].name : 0;
-            st.weaponName = kRanged[curRanged].name;
-            st.ammo = ammoMag[curRanged]; st.ammoMax = kRanged[curRanged].magazine;
-            st.reloading = (reloadCD > 0);
-            st.fps = (NOCTIS_SKYWORLD && !g_optFps) ? -1 : fps;   // opcion MOSTRAR FPS
-            st.aiming = (aiming != 0);
-            st.paused = (paused != 0);
-            if (!NOCTIS_SKYWORLD || (!g_menu && !g_cine)) hudDraw(st);   // en el menu principal no hay HUD
-#if NOCTIS_SKYWORLD
-            lvHud(aiming, hp, HP_MAX);
-#endif
-        }
-        // ---- DIALOGO de los robots: nombre y linea, con desvanecido al final ----
-        // hudDraw() termina con GU_TEXTURE_2D apagada: sin fontTexOn() cada glifo sale como
-        // un rectangulo macizo, y el dialogo se veia como dos barras (beige + clara).
-        if ((dlgTimer > 0 && dlgLine) || (pad.Buttons & PSP_CTRL_SELECT)) fontTexOn();
-        if (dlgTimer > 0 && dlgLine) {
-            int a = 255;
-            if (dlgTimer < 60) a = dlgTimer * 4;       // se apaga en el ultimo segundo
-            drawText(24, 196, 1.0f, RGBA(196, 170, 120, a), dlgWho);
-            drawText(24, 208, 1.0f, RGBA(228, 222, 206, a), dlgLine);
-        }
-
-        // ---- REPARTO DEL FRAME (mantener SELECT). Sin sprintf: en PSP arrastra medio
-        // stdio al binario, y aqui solo hacen falta tres numeros con un decimal.
-        if (pad.Buttons & PSP_CTRL_SELECT) {
-            int n = 0;
-            auto put = [&](const char *lbl, float ms) {
-                while (*lbl && n < 70) hud[n++] = *lbl++;
-                int t = (int)(ms * 10.0f + 0.5f); if (t > 9999) t = 9999;
-                if (t >= 1000) hud[n++] = (char)('0' + (t / 1000) % 10);
-                if (t >= 100)  hud[n++] = (char)('0' + (t / 100)  % 10);
-                hud[n++] = (char)('0' + (t / 10) % 10);
-                hud[n++] = '.';
-                hud[n++] = (char)('0' + t % 10);
-                hud[n++] = ' ';
-            };
-            put("CPU ", msCpu); put("GE ", msGe); put("ESP ", msWait); put("CAM ", dbgCamBack); put("RAM ", ramFreeMB); put("KV ", g_swVtx * 0.001f); put("Z-", -playerZ);
-            hud[n] = 0;
-            // Como leerlo: a 30 fps el presupuesto es 33.3 ms. Si manda ESP, sobra
-            // tiempo. Si manda GE, el cuello es la GPU (relleno o vertices). Si manda
-            // CPU, el cuello es el codigo y optimizar el dibujado no sirve de nada.
-            drawText(8, 250, 1.0f, RGBA(235, 225, 190, 255), hud);
-        }
-        sceGuDisable(GU_TEXTURE_2D);
-        sceGuDisable(GU_BLEND);
-        sceGuEnable(GU_DEPTH_TEST);
+            sceGuDisable(GU_TEXTURE_2D);
+            sceGuDisable(GU_BLEND);
+            sceGuEnable(GU_DEPTH_TEST);
 #endif
 
-        // ===== REPARTO DEL FRAME (L + SELECT lo muestra en el HUD) =====
-        // Medir antes de optimizar. Hasta ahora el proyecto daba por hecho que el cuello
-        // era el relleno, y una auditoria con los numeros delante dice que con -O2 el
-        // relleno no llega al 20% del presupuesto de 30 fps. Esto parte el frame en
-        // tres y lo zanja en la consola de verdad, en vez de discutirlo con aritmetica:
-        //   CPU = juego + generar vertices a mano | GE = transformar + rellenar
-        //   ESP = lo que se espera al vblank (si esto domina, sobra tiempo: vamos bien)
-        // sceGuSync serializa, asi que el tiempo de GE que sale de aqui es real.
-        const long long tCpu = sceKernelGetSystemTimeWide();
-        sceGuFinish();
-        sceGuSync(0, 0);
-        const long long tGe = sceKernelGetSystemTimeWide();
-        audioFrame(walkPhase, gravG);  // MISMA fase que la animacion: el sonido cae con el pie que apoya
-        sceDisplayWaitVblankStart();
-        const long long tEnd = sceKernelGetSystemTimeWide();
-        // media movil simple: un valor por frame salta demasiado para leerlo en marcha
-        msCpu = msCpu * 0.9f + (float)(tCpu - tFrame) * 0.001f * 0.1f;
-        msGe  = msGe  * 0.9f + (float)(tGe  - tCpu  ) * 0.001f * 0.1f;
-        msWait= msWait* 0.9f + (float)(tEnd - tGe   ) * 0.001f * 0.1f;
-        tFrame = tEnd;
-        g_vtxLast = g_vtxFrame; g_drawLast = g_drawFrame; g_vtxFrame = g_drawFrame = 0;   // medidor de carga
-        sceGuSwapBuffers();
+            // ===== REPARTO DEL FRAME (L + SELECT lo muestra en el HUD) =====
+            // Medir antes de optimizar. Hasta ahora el proyecto daba por hecho que el cuello
+            // era el relleno, y una auditoria con los numeros delante dice que con -O2 el
+            // relleno no llega al 20% del presupuesto de 30 fps. Esto parte el frame en
+            // tres y lo zanja en la consola de verdad, en vez de discutirlo con aritmetica:
+            //   CPU = juego + generar vertices a mano | GE = transformar + rellenar
+            //   ESP = lo que se espera al vblank (si esto domina, sobra tiempo: vamos bien)
+            // sceGuSync serializa, asi que el tiempo de GE que sale de aqui es real.
+            tCpu = sceKernelGetSystemTimeWide();
+#if NOCTIS_SLOWSIM
+            // PRUEBA del ritmo fijo en el emulador: alarga cada frame DIBUJADO como si fuera
+            // una PSP que no llega (el emulador siempre va a 60 y el frameskip nunca saltaria)
+            sceKernelDelayThread(NOCTIS_SLOWSIM);
+            tCpu = sceKernelGetSystemTimeWide();
+#endif
+            sceGuFinish();
+            sceGuSync(0, 0);
+            tGe = sceKernelGetSystemTimeWide();
+        } else g_fsSkipAcc++;
+        audioFrame(walkPhase, gravG);  // en CADA paso de logica: MISMA fase que la animacion, el sonido cae con el pie que apoya
+        if (drawThis) {
+            sceDisplayWaitVblankStart();
+            const long long tEnd = sceKernelGetSystemTimeWide();
+            // media movil simple: un valor por frame salta demasiado para leerlo en marcha
+            msCpu = msCpu * 0.9f + (float)(tCpu - tFrame) * 0.001f * 0.1f;
+            msGe  = msGe  * 0.9f + (float)(tGe  - tCpu  ) * 0.001f * 0.1f;
+            msWait= msWait* 0.9f + (float)(tEnd - tGe   ) * 0.001f * 0.1f;
+            tFrame = tEnd;
+            g_vtxLast = g_vtxFrame; g_drawLast = g_drawFrame; g_vtxFrame = g_drawFrame = 0;   // medidor de carga
+            sceGuSwapBuffers();
+        }
+        fsAfterStep(drawThis);
     }
 
     snap(); saveAuto(sv);   // guardado de emergencia al salir

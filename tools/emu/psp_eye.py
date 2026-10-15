@@ -91,6 +91,11 @@ def screenshot(s, name, scale=2):
         wait_event(s, "cpu.stepping", 4)       # para en el proximo swap (~16 ms a 60 FPS)
         a0, stride, fmt = (_call(s, "cpu.getReg", name=r)["uintValue"] for r in ("a0", "a1", "a2"))
         bpp = 4 if fmt == 3 else 2
+        # Ese buffer se lee en el SIGUIENTE swap: el renderizador por software rasteriza en
+        # diferido (binning) y en el primer alto todavia faltaban los ultimos dibujos (el
+        # texto del medidor salia cortado). Al pasar a dibujar en el otro buffer, vuelca este.
+        ws_send(s, {"event": "cpu.resume"})
+        wait_event(s, "cpu.stepping", 4)
         mem = _call(s, "memory.read", address=a0 | 0x04000000, size=stride * SCR_H * bpp)
     finally:   # aunque falle, no dejar el juego congelado
         _call(s, "cpu.breakpoint.remove", address=stub[0])

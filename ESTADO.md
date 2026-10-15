@@ -82,6 +82,19 @@ A 30 fps el presupuesto es 33.3 ms. **Si manda ESP, sobra tiempo.** Si manda GE,
 cuello es la GPU. Si manda CPU, optimizar el dibujado no sirve de nada. Ese numero decide
 que hacemos despues, asi que anotalo.
 
+**Mundo del cielo (2026-10-15):** bajo la etiqueta `V.. D..` hay una 2da linea `C.. G.. S..`
+(CPU y GE en ms por frame dibujado, S = frames saltados en el ultimo segundo). Antes el
+texto de abajo salia a pedazos: `lvHud` deja encendida la prueba de profundidad y el texto
+se recortaba contra el piso (arreglado). **En PPSSPP la GE marca siempre 0.0**: el emulador
+no simula el tiempo de la GPU, asi que G solo vale en la consola. CPU emulada por piso
+(1.3 a 2.7 ms) con 7k..27k vertices; la consola real va mas lenta (cache, FPU).
+
+**RITMO FIJO / FRAMESKIP (main.cpp, `fsAfterStep`):** toda la logica esta afinada a 60
+pasos por segundo. Si la PSP no llega, la vuelta siguiente actualiza SIN dibujar (hasta 2
+seguidas): se ve a 30 o 20 fps pero el juego va a la velocidad correcta, no en camara lenta.
+Probado con `NOCTIS_SLOWSIM 25000` (frame alargado a proposito): 20 FPS, S40, y el hunter
+llega al MISMO punto en los mismos 3 s. `NOCTIS_SLOWSIM` va SIEMPRE en 0 al commitear.
+
 ## Lo siguiente, ya diagnosticado y sin aplicar
 
 Por orden de ahorro segun la auditoria de rendimiento:
