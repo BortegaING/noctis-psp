@@ -122,8 +122,11 @@ No borrarlos: sirven de referencia.
 
 ## Pendiente, en orden
 1. **FPS real** en la PSP del ultimo build (solo lo mide Benjamin en la consola).
-2. Cerrar el bucle autonomo de prueba: leer el frame con `gpu.buffer.screenshot` del
-   debugger de PPSSPP (PrintWindow devuelve un frame **congelado**).
+2. ~~Cerrar el bucle autonomo de prueba~~ HECHO (2026-10-15): `tools/emu/psp_eye.py` manda
+   input y lee el frame real por el debugger (breakpoint en `sceDisplaySetFrameBuf` + VRAM;
+   `gpu.buffer.screenshot` no funciona en 1.20.4). Visto al probarlo, SIN confirmar: tras
+   caminar adelante ~1.5 s la camara queda mirando el piso con el hunter fuera de cuadro, y
+   aparecen dos barras horizontales a media pantalla (beige corta + clara larga).
 3. **El sable del hunter sigue siendo un bloque gris** (`src/cand/hunter.h`) — quejado varias veces.
 4. Fill rate: texturas 8888 -> 5650 (16 bits) y menos capas de pintado.
 
@@ -143,7 +146,8 @@ No borrarlos: sirven de referencia.
 - Compilar (**solo en el PC**, WSL): `bash tools/build.sh` dentro de
   `wsl -d Ubuntu-24.04 -u root` (desde Git Bash anteponer `MSYS_NO_PATHCONV=1`).
 - Emulador y capturas: ver `tools/emu/LEEME.md` (`shot.ps1` fuera de pantalla, `show.ps1` en
-  pantalla, `psp_input.py` manda botones por el debugger). **Nunca** poner el emulador al frente
+  pantalla, `psp_eye.py` = botones + foto del frame real por el debugger, sin ventana; usa el
+  software renderer, asi que culling/plano cercano igual se validan en GL o consola). **Nunca** poner el emulador al frente
   sin avisar: le tapa la pantalla al usuario.
 - Pasar a la PSP: copiar `build/EBOOT.PBP` a `<unidad USB>\PSP\GAME\NOCTIS\EBOOT.PBP`.
 

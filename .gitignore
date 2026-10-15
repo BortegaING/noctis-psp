@@ -11,6 +11,9 @@ PARAM.SFO
 ppsspp/
 memstick/
 
+# Python
+__pycache__/
+
 # Editor
 .vscode/
 .idea/
