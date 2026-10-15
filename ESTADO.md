@@ -391,4 +391,4 @@ que capa lo rompio, en vez de adivinar entre veinte.
 
 Si algo de esto falla, decir CUAL numero: cada uno apunta a un archivo distinto.
 
-- PENDIENTE (15-10 13:30): en los pisos 3..7 aparece a veces un poligono/linea NEGRA gigante que parte del personaje hacia arriba (visto en el renderizador por SOFTWARE del emulador; sin confirmar en GPU ni en PSP). No es el elevador (se movio y sigue). Sospechosos: algo cercano a la camara en el spawn o recorte de plano cercano del software renderer.
+- RESUELTO (15-10 tarde): era g_candBuf[4][3300] chico para el hunter con pistola (desbordaba y pisaba memoria vecina); ahora [4][4600] y g_hero[6000]. Historial: en los pisos 3..7 aparecia a veces un poligono/linea NEGRA gigante que parte del personaje hacia arriba (visto en el renderizador por SOFTWARE del emulador; sin confirmar en GPU ni en PSP). No es el elevador (se movio y sigue). Sospechosos: algo cercano a la camara en el spawn o recorte de plano cercano del software renderer.

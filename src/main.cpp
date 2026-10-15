@@ -268,7 +268,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 #include "bridges.h"       // EL POZO: buildBridges() megavigas/puentes cruzando el pozo a distintas alturas
 #include "void_shaft.h"    // EL POZO: buildVoidShaft() abismo sin fondo (balcones/tuberias/luces que se pierden)
 #if VIEWER_MODE
-static LineVertex __attribute__((aligned(16))) g_candBuf[4][3300];
+static LineVertex __attribute__((aligned(16))) g_candBuf[4][4600];   // (3300 quedo chico con la pistola del hunter: desbordaba)
 static int g_candV[4];
 static const char *g_candName[4] = { "AYA", "HUNTER", "FF", "WRAITH" };
 static const float g_candX[4]    = { -8.4f, -2.8f, 2.8f, 8.4f };
@@ -665,7 +665,7 @@ static int g_chUpperV = 0, g_chHeadV = 0, g_chLegV = 0, g_chArmV = 0, g_chSwordV
 // PERSONAJE DEL JUEGO: el HUNTER (encapuchado gotico, elegido por Benjamin).
 // Construido con las primitivas organicas (cilindros conicos + elipsoides +
 // abrigo hasta la rodilla con piernas a la vista), NO cubos.
-static LineVertex __attribute__((aligned(16))) g_hero[4096];
+static LineVertex __attribute__((aligned(16))) g_hero[6000];
 static LineVertex __attribute__((aligned(16))) g_vm[640];   // viewmodel del arma (1ra persona)
 static int g_heroV = 0;
 static void buildHero() {
