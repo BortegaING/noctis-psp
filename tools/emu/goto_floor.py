@@ -12,6 +12,7 @@ def main():
     def press(b, ms=100):
         ws_send(s, {"event": "input.buttons.press", "button": b, "duration": max(2, ms // 16)})
         time.sleep(ms / 1000 + 0.15)
+    press("cross"); time.sleep(1.0)       # menu principal: JUGAR (partida nueva, desde el cielo)
     stick(0, 1); time.sleep(38.5); stick(0, 0); time.sleep(0.4)   # y+ = stick ARRIBA
     press("triangle"); time.sleep(0.4)
     press("select")                       # atajo de pruebas: abre los pisos 1..7

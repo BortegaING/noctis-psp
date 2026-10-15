@@ -27,6 +27,12 @@ static const int LV_FADE = 150;   // cambio de piso: 30 a negro + 90 de PANTALLA
 
 // ---------------------------------------------------------------- estado general
 static int   g_lvFloor = 0, g_lvUnlocked = 1;
+// MENU PRINCIPAL (lobby): 1 = principal, 2 = opciones, 3 = controles, 0 = jugando
+static int   g_menu = 1, g_menuSel = 0, g_menuT = 0;
+static int   g_optMusic = 1, g_optShake = 1, g_optFps = 1;   // opciones (se guardan en eventFlags 10..12)
+static int   g_svHas = 0; static uint32_t g_svFlags = 0;      // partida guardada (CARGAR PARTIDA)
+static int   g_cine = 0;                                      // frames de cinematica de jefe (ver mas abajo)
+static void  lvCineStart(float fx, float fy, float fz, float px, float pz, const char *title, const char *sub);
 static int   g_lvT = 0;                    // frames desde que se entro al piso
 static int   g_lvPrevBtn = 0;
 static int   g_lvMenu = 0, g_lvMenuSel = 1;
@@ -187,22 +193,33 @@ static void lvInit(uint32_t flags) {
     const float rr[3] = { 5.5f, 6.5f, 7.5f };
     for (int k = 0; k < 3; ++k) g_lvSerRingN[k] = f2BuildSeraphRing(g_lvSerRing[k], 1000, rr[k]);
     sceKernelDcacheWritebackAll();
-    if (flags & 0x80000000u) {                 // partida del mundo nuevo: piso + desbloqueados
-        g_lvUnlocked = (int)((flags >> 4) & 15u); if (g_lvUnlocked < 1) g_lvUnlocked = 1;
-        g_lvFloor = (int)(flags & 15u);        if (g_lvFloor > 7) g_lvFloor = 0;
-        g_rosary = (flags >> 8) & 1u;          // las mejoras de los jefes se QUEDAN
-        g_lvPowerTime = (flags >> 9) & 1u;
+    // La partida guardada se RECUERDA pero no se aplica: el lobby arranca siempre en el cielo, y
+    // CARGAR PARTIDA la aplica (JUGAR empieza de cero). Las opciones si se aplican ya.
+    g_lvFloor = 0; g_lvUnlocked = 1; g_rosary = 0; g_lvPowerTime = 0;
+    if (flags & 0x80000000u) {                 // partida del mundo nuevo: piso + desbloqueados + mejoras
+        g_svHas = 1; g_svFlags = flags;
+        g_optMusic = !((flags >> 10) & 1u); g_optShake = !((flags >> 11) & 1u); g_optFps = !((flags >> 12) & 1u);
     }
+    audioMusic(g_optMusic);
 }
+// CARGAR PARTIDA: aplica piso, pisos abiertos y mejoras (las mejoras de los jefes se QUEDAN)
+static void lvApplySave() {
+    const uint32_t f = g_svFlags;
+    g_lvUnlocked = (int)((f >> 4) & 15u); if (g_lvUnlocked < 1) g_lvUnlocked = 1;
+    g_rosary = (f >> 8) & 1u;
+    g_lvPowerTime = (f >> 9) & 1u;
+}
+static int lvSavedFloor() { int fl = (int)(g_svFlags & 15u); return (fl > 7) ? 0 : fl; }
 static uint32_t lvFlags() {
     return 0x80000000u | (uint32_t)g_lvFloor | ((uint32_t)g_lvUnlocked << 4)
-         | ((uint32_t)(g_rosary ? 1 : 0) << 8) | ((uint32_t)(g_lvPowerTime ? 1 : 0) << 9);
+         | ((uint32_t)(g_rosary ? 1 : 0) << 8) | ((uint32_t)(g_lvPowerTime ? 1 : 0) << 9)
+         | ((uint32_t)(g_optMusic ? 0 : 1) << 10) | ((uint32_t)(g_optShake ? 0 : 1) << 11) | ((uint32_t)(g_optFps ? 0 : 1) << 12);
 }
 
 // entra a un piso: geometria, colision, spawn, estado de enemigos
 static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, float &camYaw) {
     g_lvFloor = floor; g_lvT = 0; g_lvMenu = 0; g_prison = 0; g_bsCharge = 0;
-    audioTrackStop(); audioMusic(1);                           // cada piso arranca con la musica tranquila
+    audioTrackStop(); audioMusic(g_optMusic);                           // cada piso arranca con la musica tranquila
     for (int k = 0; k < 16; ++k) g_orbs[k].life = 0;
     heroYaw = 0.0f; camYaw = 0.0f;
     if (floor == 0) {
@@ -258,6 +275,16 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
     }
     px = g_lvSpawnX; py = g_lvSpawnY + 0.2f; pz = g_lvSpawnZ;
     g_swSafeX = px; g_swSafeY = py; g_swSafeZ = pz;
+    // CINEMATICA de presentacion del jefe (si todavia no lo venciste)
+    g_cine = 0;
+    if (floor == 2 && g_lvUnlocked < 3) lvCineStart(g_bsX, g_bsY, g_bsZ, px, pz, "EL SERAFÍN", "OFANIM");
+    if (floor >= 3) {   // estos jefes pelean cada vez que entras: la presentacion va siempre (X la salta)
+        static const char *kT[5] = { "BAPHOMET", "EL JINETE BLANCO", "EL JINETE ROJO", "EL JINETE NEGRO", "EL JINETE PÁLIDO" };
+        static const char *kS[5] = { "EL QUE ESPERA JUNTO AL FUEGO", "CONQUISTA", "GUERRA", "HAMBRE", "MUERTE. HADES LO SIGUE" };
+        float t[3] = { 0.0f, 6.0f, 0.0f };
+        if (!LV_BOSS(AimTarget, t)) { t[0] = 0.0f; t[1] = 6.0f; t[2] = 0.0f; }
+        lvCineStart(t[0], t[1], t[2], px, pz, kT[floor - 3], kS[floor - 3]);
+    }
 }
 
 // ---------------------------------------------------------------- guardado
@@ -320,7 +347,7 @@ static bool lvShotHit(float x, float y, float z) {
     }
     if (g_lvFloor == 2 && g_bs == BS_FIGHT && lvDist2(x, y, z, g_bsX, g_bsY, g_bsZ) < 5.0f * 5.0f) {
         g_bsHurt = 6;
-        g_bsHp -= LV_SHOT_DMG; if (g_bsHp <= 0) { g_bs = BS_DEAD; g_bsDeadT = 0; lvAttacksReset(); audioTrackStop(); audioMusic(1); }
+        g_bsHp -= LV_SHOT_DMG; if (g_bsHp <= 0) { g_bs = BS_DEAD; g_bsDeadT = 0; lvAttacksReset(); audioTrackStop(); audioMusic(g_optMusic); }
         return true;
     }
     return false;
@@ -338,9 +365,151 @@ static void lvFireOrb(float x, float y, float z, float tx, float ty, float tz, f
     }
 }
 
+// ---------------------------------------------------------------- CINEMATICA DE JEFE
+// Al ver al jefe de cada piso: la camara deja al jugador y gira alrededor del jefe (de plano
+// general a cerrado), franjas de cine y tarjeta con su nombre. La logica del piso espera.
+// X la salta. Piso 1: cuando el cielo se apaga y llegan los ojos; 2..7: al entrar al piso.
+static const int LV_CINE = 330;
+static float g_cineFx = 0, g_cineFy = 0, g_cineFz = 0, g_cineA0 = 0;
+static const char *g_cineTitle = 0, *g_cineSub = 0;
+static void lvCineStart(float fx, float fy, float fz, float px, float pz, const char *title, const char *sub) {
+    g_cine = LV_CINE; g_cineFx = fx; g_cineFy = fy; g_cineFz = fz;
+    g_cineA0 = atan2f(px - fx, pz - fz);                     // arranca del lado del jugador
+    g_cineTitle = title; g_cineSub = sub;
+}
+// main la llama antes de sceGumLookAt: si hay cinematica, reemplaza el ojo y el objetivo
+static float g_menuPx = 0, g_menuPy = 0, g_menuPz = 0;      // jugador (para la camara del lobby)
+static int lvCineCam(ScePspFVector3 &eye, ScePspFVector3 &ctr) {
+    if (g_menu) {   // LOBBY: la camara gira alrededor del hunter y lo deja a la DERECHA (el menu va a la izquierda)
+        const float a = g_menuT * 0.0035f, ca = cosf(a), sa = sinf(a);
+        eye.x = g_menuPx + sa * 10.0f; eye.y = g_menuPy + 3.4f; eye.z = g_menuPz + ca * 10.0f;
+        ctr.x = g_menuPx - ca * 3.6f; ctr.y = g_menuPy + 2.2f; ctr.z = g_menuPz + sa * 3.6f;   // apunta a su izquierda
+        return 1;
+    }
+    if (g_cine <= 0) return 0;
+    const float t = 1.0f - (float)g_cine / LV_CINE;          // 0 -> 1
+    const float s = t * t * (3.0f - 2.0f * t);               // suave al empezar y al terminar
+    const float a = g_cineA0 + 1.3f * s, R = 36.0f - 18.0f * s, h = 12.0f - 7.0f * s;
+    eye.x = g_cineFx + sinf(a) * R; eye.y = g_cineFy + h; eye.z = g_cineFz + cosf(a) * R;
+    ctr.x = g_cineFx; ctr.y = g_cineFy; ctr.z = g_cineFz;
+    return 1;
+}
+static void lvCineHud() {
+    const float t = 1.0f - (float)g_cine / LV_CINE;
+    const int bar = (int)(34.0f * ((t < 0.08f) ? t / 0.08f : (t > 0.94f ? (1.0f - t) / 0.06f : 1.0f)));
+    sceGuDisable(GU_TEXTURE_2D);
+    drawRect(0, 0, SCR_WIDTH, bar, RGBA(0, 0, 0, 255));                       // franjas de cine
+    drawRect(0, SCR_HEIGHT - bar, SCR_WIDTH, bar, RGBA(0, 0, 0, 255));
+    float k = (t - 0.22f) / 0.15f; if (t > 0.80f) k = (0.95f - t) / 0.15f;   // la tarjeta entra y sale
+    if (k > 1.0f) k = 1.0f; if (k < 0.0f) k = 0.0f;
+    if (k > 0.0f && g_cineTitle) {
+        const int a = (int)(255.0f * k), n = textLen(g_cineTitle);
+        drawRect(240 - n * 13, 196, n * 26, 1, RGBA(214, 186, 120, a));
+        fontTexOn();
+        drawText(240 - n * 12 + 2, 168 + 2, 3.0f, RGBA(0, 0, 0, a * 2 / 3), g_cineTitle);
+        drawText(240 - n * 12, 168, 3.0f, RGBA(240, 238, 232, a), g_cineTitle);
+        if (g_cineSub) drawText(240 - textLen(g_cineSub) * 4, 204, 1.0f, RGBA(214, 186, 120, a), g_cineSub);
+        sceGuDisable(GU_TEXTURE_2D);
+    }
+    fontTexOn(); drawText(398, 258, 1.0f, RGBA(140, 140, 150, 200), "X SALTAR"); sceGuDisable(GU_TEXTURE_2D);
+}
+
+// ---------------------------------------------------------------- MENU PRINCIPAL (lobby)
+// Al arrancar: el mundo de fondo (la camara gira lenta alrededor del hunter), el titulo NOCTIS y
+// JUGAR / OPCIONES / CONTROLES. Sin HUD ni movimiento mientras esta abierto.
+static void lvMenuUpdate(int edge, float &camYaw) {
+    ++g_menuT;
+    if (g_lvMsgT > 0) --g_lvMsgT;
+    camYaw = 0.0f;   // la camara del lobby la pone lvCineCam; al salir se juega mirando al camino
+    const int n = (g_menu == 1) ? 4 : (g_menu == 2) ? 4 : 1;
+    if (edge & PSP_CTRL_UP)   { if (--g_menuSel < 0) g_menuSel = n - 1; }
+    if (edge & PSP_CTRL_DOWN) { if (++g_menuSel >= n) g_menuSel = 0; }
+    if ((edge & PSP_CTRL_CIRCLE) && g_menu != 1) { g_menuSel = (g_menu == 2) ? 2 : 3; g_menu = 1; return; }
+    if (!(edge & PSP_CTRL_CROSS)) return;
+    if (g_menu == 1) {
+        if (g_menuSel == 0) { g_menu = 0; g_lvFade = 30; g_lvFadeTo = -1; g_lvFadeWhite = 0; }   // JUGAR (de cero)
+        else if (g_menuSel == 1) {                                                              // CARGAR PARTIDA
+            if (!g_svHas) { lvMessage("NO HAY PARTIDA GUARDADA", 100); return; }
+            lvApplySave(); g_menu = 0;
+            const int fl = lvSavedFloor();
+            if (fl > 0) { g_lvFade = LV_FADE; g_lvFadeTo = fl; }     // con pantalla de carga del piso
+            else        { g_lvFade = 30; g_lvFadeTo = -1; }
+            g_lvFadeWhite = 0;
+        }
+        else { g_menu = g_menuSel; g_menuSel = 0; }                   // 2 OPCIONES, 3 CONTROLES
+    } else if (g_menu == 2) {
+        if (g_menuSel == 0) { g_optMusic ^= 1; audioMusic(g_optMusic); if (!g_optMusic) audioTrackStop(); }
+        else if (g_menuSel == 1) g_optShake ^= 1;
+        else if (g_menuSel == 2) g_optFps ^= 1;
+        else { g_menu = 1; g_menuSel = 2; }
+    } else { g_menu = 1; g_menuSel = 3; }
+}
+// texto con espaciado extra entre letras (titulos)
+static void lvMenuSpaced(int x, int y, float sc, unsigned int col, const char *s, int gap) {
+    char one[2] = { 0, 0 };
+    for (const char *p = s; *p; ++p) { one[0] = *p; drawText(x, y, sc, col, one); x += (int)(8 * sc) + gap; }
+}
+static void lvMenuDraw() {
+    const float pulse = 0.5f + 0.5f * sinf(g_menuT * 0.08f);
+    const unsigned int gold = RGBA(214, 186, 120, 255), dim = RGBA(150, 156, 170, 255), white = RGBA(240, 242, 248, 255);
+    sceGuDisable(GU_DEPTH_TEST); sceGuDisable(GU_TEXTURE_2D);
+    sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    drawVignette();
+    gradQuadV(0, 270, RGBA(6, 8, 12, 225), RGBA(6, 8, 12, 0));      // panel lateral: legibilidad sobre el cielo
+    drawRect(36, 93, 216, 1, RGBA(214, 186, 120, 200));              // filete dorado bajo el titulo
+    int y0 = 128;
+    if (g_menu == 1) {                                                // barra suave del seleccionado
+        drawRect(30, y0 + g_menuSel * 28 - 4, 230, 22, RGBA(214, 186, 120, 26 + (int)(24.0f * pulse)));
+        drawRect(30, y0 + g_menuSel * 28 - 4, 2, 22, gold);
+    }
+    fontTexOn();
+    lvMenuSpaced(39, 51, 4.0f, RGBA(0, 0, 0, 170), "NOCTIS", 4);     // sombra
+    lvMenuSpaced(36, 48, 4.0f, white, "NOCTIS", 4);
+    lvMenuSpaced(38, 100, 1.0f, gold, "LA TORRE", 6);
+    if (g_menu == 1) {
+        static const char *kMain[4] = { "JUGAR", "CARGAR PARTIDA", "OPCIONES", "CONTROLES" };
+        for (int k = 0; k < 4; ++k) {
+            const unsigned int c = (k == 1 && !g_svHas) ? RGBA(90, 94, 104, 255) : (k == g_menuSel ? gold : dim);
+            drawText(42, y0 + k * 28, 1.75f, c, kMain[k]);
+        }
+        if (g_svHas) {                                                // de que piso es la partida guardada
+            static const char *kFl[8] = { "EL CIELO", "PISO 1: EL CAMPO", "PISO 2: LA ESCALERA", "PISO 3: LA CUEVA",
+                                          "PISO 4: JINETE BLANCO", "PISO 5: JINETE ROJO", "PISO 6: JINETE NEGRO", "PISO 7: JINETE PÁLIDO" };
+            drawText(44, y0 + 28 + 16, 1.0f, RGBA(150, 140, 110, 255), kFl[lvSavedFloor()]);
+        }
+        drawText(36, 248, 1.0f, RGBA(120, 126, 140, 255), "X ACEPTAR");
+        if (g_lvMsgT > 0 && g_lvMsg) drawText(36, 232, 1.0f, RGBA(230, 120, 110, 255), g_lvMsg);
+    } else if (g_menu == 2) {
+        drawText(42, 128, 1.0f, gold, "OPCIONES");
+        const char *items[4] = { g_optMusic ? "MÚSICA:  SÍ" : "MÚSICA:  NO",
+                                 g_optShake ? "TEMBLOR DE PANTALLA:  SÍ" : "TEMBLOR DE PANTALLA:  NO",
+                                 g_optFps ? "MOSTRAR FPS:  SÍ" : "MOSTRAR FPS:  NO", "VOLVER" };
+        for (int k = 0; k < 4; ++k) {
+            if (k == g_menuSel) drawText(36, 148 + k * 18, 1.0f, gold, ">");
+            drawText(48, 148 + k * 18, 1.0f, k == g_menuSel ? white : dim, items[k]);
+        }
+        drawText(36, 248, 1.0f, RGBA(120, 126, 140, 255), "X CAMBIAR   O VOLVER");
+    } else {
+        drawText(42, 116, 1.0f, gold, "CONTROLES");
+        static const char *kKey[11] = { "STICK", "CRUCETA IZQ/DER", "CRUCETA ARR/ABA", "X", "L", "R", "CÍRCULO",
+                                        "TRIÁNGULO", "CUADRADO", "START", "SELECT" };
+        static const char *kAct[11] = { "Caminar", "Girar la cámara", "Mirar arriba/abajo", "Saltar / aceptar",
+                                        "Apuntar (autoapuntado)", "Disparar (con L)", "Golpe de sable",
+                                        "Interactuar / rosario", "Detener el tiempo", "Pausa", "Rendimiento" };
+        for (int k = 0; k < 11; ++k) {
+            drawText(42, 132 + k * 10, 1.0f, gold, kKey[k]);
+            drawText(176, 132 + k * 10, 1.0f, white, kAct[k]);
+        }
+        drawText(36, 250, 1.0f, RGBA(120, 126, 140, 255), "O VOLVER");
+    }
+    sceGuDisable(GU_TEXTURE_2D); sceGuEnable(GU_DEPTH_TEST);
+}
+
 // ---------------------------------------------------------------- logica por frame
 // Devuelve 1 si el jugador NO debe moverse ni disparar (menu, dialogo, prision, fundido).
 static int lvBlocks() {
+    if (g_menu) return 1;                                         // menu principal abierto
+    if (g_cine > 0) return 1;                                     // cinematica de jefe
     return g_lvMenu || g_lvFade > 0 || g_prison > 0 || (g_lvFloor == 2 && (g_bs == BS_TALK || g_bs == BS_CHOICE))
         || (lvBossFloor() && g_lvFade == 0 && LV_BOSS(Blocks));
 }
@@ -353,6 +522,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
     if (g_lvTimeStop > 0) --g_lvTimeStop; else ++g_lvT;
     if (g_timeCd > 0) --g_timeCd;
     if (g_lvGiveTimePower) { g_lvGiveTimePower = 0; g_lvPowerTime = 1; }
+    if (g_menu) { g_menuPx = px; g_menuPy = py; g_menuPz = pz; lvMenuUpdate(edge, camYaw); return; }          // lobby: nada mas se mueve
     if ((edge & PSP_CTRL_SQUARE) && g_lvPowerTime && g_lvFade == 0) {
         if (g_timeCd == 0) { g_lvTimeStop = 120; g_timeCd = 900; lvMessage("TIEMPO DETENIDO", 90); }
         else lvMessage("EL TIEMPO AÚN NO RESPONDE", 50);
@@ -368,6 +538,13 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
         --g_lvFade;
         if (g_lvFade == 100 && g_lvFadeTo >= 0) { lvEnter(g_lvFadeTo, px, py, pz, heroYaw, camYaw); vy = 0.0f; hp = hpMax; g_lvFadeTo = -1; }
         if (g_lvFade == 0) g_lvFadeWhite = 0;
+        return;
+    }
+    // ---- cinematica de jefe: la logica del piso espera (salvo los ojos, que siguen llegando) ----
+    if (g_cine > 0) {
+        if (edge & PSP_CTRL_CROSS) g_cine = 1;
+        --g_cine;
+        if (g_lvFloor == 1) for (int k = 0; k < 30; ++k) { LvEye &e = g_eyes[k]; if (e.delay > 0) --e.delay; lvEyePos(e, (float)g_lvT, e.x, e.y, e.z); }
         return;
     }
     // ---- menu del elevador ----
@@ -413,7 +590,10 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
         }
         if (g_eyesOn && g_eyesKilled < 30) {          // el cielo se va a NEGRO en ~3 s
             g_f1Dark += 1.0f / 180.0f; if (g_f1Dark > 1.0f) g_f1Dark = 1.0f;
-            if (g_f1Dark >= 1.0f && !g_f1DarkSaid) { g_f1DarkSaid = 1; lvMessage("Y SE LLENA DE OJOS", 150); }
+            if (g_f1Dark >= 1.0f && !g_f1DarkSaid) {
+                g_f1DarkSaid = 1; lvMessage("Y SE LLENA DE OJOS", 150);
+                lvCineStart(0.0f, 30.0f, 0.0f, px, pz, "LOS OJOS", "EL CIELO TE MIRA");   // cinematica
+            }
         }
         if (g_eyesOn && g_lvTimeStop == 0) {                  // tiempo detenido: los ojos se congelan
             int volleys = 0;
@@ -453,7 +633,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
                     lvMessage("UNA LUZ CÁLIDA TE SOSTIENE. ROSARIO: TRIÁNGULO", 200);
                     g_rosary = 1; g_bs = BS_FIGHT; g_bsT = 240; g_bsHp = BS_HP;
                     audioMusic(0);                            // la cancion de la pelea
-                    audioTrackPlay(g_seraphAdp, (unsigned int)(g_seraphAdpEnd - g_seraphAdp), 32000);
+                    if (g_optMusic) audioTrackPlay(g_seraphAdp, (unsigned int)(g_seraphAdpEnd - g_seraphAdp), 32000);
                 }
             }
         } else if (g_bs == BS_FIGHT && g_lvTimeStop == 0) {      // tiempo detenido: el serafin se congela
@@ -811,6 +991,8 @@ static void lvSetCamera(const ScePspFVector3 &eye, const ScePspFVector3 &ctr, co
 }
 
 static void lvHud(int aiming, float hp, float hpMax) {
+    if (g_menu) { lvMenuDraw(); return; }                         // lobby: solo el menu
+    if (g_cine > 0 && g_lvFade == 0) { lvCineHud(); return; }     // cinematica: franjas + tarjeta
     (void)hp; (void)hpMax;
     sceGuDisable(GU_DEPTH_TEST); sceGuDisable(GU_TEXTURE_2D);
     sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);

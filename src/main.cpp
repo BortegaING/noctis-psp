@@ -1767,13 +1767,14 @@ int main(void) {
             ScePspFVector3 up  = { uX, uY, uZ };
 #if NOCTIS_SKYWORLD
             {   // temblor: el serafin habla / su luz estalla
-                const float a = lvShakeAmp();
+                const float a = g_optShake ? lvShakeAmp() : 0.0f;   // opcion TEMBLOR DE PANTALLA
                 if (a > 0.0f) {
                     const float sx = a * sinf(g_lvT * 1.7f), sy = a * cosf(g_lvT * 2.3f);
                     eye.x += sx; eye.y += sy; ctr.x += sx * 0.5f; ctr.y += sy * 0.5f;
                 }
             }
 #endif
+            lvCineCam(eye, ctr);         // cinematica de jefe: la camara la manda levels.h
             sceGumLookAt(&eye, &ctr, &up);
             lvSetCamera(eye, ctr, up);   // autoapuntado, "lo estas mirando?" y proyeccion del HUD
 #endif
@@ -2062,10 +2063,10 @@ int main(void) {
             st.weaponName = kRanged[curRanged].name;
             st.ammo = ammoMag[curRanged]; st.ammoMax = kRanged[curRanged].magazine;
             st.reloading = (reloadCD > 0);
-            st.fps = fps;
+            st.fps = (NOCTIS_SKYWORLD && !g_optFps) ? -1 : fps;   // opcion MOSTRAR FPS
             st.aiming = (aiming != 0);
             st.paused = (paused != 0);
-            hudDraw(st);
+            if (!NOCTIS_SKYWORLD || (!g_menu && !g_cine)) hudDraw(st);   // en el menu principal no hay HUD
 #if NOCTIS_SKYWORLD
             lvHud(aiming, hp, HP_MAX);
 #endif
