@@ -902,6 +902,7 @@ static void fontTexOn() {
 #include "hud.h"         // HUD nuevo: minimapa del sector REAL (usa drawRect/drawText/fontTexOn)
 #include "skyworld.h"    // MUNDO NUEVO: plataformas en el cielo por celdas, niebla HW, colosos de fondo
 #include "rig.h"         // hunter ARTICULADO: piernas/rodillas/brazos/codos/cabeza/faldon con su propio giro
+#include "levels.h"      // LA TORRE: elevador de 12 pisos, piso 1 (ojos), piso 2 (serafin), guardado con icono
 
 #if VIEWER_MODE
 // dibuja los 4 candidatos en fila sobre un turntable, sobre un piso oscuro.
@@ -1074,7 +1075,13 @@ int main(void) {
     float EN_MAX = 780.0f;   // sube con cada material recogido (objEnergyMax)
     // constantes de movilidad (diseno del agente)
     const float DEADZONE = 0.18f, RUN_SPEED = 0.22f, ACCEL_GND = 0.20f, ACCEL_AIR = 0.09f, STOP_FRIC = 0.22f, CAM_SPEED = 0.03f;
+#if NOCTIS_SKYWORLD
+    // GRAVEDAD LUNAR (Benjamin: "que solo salte como con poca gravedad tipo luna"): sube ~8.6u
+    // y tarda ~1.6 s en volver; la caida terminal tambien es mas lenta.
+    const float GRAVITY = 0.0075f, JUMP_VEL = 0.36f, SHORTHOP = 0.60f, FALL_CAP = 0.55f;
+#else
     const float GRAVITY = 0.020f, JUMP_VEL = 0.55f, SHORTHOP = 0.50f, FALL_CAP = 0.80f;
+#endif
     const int   COYOTE_MAX = 6, JUMPBUF_MAX = 6;
     // LEVITACION. Ya no es un planeo de adorno: es el unico medio de subir desde que
     // se quito la gravedad dirigida, asi que sube mas rapido (0.12 -> 0.20) y cuesta
@@ -1195,6 +1202,8 @@ int main(void) {
     }
 #if NOCTIS_SKYWORLD
     swInit(&playerX, &playerY, &playerZ);   // el guardado es del sector viejo: aqui se arranca en la losa (0,0)
+    lvInit(sv.eventFlags);                  // piso y pisos abiertos de la ultima partida del mundo nuevo
+    lvEnter(g_lvFloor, playerX, playerY, playerZ, heroYaw, camYaw);
 #endif
     float gvr = 0.0f, gvf = 0.0f, gvg = 0.0f;   // vel en el plano (right,fwd) + a lo largo de la gravedad
     static const char *kGravName[6] = { "ABAJO", "ARRIBA", "+X", "-X", "+Z", "-Z" };
@@ -1202,7 +1211,7 @@ int main(void) {
     while (!g_exit) {
         sceCtrlReadBufferPositive(&pad, 1);
 #if NOCTIS_SKYWORLD
-        swUpdate(playerX, playerZ, 1);   // 1 celda nueva por frame como mucho: sin tirones al cruzar
+        if (g_lvFloor == 0) swUpdate(playerX, playerZ, 1);   // 1 celda nueva por frame como mucho: sin tirones al cruzar
 #endif
         // START = pausa (toggle con deteccion de flanco). Ya NO sale. HOME sale.
         int startNow = (pad.Buttons & PSP_CTRL_START) ? 1 : 0;
@@ -1210,6 +1219,12 @@ int main(void) {
         prevStart = startNow;
 
         if (!paused) {
+#if NOCTIS_SKYWORLD
+            // pisos/elevador/ojos/serafin con el control CRUDO; si hay menu, dialogo, prision o
+            // fundido, el jugador no se mueve ni dispara (se neutraliza el pad para el resto)
+            lvUpdate(pad, playerX, playerY, playerZ, velY, hp, HP_MAX, grounded, heroYaw, camYaw, sv);
+            if (lvBlocks()) { pad.Lx = 128; pad.Ly = 128; pad.Buttons &= (PSP_CTRL_START | PSP_CTRL_SELECT); }
+#endif
             // ===== stick -> deseo en MUNDO FIJO (girar la camara NO cambia el control) =====
             float ax = ((int)pad.Lx - 128) / 128.0f;
             float ay = ((int)pad.Ly - 128) / 128.0f;
@@ -1346,14 +1361,27 @@ int main(void) {
                 WeaponFX wf = weaponFX(curRanged);
                 int cost = kRanged[curRanged].energyCost;
                 if (ammoMag[curRanged] > 0 && en >= (float)cost) {
+                    // AUTOAPUNTADO: con un blanco en el cono de la mirada, la bala sale en 3D
+                    // directo hacia el (ojos en el cielo, el serafin), con vida suficiente
+                    // para llegar. Sin blanco, recto al frente como siempre.
+                    float aimT[3]; const int locked = NOCTIS_SKYWORLD ? lvAimTarget(aimT) : 0;
                     for (int b = 0; b < wf.spread; ++b) {
                         float off = (wf.spread > 1) ? ((float)b - (wf.spread - 1) * 0.5f) * 0.11f : 0.0f;
                         float ya = heroYaw + off, fx = sinf(ya), fz = -cosf(ya);
-                        float mx = playerX + fx * 0.7f, my = playerY + 1.5f, mz = playerZ + fz * 0.7f;
+                        float mx = playerX + fx * 0.7f, my = playerY + (locked ? 2.6f : 1.5f), mz = playerZ + fz * 0.7f;
+                        float dx = fx, dy = 0.0f, dz = fz; int life = SHOT_LIFE;
+                        if (locked) {
+                            dx = aimT[0] - mx; dy = aimT[1] - my; dz = aimT[2] - mz;
+                            const float d = sqrtf(dx * dx + dy * dy + dz * dz) + 0.001f;
+                            const float c = cosf(off), sn = sinf(off);              // el abanico del arma se mantiene
+                            const float rx = dx * c - dz * sn, rz = dx * sn + dz * c;
+                            dx = rx / d; dy /= d; dz = rz / d;
+                            life = (int)(d / wf.speed) + 24;
+                        }
                         for (int s = 0; s < 24; ++s) if (g_shots[s].life <= 0) {
                             g_shots[s].x = mx; g_shots[s].y = my; g_shots[s].z = mz;
-                            g_shots[s].vx = fx * wf.speed; g_shots[s].vy = 0.0f; g_shots[s].vz = fz * wf.speed;
-                            g_shots[s].life = SHOT_LIFE; g_shots[s].col = wf.col; g_shots[s].size = wf.size; g_shots[s].pierce = wf.pierce;
+                            g_shots[s].vx = dx * wf.speed; g_shots[s].vy = dy * wf.speed; g_shots[s].vz = dz * wf.speed;
+                            g_shots[s].life = life; g_shots[s].col = wf.col; g_shots[s].size = wf.size; g_shots[s].pierce = wf.pierce;
                             break;
                         }
                     }
@@ -1382,7 +1410,7 @@ int main(void) {
             if (!jumpNow && velY > 0.0f) velY *= SHORTHOP;
             prevJump = jumpNow;
             // ===== gravedad / PLANEO (CUADRADO gasta EN; L apunta) =====
-            if ((pad.Buttons & PSP_CTRL_SQUARE) && en > 0.0f) {
+            if (!NOCTIS_SKYWORLD && (pad.Buttons & PSP_CTRL_SQUARE) && en > 0.0f) {   // en el cielo: solo salto lunar, sin levitar
                 velY += FLOAT_LIFT; if (velY > FLOAT_UPCAP)   velY = FLOAT_UPCAP;
                 velY -= FLOAT_GRAV; if (velY < FLOAT_FALLCAP) velY = FLOAT_FALLCAP;
                 en -= EN_FLOAT; grounded = 0;
@@ -1411,6 +1439,9 @@ int main(void) {
             } else grounded = 0;
             // ultima red: si aun asi quedo dentro de algo, sacarlo por la cara mas cercana
             unstick(playerX, playerY, playerZ);
+#if NOCTIS_SKYWORLD
+            lvPost(playerX, playerY, playerZ, velX, velY, velZ);   // la prision de gravedad te deja clavado
+#endif
             // ===== energia (EN) =====
             if (grounded && en < EN_MAX) en += EN_REGEN;
             if (en > EN_MAX) en = EN_MAX;
@@ -1506,7 +1537,7 @@ int main(void) {
 #if NOCTIS_SKYWORLD
             // cielo: sin anclas/materiales/robots del sector. Caer al vacio = volver al ultimo
             // punto pisado.
-            if (swFallRespawn(playerX, playerY, playerZ, grounded)) {
+            if (g_lvFloor == 0 && swFallRespawn(playerX, playerY, playerZ, grounded)) {
                 velX = velY = velZ = 0.0f; gvr = gvf = gvg = 0.0f; grounded = 1;
             }
 #else
@@ -1562,6 +1593,18 @@ int main(void) {
                 g_shots[s].y += g_shots[s].vy;
                 g_shots[s].z += g_shots[s].vz;
                 if (--g_shots[s].life <= 0) continue;
+#if NOCTIS_SKYWORLD
+                if (lvShotHit(g_shots[s].x, g_shots[s].y, g_shots[s].z)) {   // ojo o serafin: una sola vez
+                    for (int q = 0; q < 12; ++q) if (g_sparks[q].life <= 0) {
+                        g_sparks[q].x = g_shots[s].x; g_sparks[q].y = g_shots[s].y; g_sparks[q].z = g_shots[s].z;
+                        g_sparks[q].life = 16; break;
+                    }
+                    g_shots[s].life = 0; continue;
+                }
+                // en los pisos las cajas son columnas desde y=0 (el tronco llega a 26): una bala
+                // hacia un ojo sobre el arbol chocaba con el tronco "invisible". Ahi vuelan libres.
+                if (g_lvFloor >= 1) { if (g_shots[s].y < -1.0f) g_shots[s].life = 0; continue; }
+#endif
                 if (blocked(g_shots[s].x, g_shots[s].z, g_shots[s].y)) {
                     for (int q = 0; q < 12; ++q) if (g_sparks[q].life <= 0) {   // chispa contra el muro
                         g_sparks[q].x = g_shots[s].x; g_sparks[q].y = g_shots[s].y;
@@ -1588,7 +1631,7 @@ int main(void) {
         // fondo brumoso (2D, sin profundidad): neblina en el horizonte
         sceGuDisable(GU_DEPTH_TEST);
 #if NOCTIS_SKYWORLD
-        swBackdrop();
+        lvBackdrop();
 #else
         drawSky();   // cielo gotico dramatico (2D): luna, gradiente, nubes, silueta del horizonte
 #endif
@@ -1664,6 +1707,7 @@ int main(void) {
             ScePspFVector3 ctr = { playerX + aX * 4.0f + uX * 1.8f, playerY + aY * 4.0f + uY * 1.8f, playerZ + aZ * 4.0f + uZ * 1.8f };
             ScePspFVector3 up  = { uX, uY, uZ };
             sceGumLookAt(&eye, &ctr, &up);
+            lvSetCamera(eye, ctr, up);   // autoapuntado, "lo estas mirando?" y proyeccion del HUD
 #endif
         }
 
@@ -1682,7 +1726,8 @@ int main(void) {
         // (Se limpiaron 11 dibujados de 0 vertices y 4 texturas muertas que quedaban de los
         //  mundos anteriores: catedrales, agujas de fondo, ventanas y metal del mirador.)
 #if NOCTIS_SKYWORLD
-        swDraw(playerX, playerZ, fwdX, fwdZ);
+        if (g_lvFloor == 0) swDraw(playerX, playerZ, fwdX, fwdZ);
+        lvDraw(playerX, playerY, playerZ);
         sceGuDisable(GU_CULL_FACE);
 #else
         sceGuEnable(GU_TEXTURE_2D);
@@ -1730,7 +1775,7 @@ int main(void) {
         // volcar) y el balanceo tardaba dos ciclos en cerrar.
         {
             HunterPose pose = hunterPose(walkPhase, idleT, speed01, grounded);   // no llamarla hp: ensombrecia la VIDA del jugador
-            const int floatingNow = (!grounded && (pad.Buttons & PSP_CTRL_SQUARE) && en > 0.0f) ? 1 : 0;
+            const int floatingNow = (!NOCTIS_SKYWORLD && !grounded && (pad.Buttons & PSP_CTRL_SQUARE) && en > 0.0f) ? 1 : 0;
             {   // sombra de contacto sobre lo que haya debajo (si es vacio, no hay sombra)
                 const float gy = groundHeight(playerX, playerZ, playerY + 0.5f);
                 if (gy > -1000.0f) drawBlobShadow(playerX, gy, playerZ, playerY - gy);
@@ -1901,8 +1946,22 @@ int main(void) {
               st.grv = g1; }
             st.gravName = kGravName[gravG];
             st.px = playerX; st.pz = playerZ; st.yaw = heroYaw;
-            st.district = NOCTIS_SKYWORLD ? "CIELO" : "CAMPANARIO";
+            st.district = !NOCTIS_SKYWORLD ? "CAMPANARIO" : (g_lvFloor == 0 ? "CIELO" : g_lvFloor == 1 ? "PISO 1" : "PISO 2");
             st.matTaken = objMaterialsTaken(); st.matTotal = objMaterialCount();
+#if NOCTIS_SKYWORLD
+            if (pad.Buttons & PSP_CTRL_SELECT) {   // depuracion: posicion en la etiqueta de zona (Z y Y)
+                static char pos[24]; int n = 0;
+                auto num = [&](char tag, float v) {
+                    pos[n++] = tag; int q = (int)(v < 0 ? -v : v); if (v < 0) pos[n++] = '-';
+                    char t[8]; int k = 0; do { t[k++] = (char)('0' + q % 10); q /= 10; } while (q && k < 7);
+                    while (k) pos[n++] = t[--k]; pos[n++] = ' ';
+                };
+                num('Z', playerZ); num('Y', playerY); pos[n] = 0; st.district = pos;
+            }
+            st.objLabel = "OJOS "; st.matTaken = g_eyesKilled;
+            st.matTotal = (g_lvFloor == 1 && g_eyesOn && g_lvUnlocked < 2) ? 30 : 0;
+            if (g_lvFloor == 2 && g_bs == BS_FIGHT) { st.objLabel = "LUZ "; st.matTaken = g_bsHp; st.matTotal = 36; }
+#endif
             st.pickTimer = pickTimer;
             st.pickName = (pickedType >= 0 && pickedType < kMaterialCount) ? kMaterials[pickedType].name : 0;
             st.weaponName = kRanged[curRanged].name;
@@ -1912,6 +1971,9 @@ int main(void) {
             st.aiming = (aiming != 0);
             st.paused = (paused != 0);
             hudDraw(st);
+#if NOCTIS_SKYWORLD
+            lvHud(aiming, hp, HP_MAX);
+#endif
         }
         // ---- DIALOGO de los robots: nombre y linea, con desvanecido al final ----
         // hudDraw() termina con GU_TEXTURE_2D apagada: sin fontTexOn() cada glifo sale como
@@ -1938,7 +2000,7 @@ int main(void) {
                 hud[n++] = (char)('0' + t % 10);
                 hud[n++] = ' ';
             };
-            put("CPU ", msCpu); put("GE ", msGe); put("ESP ", msWait); put("CAM ", dbgCamBack); put("RAM ", ramFreeMB); put("KV ", g_swVtx * 0.001f);
+            put("CPU ", msCpu); put("GE ", msGe); put("ESP ", msWait); put("CAM ", dbgCamBack); put("RAM ", ramFreeMB); put("KV ", g_swVtx * 0.001f); put("Z-", -playerZ);
             hud[n] = 0;
             // Como leerlo: a 30 fps el presupuesto es 33.3 ms. Si manda ESP, sobra
             // tiempo. Si manda GE, el cuello es la GPU (relleno o vertices). Si manda

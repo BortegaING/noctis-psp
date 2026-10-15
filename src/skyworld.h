@@ -45,8 +45,13 @@ static float swRand(int x, int z, unsigned int salt) { return (float)(swHash(x, 
 // type 0 = vacio, 1 = plataforma caminable, 2 = coloso (torre que sale del abismo)
 struct SwLayout { int type; float x, z, w, d, top; };
 
+// CAMINO AL ELEVADOR: las celdas (0,0)..(0,SW_ELEV_CZ) son SIEMPRE losas unidas por puentes
+// (se camina "hacia adelante" viendo el cielo); en la ultima esta el elevador (levels.h).
+static const int SW_ELEV_CZ = -5;
+static bool swOnPath(int cx, int cz) { return cx == 0 && cz <= 0 && cz >= SW_ELEV_CZ; }
+
 static void swLayout(int cx, int cz, SwLayout &L) {
-    const bool spawnArea = (cx >= -1 && cx <= 1 && cz >= -1 && cz <= 1);
+    const bool spawnArea = (cx >= -1 && cx <= 1 && cz >= -1 && cz <= 1) || swOnPath(cx, cz);
     const float r = swRand(cx, cz, 1);
     L.type = spawnArea ? 1 : (r < 0.70f ? 1 : (r < 0.86f ? 2 : 0));
     L.w = 18.0f + 14.0f * swRand(cx, cz, 2);
@@ -54,7 +59,9 @@ static void swLayout(int cx, int cz, SwLayout &L) {
     L.x = cx * SW_C + (swRand(cx, cz, 4) - 0.5f) * 6.0f;
     L.z = cz * SW_C + (swRand(cx, cz, 5) - 0.5f) * 6.0f;
     L.top = (float)(swHash(cx, cz, 6) % 3u) * 2.4f;          // 0 / 2.4 / 4.8: se sube por escalones
+    if (swOnPath(cx, cz)) { L.x = 0.0f; L.top = 0.0f; }   // camino RECTO y PLANO hasta el elevador
     if (cx == 0 && cz == 0) { L.x = 0.0f; L.z = 0.0f; L.w = 26.0f; L.d = 26.0f; }
+    if (cx == 0 && cz == SW_ELEV_CZ) { L.x = 0.0f; L.z = cz * SW_C; L.w = 28.0f; L.d = 28.0f; }
 }
 
 // puente de (cx,cz) hacia +X (axis 0) o +Z (axis 1). Lo "posee" la celda de menor coordenada.
@@ -62,7 +69,8 @@ static bool swBridge(int cx, int cz, int axis) {
     SwLayout a, b; swLayout(cx, cz, a); swLayout(cx + (axis == 0), cz + (axis == 1), b);
     if (a.type != 1 || b.type != 1) return false;
     const bool spawnLink = (cx >= -1 && cx <= 1 && cz >= -1 && cz <= 1 &&
-                            cx + (axis == 0) <= 1 && cz + (axis == 1) <= 1);
+                            cx + (axis == 0) <= 1 && cz + (axis == 1) <= 1)
+                         || (axis == 1 && swOnPath(cx, cz) && swOnPath(cx, cz + 1));
     return spawnLink || (swHash(cx, cz, 7u + (unsigned int)axis) % 100u) < 72u;
 }
 
@@ -205,7 +213,10 @@ static void swEmitCell(int cx, int cz, SwOut &o) {
     }
     o.tCore = o.tn;
     // ===== T detalle: pretiles en bordes SIN puente, monolitos =====
-    if (L.type == 1) {
+    const bool elevCell = (cx == 0 && cz == SW_ELEV_CZ);   // la losa del elevador va despejada
+    if (elevCell)   // muro alto al fondo: el elevador se apoya en el y no se sigue de largo al vacio
+        swSolidT(o, L.x, L.top, L.z - L.d * 0.5f + 0.6f, L.w, 1.2f, 9.0f, SW_C_MONO, true);
+    if (L.type == 1 && !elevCell) {
         const float hw = L.w * 0.5f, hd = L.d * 0.5f, PH = 1.1f, PT = 0.7f;
         if (!swBridge(cx, cz, 0)     && swRand(cx, cz, 10) < 0.5f) swSolidT(o, L.x + hw - PT * 0.5f, L.top, L.z, PT, L.d, PH, SW_C_SLAB, true);
         if (!swBridge(cx - 1, cz, 0) && swRand(cx, cz, 11) < 0.5f) swSolidT(o, L.x - hw + PT * 0.5f, L.top, L.z, PT, L.d, PH, SW_C_SLAB, true);
@@ -244,7 +255,7 @@ static void swEmitCell(int cx, int cz, SwOut &o) {
     }
     o.lCore = o.ln;
     // ===== L detalle: farol frio en una esquina =====
-    if (L.type == 1 && swRand(cx, cz, 50) < 0.45f) {
+    if (L.type == 1 && !elevCell && swRand(cx, cz, 50) < 0.45f) {
         const float sx = (swHash(cx, cz, 51) & 1) ? 1.0f : -1.0f, sz = (swHash(cx, cz, 52) & 1) ? 1.0f : -1.0f;
         const float x = L.x + sx * (L.w * 0.5f - 1.4f), z = L.z + sz * (L.d * 0.5f - 1.4f);
         swSolidL(o, x, L.top, z, 0.35f, 0.35f, 4.6f, SW_C_PIL, true);
@@ -253,7 +264,7 @@ static void swEmitCell(int cx, int cz, SwOut &o) {
     o.lBoxEnd = o.ln;
     // ===== anillos (sin cull) =====
     if (o.l) {
-        if (L.type == 1 && swRand(cx, cz, 60) < 0.20f) {
+        if (L.type == 1 && !elevCell && swRand(cx, cz, 60) < 0.20f) {
             const float R = 4.5f + 2.0f * swRand(cx, cz, 61);
             const bool alongX = (swHash(cx, cz, 62) & 1) != 0;
             swRing(o.l, o.ln, SW_LV, L.x - L.w * 0.2f, L.top + R + 0.7f, L.z + L.d * 0.2f,

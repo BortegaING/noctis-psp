@@ -138,6 +138,23 @@ misma funcion que la malla, fondo de colosos que sigue al jugador. ~6.9k vertice
 cull ON desaparecia visto desde arriba. Sin textura a proposito (hormigon liso + menos relleno).
 Siguiente: autoapuntado, enemigos para el cielo, detalle de superficie barato, FPS en consola.
 
+**LA TORRE (2026-10-15)** -- `src/levels.h` (logica) + `floor1.h` / `floor2.h` (geometria, agentes)
++ `save_util.h` (guardado XMB con icono) + `audio.h` (musica ambient + pista ADPCM):
+- Gravedad LUNAR, solo salto (sin levitar ni cambio de gravedad; barra GRV fuera).
+- Cielo: camino recto y plano (0,0)->(0,-5) hasta el ELEVADOR (muro al fondo). TRIANGULO = elevador
+  / guardar. Menu de 12 pisos (3..12 "CERRADO"); PANTALLA DE CARGA entre pisos (cada piso = capitulo).
+- Piso 1: campo + arbol + muros de cielo simulado; al acercarse al arbol "EL CIELO SE LLENA DE OJOS":
+  30 ojos (2 golpes c/u) que disparan orbes lentos; AUTOAPUNTADO con L (marcador rojo, bala 3D).
+  Al matar los 30 sube un elevador junto al arbol (abre piso 2).
+- Piso 2: escalera blanca de 40 peldanos; arriba el OFANIM (ojo azul gigante + 3 aros oro rosado
+  con ojos + 6 alas). Dialogo -> RENDIRSE (fundido blanco, vuelves abajo) / PENSAR EN DIOS (rosario
+  TRIANGULO +35 HP, 10 s). Ataques: LUZ (no mirarlo al estallar), PRISION (mover el analogo), orbes.
+  Su cancion: `assets/SERAPH.ADP` (NO va al repo: `python tools/make_adpcm.py <mp3> assets/SERAPH.ADP`,
+  el MP3 esta en Downloads "Untitled #9 - Smaskifa 1.mp3"); se incrusta con src/music_blob.S.
+- Guardado: punto de guardado en cada piso -> saveAuto + utilidad PSP con ICON0/PIC1 (assets/,
+  `tools/make_icons.py`); el piso y los pisos abiertos van en NoctisSave.eventFlags (bit 31 = mundo nuevo).
+- PRUEBAS: SELECT dentro del menu del elevador abre el piso 2. psp_eye: `sy:1` = stick ARRIBA.
+
 ## Pendiente, en orden
 1. **FPS real** en la PSP del ultimo build (solo lo mide Benjamin en la consola).
 2. ~~Cerrar el bucle autonomo de prueba~~ HECHO (2026-10-15): `tools/emu/psp_eye.py` manda

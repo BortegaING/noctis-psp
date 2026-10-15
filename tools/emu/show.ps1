@@ -34,7 +34,7 @@ Start-Sleep -Milliseconds 400
 # necesita para leer la VRAM.) En la consola real no cambia nada: la PSP es 480x272 siempre.
 $ini = "$repo\ppsspp\memstick\PSP\SYSTEM\ppsspp.ini"
 $c = [IO.File]::ReadAllLines($ini)
-$c = $c -replace '^SoftwareRenderer = .*$', 'SoftwareRenderer = False' -replace '^InternalResolution = .*$', 'InternalResolution = 3' -replace '^TextureFiltering = .*$', 'TextureFiltering = 3'
+$c = $c -replace '^SoftwareRenderer = .*$', 'SoftwareRenderer = False' -replace '^InternalResolution = .*$', 'InternalResolution = 3' -replace '^TextureFiltering = .*$', 'TextureFiltering = 3' -replace '^GameVolume = .*$', 'GameVolume = 100'
 [IO.File]::WriteAllLines($ini, $c)
 
 if ($Build) {

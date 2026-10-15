@@ -4,10 +4,10 @@ Uso: python psp_eye.py [acciones...]
   ax:X:ms / ay:Y:ms -> nub analogico (-1..1) mantenido ms
   wait:ms           -> espera sin tocar nada
   hold:boton / free:boton -> mantiene / suelta un boton (ej. hold:l ... shot ... free:l)
-  sx:X / sy:Y       -> deja el nub inclinado hasta nuevo aviso (sy:-1 = adelante; sx:0 sy:0 suelta)
+  sx:X / sy:Y       -> deja el nub inclinado hasta nuevo aviso (OJO: en el debugger de PPSSPP y+ es ARRIBA: sy:1 = adelante, sy:-1 = atras; sx:0 sy:0 suelta)
   shot[:nombre]     -> guarda el frame REAL del juego en build/<nombre>.png (gpu.buffer.screenshot)
 Si no hay ningun shot, al final guarda build/eye.png.
-Ej: python psp_eye.py shot:antes "ay:-1.0:1500" shot:despues
+Ej: python psp_eye.py shot:antes "ay:1.0:1500" shot:despues   (ay/sy positivo = stick ARRIBA)
 A diferencia de PrintWindow (shot.ps1/play.ps1), lee el framebuffer del emulador: no se congela
 y funciona con cualquier backend (GL/D3D/software).
 """

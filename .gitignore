@@ -23,3 +23,6 @@ __pycache__/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Cancion comercial convertida (se regenera con tools/make_adpcm.py desde el MP3; no va al repo)
+assets/SERAPH.ADP

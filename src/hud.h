@@ -49,6 +49,7 @@ struct HudState {
 
     // --- objetivo (abajo izquierda) ---
     int  matTaken = 0, matTotal = 10;        // objMaterialsTaken()/objMaterialCount()
+    const char *objLabel = "MAT ";           // etiqueta del contador (cada piso pone la suya)
     int  pickTimer = 0;                      // frames de aviso (0 = sin aviso)
     const char *pickName = nullptr;          // kMaterials[pickedType].name
 
@@ -159,7 +160,7 @@ static void hudDraw(const HudState &st) {
     drawRect(HUD_SP_X, HUD_SP_Y, HUD_SP_W, HUD_SP_H, HUD_C_PANEL);
     hudBar(r0, hpF,    RGBA(198,  62,  64, 255), RGBA(44, 18, 20, 190));
     hudBar(r1, enF,    RGBA( 72, 142, 208, 255), RGBA(16, 28, 44, 190));
-    hudBar(r2, st.grv, RGBA(158, 120, 210, 255), RGBA(28, 20, 42, 190));
+    if (!NOCTIS_SKYWORLD) hudBar(r2, st.grv, RGBA(158, 120, 210, 255), RGBA(28, 20, 42, 190));   // sin cambio de gravedad: sin barra GRV
 
 #if !NOCTIS_SKYWORLD   // el minimapa dibuja el sector cerrado: no aplica al mundo por celdas
     // --- minimapa REAL del sector (arriba derecha) ---
@@ -192,9 +193,9 @@ static void hudDraw(const HudState &st) {
 
     // --- objetivo (abajo izquierda) + arma (abajo derecha) ---
     // 80 px de ancho = "MAT 10/10" (9 caracteres) + margen.
-    drawRect(HUD_SP_X, HUD_WP_Y, 80, HUD_WP_H, HUD_C_PANEL);
-    drawRect(10, HUD_WP_Y + 13, 72, 3, RGBA(22, 34, 28, 210));            // progreso
-    {
+    if (st.matTotal > 0) {   // matTotal 0 = este piso no tiene contador (panel oculto)
+        drawRect(HUD_SP_X, HUD_WP_Y, 80, HUD_WP_H, HUD_C_PANEL);
+        drawRect(10, HUD_WP_Y + 13, 72, 3, RGBA(22, 34, 28, 210));            // progreso
         int w = (int)(72.0f * (float)st.matTaken / (float)matN + 0.5f);
         if (w > 0) drawRect(10, HUD_WP_Y + 13, w, 3, HUD_C_GOOD);
     }
@@ -221,13 +222,13 @@ static void hudDraw(const HudState &st) {
     // --- vitales: etiqueta + valor numerico ---
     drawText(10, r0 - 1, 1.0f, RGBA(216, 116, 122, 255), "HP");
     drawText(10, r1 - 1, 1.0f, RGBA(124, 168, 226, 255), "EN");
-    drawText(10, r2 - 1, 1.0f, RGBA(180, 148, 226, 255), "GRV");
+    if (!NOCTIS_SKYWORLD) drawText(10, r2 - 1, 1.0f, RGBA(180, 148, 226, 255), "GRV");
     hudUInt(b, (int)(st.hp + 0.5f));
     drawText(HUD_VAL_X, r0 - 1, 1.0f, HUD_C_TEXT, b);
     hudUInt(b, (int)(st.en + 0.5f));
     drawText(HUD_VAL_X, r1 - 1, 1.0f, HUD_C_TEXT, b);
     hudPut(b, 0, st.gravName ? st.gravName : "-", 6);
-    drawText(HUD_VAL_X, r2 - 1, 1.0f, HUD_C_TEXT, b);
+    if (!NOCTIS_SKYWORLD) drawText(HUD_VAL_X, r2 - 1, 1.0f, HUD_C_TEXT, b);
     if (st.fps >= 0) {                                 // discreto, bajo el panel
         int n = hudPut(b, 0, "FPS ", 4);
         hudUInt(b + n, st.fps);
@@ -239,8 +240,8 @@ static void hudDraw(const HudState &st) {
     hudTextR(HUD_MM_X + HUD_MM, HUD_MM_Y + HUD_MM + 4, HUD_C_DIM, b);
 
     // --- materiales: "MAT 3/10" ---
-    {
-        int n = hudPut(b, 0, "MAT ", 4);
+    if (st.matTotal > 0) {
+        int n = hudPut(b, 0, st.objLabel, 6);   // "MAT ", "OJOS " ...
         n += hudUInt(b + n, st.matTaken);
         n = hudPut(b, n, "/", 1);
         hudUInt(b + n, st.matTotal);

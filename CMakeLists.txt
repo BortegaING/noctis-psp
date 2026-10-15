@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(noctis CXX C)
+project(noctis CXX C ASM)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,9 +24,15 @@ set(CMAKE_C_FLAGS_RELEASE   "-O2 -DNDEBUG")
 
 add_executable(${PROJECT_NAME}
     src/main.cpp
+    src/music_blob.S   # .incbin de assets/SERAPH.ADP (cancion de la pelea con el serafin)
 )
+# el .incbin busca en assets/, y si la cancion cambia hay que reensamblar
+set_source_files_properties(src/music_blob.S PROPERTIES
+    COMPILE_FLAGS "-Wa,-I${CMAKE_SOURCE_DIR}/assets"
+    OBJECT_DEPENDS "${CMAKE_SOURCE_DIR}/assets/SERAPH.ADP")
 
 target_link_libraries(${PROJECT_NAME}
+    psputility
     pspgum
     pspgu
     m
@@ -43,4 +49,6 @@ create_pbp_file(
     TARGET ${PROJECT_NAME}
     TITLE  "PROJECT NOCTIS"
     MEMSIZE 1   # 64 MB de la PSP-2000/3000 (~52 libres). El helper pone 2 (modo limitado) si se omite
+    ICON_PATH       ${CMAKE_SOURCE_DIR}/assets/ICON0.PNG   # icono del XMB (144x80)
+    BACKGROUND_PATH ${CMAKE_SOURCE_DIR}/assets/PIC1.PNG    # fondo del XMB (480x272)
 )

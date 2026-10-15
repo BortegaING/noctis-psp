@@ -29,7 +29,7 @@ if ($Build) {
 # psp_eye.py lee la VRAM: necesita el renderizador por SOFTWARE a 1x (show.ps1 pone GPU 3x)
 $ini = "$repo\ppsspp\memstick\PSP\SYSTEM\ppsspp.ini"
 $c = [IO.File]::ReadAllLines($ini)
-$c = $c -replace '^SoftwareRenderer = .*$', 'SoftwareRenderer = True' -replace '^InternalResolution = .*$', 'InternalResolution = 1'
+$c = $c -replace '^SoftwareRenderer = .*$', 'SoftwareRenderer = True' -replace '^InternalResolution = .*$', 'InternalResolution = 1' -replace '^GameVolume = .*$', 'GameVolume = 0'
 [IO.File]::WriteAllLines($ini, $c)
 $proc = Start-Process -FilePath "$repo\ppsspp\PPSSPPWindows64.exe" -ArgumentList "`"$repo\build\EBOOT.PBP`"" -WindowStyle Hidden -PassThru
 # vigia: 10 s ocultando cualquier ventana que PPSSPP muestre por su cuenta

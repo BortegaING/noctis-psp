@@ -34,6 +34,7 @@
 //   audioBell()                  campana lejana con cola larga
 //   audioGravityShift()          golpe grave con caida de tono
 //   audioUpdate()                1 vez por frame: rellena el buffer (NO BLOQUEA)
+//   audioMusic(int on)           musica ambient (pad + celesta), fundido ~2 s; arranca apagada
 //   audioShutdown()              libera el canal
 //   + audioFrame(walkCycle, gravMode)  atajo: pisadas por cadencia + gravedad + update
 //
@@ -159,6 +160,18 @@ static_assert((NOCTIS_AUDIO_SAMPLES % NOCTIS_AUDIO_CHUNK) == 0,
 #define NOCTIS_GS_FMIN        28.0f     // Hz donde se planta
 
 // -----------------------------------------------------------------------------
+// Musica ambient (pad de acordes lentos + arpegio de celesta, todo procedural)
+// -----------------------------------------------------------------------------
+#define NOCTIS_MU_FADE_STEP   190       // Q20 por chunk: fundido lineal ~2 s (1048576/190 = 5518 chunks)
+#define NOCTIS_MU_CHORD_CHUNKS 22050    // 8 s por acorde (a 2756 chunks/s)
+#define NOCTIS_MU_PAD_LVL     2600      // Q15: pico del pad (bajo, no tapa el viento)
+#define NOCTIS_MU_ARP_LVL     1700      // Q15: pico de la celesta (muy suave)
+#define NOCTIS_MU_PAD_SH      12        // ataque/caida del pad: tau 4096 chunks = 1.5 s
+#define NOCTIS_MU_ARP_SH      11        // cola de la celesta: tau 2048 chunks = 0.74 s
+#define NOCTIS_MU_ARP_MIN     2756      // 1 s minimo entre notas del arpegio
+#define NOCTIS_MU_ARP_SPAN    2756      // +0..1 s de variacion
+
+// -----------------------------------------------------------------------------
 // Cadencia de pisadas de audioFrame() (en muestras: reloj de audio, no de frames)
 // -----------------------------------------------------------------------------
 #define NOCTIS_STEP_T_SLOW    27000     // 0.61 s entre pasos caminando
@@ -215,6 +228,31 @@ static int g_belTimer = 430;     // ~20 s para la primera campana
 static unsigned int g_gsPh = 0;
 static int g_gsInc = 0, g_gsE = 0, g_gsEN = 0, g_gsLp = 0;
 
+// --- musica: pad (2 bancos que se cruzan) + arpegio (2 voces) ---
+// Progresion Dmaj9 - Bm7 - Gmaj7 - Aadd9, 4 notas por acorde (Hz literales).
+static const unsigned int g_muChord[4][4] = {
+    { AU_INC(146.83f), AU_INC(220.00f), AU_INC(277.18f), AU_INC(329.63f) },   // D  A  C# E
+    { AU_INC(123.47f), AU_INC(185.00f), AU_INC(220.00f), AU_INC(293.66f) },   // B  F# A  D
+    { AU_INC( 98.00f), AU_INC(146.83f), AU_INC(185.00f), AU_INC(246.94f) },   // G  D  F# B
+    { AU_INC(110.00f), AU_INC(164.81f), AU_INC(246.94f), AU_INC(277.18f) }    // A  E  B  C#
+};
+struct AuPad {
+    unsigned int ph[8];     // 4 notas x 2 osciladores (el 2do desafinado +0.2%)
+    unsigned int inc[8];
+    int env;                // Q20
+    int up;                 // 1 = subiendo (acorde vigente), 0 = cayendo
+};
+static AuPad g_muPad[2];
+static int g_muCur = 0;           // banco vigente
+static int g_muChordIdx = 3;      // el primer cambio lleva al acorde 0
+static int g_muT = 1;             // chunks que faltan para el proximo acorde
+static int g_muGain = 0;          // Q20: fundido maestro de la musica (0 = apagada)
+static int g_muOn = 0;            // pedido del juego
+static unsigned int g_muArpPh[2] = {0,0}, g_muArpInc[2] = {0,0};
+static int g_muArpE[2] = {0,0};
+static int g_muArpV = 0;
+static int g_muArpT = 4000;
+
 // --- estado de audioFrame() ---
 static float g_afPrevWalk = 0.0f;
 static int   g_afPrevGrav = 0;
@@ -263,6 +301,81 @@ static inline void auBellStrike(void)
     g_belE2   = NOCTIS_BELL_E2;
 }
 
+// Cambia al siguiente acorde: el banco vigente empieza a caer y el otro sube.
+static inline void auMusicNextChord(void)
+{
+    g_muChordIdx = (g_muChordIdx + 1) & 3;
+    g_muPad[g_muCur].up = 0;
+    g_muCur ^= 1;
+    AuPad *p = &g_muPad[g_muCur];
+    for (int k = 0; k < 4; ++k) {
+        unsigned int f = g_muChord[g_muChordIdx][k];
+        p->inc[k * 2]     = f;
+        p->inc[k * 2 + 1] = f + (f >> 9);          // detune ~ +0.2% (calidez)
+    }
+    p->up = 1;
+    g_muT = NOCTIS_MU_CHORD_CHUNKS;
+}
+
+// Suma al seco (dry) el aporte del pad y la celesta de este chunk. Control a 1/16.
+static inline void auMusicChunk(int *dry)
+{
+    if (g_muOn) { g_muGain += NOCTIS_MU_FADE_STEP; if (g_muGain > NOCTIS_ENV_ONE) g_muGain = NOCTIS_ENV_ONE; }
+    else if (g_muGain > 0) { g_muGain -= NOCTIS_MU_FADE_STEP; if (g_muGain < 0) g_muGain = 0; }
+    if (g_muGain <= 0) return;                    // apagada: costo cero, salida intacta
+
+    if (--g_muT <= 0) auMusicNextChord();
+
+    int g15 = g_muGain >> 5;                      // Q15
+    int i;
+
+    // -- pad: cada banco activo suma 8 senoidales --
+    for (int b = 0; b < 2; ++b) {
+        AuPad *p = &g_muPad[b];
+        if (p->env <= 0 && !p->up) continue;
+        if (p->up) { p->env += ((NOCTIS_ENV_ONE - p->env) >> NOCTIS_MU_PAD_SH) + 1;
+                     if (p->env > NOCTIS_ENV_ONE) p->env = NOCTIS_ENV_ONE; }
+        else       { p->env -= (p->env >> NOCTIS_MU_PAD_SH) + 1;
+                     if (p->env <= NOCTIS_ENV_FLOOR) p->env = 0; }
+        int gp = ((((p->env >> 5) * g15) >> 15) * NOCTIS_MU_PAD_LVL) >> 15;   // Q15
+        unsigned int ph0=p->ph[0],ph1=p->ph[1],ph2=p->ph[2],ph3=p->ph[3],
+                     ph4=p->ph[4],ph5=p->ph[5],ph6=p->ph[6],ph7=p->ph[7];
+        const unsigned int i0=p->inc[0],i1=p->inc[1],i2=p->inc[2],i3=p->inc[3],
+                           i4=p->inc[4],i5=p->inc[5],i6=p->inc[6],i7=p->inc[7];
+        for (i = 0; i < NOCTIS_AUDIO_CHUNK; ++i) {
+            int sum = g_auSine[ph0>>22] + g_auSine[ph1>>22] + g_auSine[ph2>>22] + g_auSine[ph3>>22]
+                    + g_auSine[ph4>>22] + g_auSine[ph5>>22] + g_auSine[ph6>>22] + g_auSine[ph7>>22];
+            ph0+=i0; ph1+=i1; ph2+=i2; ph3+=i3; ph4+=i4; ph5+=i5; ph6+=i6; ph7+=i7;
+            dry[i] += ((sum >> 3) * gp) >> 15;
+        }
+        p->ph[0]=ph0;p->ph[1]=ph1;p->ph[2]=ph2;p->ph[3]=ph3;
+        p->ph[4]=ph4;p->ph[5]=ph5;p->ph[6]=ph6;p->ph[7]=ph7;
+    }
+
+    // -- arpegio esparcido: una nota del acorde cada 1-2 s, cola corta --
+    if (g_muOn && --g_muArpT <= 0) {
+        unsigned int r = auRnd();
+        g_muArpV ^= 1;
+        g_muArpInc[g_muArpV] = g_muChord[g_muChordIdx][r & 3u] << (1u + ((r >> 3) & 1u));  // 1 o 2 octavas arriba
+        g_muArpPh[g_muArpV]  = 0;
+        g_muArpE[g_muArpV]   = NOCTIS_ENV_ONE;
+        g_muArpT = NOCTIS_MU_ARP_MIN + (int)(auRnd() % (unsigned int)NOCTIS_MU_ARP_SPAN);
+    }
+    for (int v = 0; v < 2; ++v) {
+        if (g_muArpE[v] <= NOCTIS_ENV_FLOOR) continue;
+        int ea = ((((g_muArpE[v] >> 5) * g15) >> 15) * NOCTIS_MU_ARP_LVL) >> 15;  // Q15
+        unsigned int ph = g_muArpPh[v], inc = g_muArpInc[v];
+        for (i = 0; i < NOCTIS_AUDIO_CHUNK; ++i) {
+            int s = g_auSine[ph >> 22] + (g_auSine[(ph << 2) >> 22] >> 2);   // fundamental + 4to armonico (celesta)
+            ph += inc;
+            dry[i] += (((s * 26) >> 5) * ea) >> 15;     // s*26/32: margen contra desborde
+        }
+        g_muArpPh[v] = ph;
+        g_muArpE[v] -= (g_muArpE[v] >> NOCTIS_MU_ARP_SH) + 1;
+        if (g_muArpE[v] <= NOCTIS_ENV_FLOOR) g_muArpE[v] = 0;
+    }
+}
+
 // -----------------------------------------------------------------------------
 // "Director": corre 1 vez por bloque (cada 46 ms). Decide como respira el viento,
 // cuando hay silencio de verdad, y cuando suena una campana sola.
@@ -302,6 +415,39 @@ static inline void auDirector(void)
 //      apagadas no cuestan ni un ciclo,
 //   3) un lazo final mezcla viento estereo + dry + eco y escribe el buffer.
 // -----------------------------------------------------------------------------
+// =============================================================================
+// PISTA GRABADA (cancion de la pelea con el serafin): IMA ADPCM mono, 2 muestras por
+// byte (nibble bajo primero), a cualquier tasa; se re-muestrea a 44.1 kHz con
+// interpolacion lineal y se mezcla FUERA del eco (es musica, no sonido del lugar).
+// Al terminar vuelve a empezar. audioTrackStop() la apaga con fundido.
+// =============================================================================
+static const short kAuImaStep[89] = {
+    7,8,9,10,11,12,13,14,16,17,19,21,23,25,28,31,34,37,41,45,50,55,60,66,73,80,88,97,107,118,130,143,
+    157,173,190,209,230,253,279,307,337,371,408,449,494,544,598,658,724,796,876,963,1060,1166,1282,1411,
+    1552,1707,1878,2066,2272,2499,2749,3024,3327,3660,4026,4428,4871,5358,5894,6484,7132,7845,8630,9493,
+    10442,11487,12635,13899,15289,16818,18500,20350,22385,24623,27086,29794,32767 };
+static const signed char kAuImaIdx[16] = { -1,-1,-1,-1,2,4,6,8, -1,-1,-1,-1,2,4,6,8 };
+static const unsigned char *g_trkData = 0;
+static unsigned int g_trkN = 0, g_trkPos = 0, g_trkFrac = 0, g_trkInc = 0;   // N = muestras; Frac/Inc en Q16
+static int g_trkOn = 0, g_trkVol = 0, g_trkVolT = 0, g_trkPred = 0, g_trkIdx = 0, g_trkS0 = 0, g_trkS1 = 0;
+
+static inline int auTrkNext(void)
+{
+    if (g_trkPos >= g_trkN) { g_trkPos = 0; g_trkPred = 0; g_trkIdx = 0; }   // vuelta al principio
+    const int code = (g_trkData[g_trkPos >> 1] >> ((g_trkPos & 1) << 2)) & 15;
+    ++g_trkPos;
+    const int step = kAuImaStep[g_trkIdx];
+    int d = step >> 3;
+    if (code & 4) d += step;
+    if (code & 2) d += step >> 1;
+    if (code & 1) d += step >> 2;
+    g_trkPred += (code & 8) ? -d : d;
+    if (g_trkPred > 32767) g_trkPred = 32767; else if (g_trkPred < -32768) g_trkPred = -32768;
+    g_trkIdx += kAuImaIdx[code];
+    if (g_trkIdx < 0) g_trkIdx = 0; else if (g_trkIdx > 88) g_trkIdx = 88;
+    return g_trkPred;
+}
+
 static inline void auRenderBlock(short *out)
 {
     auDirector();
@@ -379,8 +525,24 @@ static inline void auRenderBlock(short *out)
             if (g_gsE <= NOCTIS_ENV_FLOOR) { g_gsE = 0; g_gsEN = 0; }
         }
 
+        // -- musica ambient (pad + celesta); no hace nada si esta apagada --
+        auMusicChunk(dry);
+
+        // volumen de la pista: fundido de ~0.4 s, y al llegar a 0 con objetivo 0 se apaga
+        if (g_trkOn) {
+            g_trkVol += (g_trkVolT - g_trkVol) >> 10;
+            if (g_trkVolT == 0 && g_trkVol < 64) { g_trkVol = 0; g_trkOn = 0; }
+        }
+
         // ---------------- mezcla final: viento estereo + seco + eco ----------------
         for (i = 0; i < NOCTIS_AUDIO_CHUNK; ++i) {
+            int trk = 0;
+            if (g_trkOn) {
+                g_trkFrac += g_trkInc;
+                while (g_trkFrac >= 65536u) { g_trkFrac -= 65536u; g_trkS0 = g_trkS1; g_trkS1 = auTrkNext(); }
+                const int s = g_trkS0 + (((g_trkS1 - g_trkS0) * (int)(g_trkFrac >> 1)) >> 15);
+                trk = (s * g_trkVol) >> 15;
+            }
             // Viento: ruido con dos polos por canal. Los dos lados usan ruido
             // INDEPENDIENTE -> suena ancho, envolvente, no "pegado al centro".
             int nL = auNoise();
@@ -411,8 +573,8 @@ static inline void auRenderBlock(short *out)
             int wetL = ((e0 * NOCTIS_ECHO_WET) >> 15) + (e1 >> 3);
             int wetR = ((e1 * NOCTIS_ECHO_WET) >> 15) + (e0 >> 3);
 
-            o[i * 2    ] = (short)auClamp16(wL + d + wetL);
-            o[i * 2 + 1] = (short)auClamp16(wR + d + wetR);
+            o[i * 2    ] = (short)auClamp16(wL + d + wetL + trk);
+            o[i * 2 + 1] = (short)auClamp16(wR + d + wetR + trk);
         }
     }
 
@@ -528,6 +690,23 @@ static inline void audioUpdate(void)
                              g_auBuf[g_auCur]) >= 0) g_auCur ^= 1;
     else g_auPending = 1;
 }
+
+// Musica ambient. 1 = suena (fundido de entrada ~2 s), 0 = fundido de salida ~2 s.
+// Por defecto arranca APAGADA. Apagada no cuesta CPU ni altera la salida.
+static inline void audioMusic(int on)
+{
+    g_muOn = on ? 1 : 0;
+}
+
+// Pista grabada (ADPCM, ver auTrkNext). rate = su tasa de muestreo (ej. 32000).
+static inline void audioTrackPlay(const unsigned char *data, unsigned int bytes, int rate)
+{
+    g_trkData = data; g_trkN = bytes * 2u; g_trkPos = 0; g_trkPred = 0; g_trkIdx = 0;
+    g_trkS0 = g_trkS1 = 0; g_trkFrac = 0;
+    g_trkInc = (unsigned int)(((unsigned long long)rate << 16) / NOCTIS_AUDIO_SR);
+    g_trkVol = 0; g_trkVolT = 26000; g_trkOn = 1;
+}
+static inline void audioTrackStop(void) { g_trkVolT = 0; }
 
 static inline void audioShutdown(void)
 {
