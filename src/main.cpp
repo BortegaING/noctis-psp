@@ -1364,7 +1364,7 @@ int main(void) {
                     // AUTOAPUNTADO: con un blanco en el cono de la mirada, la bala sale en 3D
                     // directo hacia el (ojos en el cielo, el serafin), con vida suficiente
                     // para llegar. Sin blanco, recto al frente como siempre.
-                    float aimT[3]; const int locked = NOCTIS_SKYWORLD ? lvAimTarget(aimT) : 0;
+                    float aimT[3]; const int locked = NOCTIS_SKYWORLD ? lvAimTarget(aimT, wf.speed) : 0;
                     for (int b = 0; b < wf.spread; ++b) {
                         float off = (wf.spread > 1) ? ((float)b - (wf.spread - 1) * 0.5f) * 0.11f : 0.0f;
                         float ya = heroYaw + off, fx = sinf(ya), fz = -cosf(ya);
