@@ -805,12 +805,61 @@ static void buildEnv() {
 // ================= fuente bitmap y rectangulos (sprites 2D) =================
 static unsigned int __attribute__((aligned(16))) g_fontAtlas[128 * 128];
 
+// ESPANOL EN PANTALLA: font8x8_basic es ASCII puro (sin n con tilde ni acentos). Los codigos
+// de control 1..14 (que nunca se dibujan) pasan a ser: 1 a-tilde 2 e 3 i 4 o 5 u 6 enie,
+// 7..12 sus mayusculas, 13 abre-pregunta, 14 abre-exclamacion. Se GENERAN desde la letra base de
+// la misma fuente (asi combinan): minuscula = acento en las filas 0-1 (vacias en a/e/o/u/n);
+// mayuscula = acento de 1 fila arriba y la letra corrida (sin su fila 0). drawText traduce UTF-8.
+static unsigned char g_fontExtra[15][8];
+static void buildFontExtras() {
+    const unsigned char acute2[2] = { 0x30, 0x18 }, tilde2[2] = { 0x26, 0x19 };
+    const char base[12] = { 'a', 'e', 'i', 'o', 'u', 'n', 'A', 'E', 'I', 'O', 'U', 'N' };
+    for (int k = 0; k < 12; ++k) {
+        const unsigned char *b = (const unsigned char *)font8x8_basic[(int)base[k]];
+        unsigned char *g = g_fontExtra[k + 1];
+        const bool tilde = (base[k] == 'n' || base[k] == 'N');
+        if (k < 6) {
+            for (int r = 0; r < 8; ++r) g[r] = b[r];
+            g[0] = tilde ? tilde2[0] : acute2[0]; g[1] = tilde ? tilde2[1] : acute2[1];
+        } else {
+            g[0] = tilde ? 0x36 : 0x18;
+            for (int r = 1; r < 7; ++r) g[r] = b[r];
+            g[7] = 0;
+        }
+    }
+    for (int r = 0; r < 8; ++r) {
+        const unsigned char q = (unsigned char)font8x8_basic[(int)'?'][7 - r];   // ? dado vuelta (espejo y de cabeza)
+        unsigned char m = 0; for (int c = 0; c < 8; ++c) if (q & (1 << c)) m |= (unsigned char)(1 << (7 - c));
+        g_fontExtra[13][r] = (unsigned char)(m >> 2);
+        g_fontExtra[14][r] = (unsigned char)font8x8_basic[(int)'!'][7 - r];   // ! de cabeza
+    }
+}
+// UTF-8 -> codigo de glifo (avanza p si el caracter ocupa 2 bytes)
+static unsigned char textGlyph(const char *&p) {
+    const unsigned char c = (unsigned char)p[0];
+    if ((c == 0xC3 || c == 0xC2) && p[1]) {
+        const unsigned char d = (unsigned char)p[1]; unsigned char g = '?';
+        if (c == 0xC3) {
+            switch (d) {
+                case 0xA1: g = 1; break;  case 0xA9: g = 2; break;  case 0xAD: g = 3; break;
+                case 0xB3: g = 4; break;  case 0xBA: g = 5; break;  case 0xB1: g = 6; break;
+                case 0x81: g = 7; break;  case 0x89: g = 8; break;  case 0x8D: g = 9; break;
+                case 0x93: g = 10; break; case 0x9A: g = 11; break; case 0x91: g = 12; break;
+            }
+        } else if (d == 0xBF) g = 13; else if (d == 0xA1) g = 14;
+        ++p; return g;
+    }
+    return c >= 128 ? (unsigned char)'?' : c;
+}
+static int textLen(const char *s) { int n = 0; for (const char *p = s; *p; ++p) { textGlyph(p); ++n; } return n; }
+
 static void buildFontAtlas() {
+    buildFontExtras();
     for (int i = 0; i < 128 * 128; ++i) g_fontAtlas[i] = 0;
     for (int c = 0; c < 128; ++c) {
         const int cx = (c % 16) * 8, cy = (c / 16) * 8;
         for (int row = 0; row < 8; ++row) {
-            const unsigned char bits = font8x8_basic[c][row];
+            const unsigned char bits = (c >= 1 && c <= 14) ? g_fontExtra[c][row] : font8x8_basic[c][row];
             for (int col = 0; col < 8; ++col)
                 if (bits & (1 << col))
                     g_fontAtlas[(cy + row) * 128 + (cx + col)] = 0xFFFFFFFF;
@@ -881,8 +930,7 @@ static void drawText(int x, int y, float scale, unsigned int color, const char *
     const int cw = (int)(8 * scale), ch = (int)(8 * scale);
     int n = 0, px = x;
     for (const char *p = text; *p; ++p) {
-        unsigned char c = (unsigned char)*p;
-        if (c >= 128) c = '?';
+        const unsigned char c = textGlyph(p);          // UTF-8: tildes, enie, signos de apertura
         const int cx = (c % 16) * 8, cy = (c / 16) * 8;
         v[n].u = cx;     v[n].v = cy;     v[n].x = px;      v[n].y = y;      v[n].z = 0; n++;
         v[n].u = cx + 8; v[n].v = cy + 8; v[n].x = px + cw; v[n].y = y + ch; v[n].z = 0; n++;
@@ -1706,6 +1754,15 @@ int main(void) {
             const float aX = fX * cpv + uX * spv, aY = fY * cpv + uY * spv, aZ = fZ * cpv + uZ * spv;
             ScePspFVector3 ctr = { playerX + aX * 4.0f + uX * 1.8f, playerY + aY * 4.0f + uY * 1.8f, playerZ + aZ * 4.0f + uZ * 1.8f };
             ScePspFVector3 up  = { uX, uY, uZ };
+#if NOCTIS_SKYWORLD
+            {   // temblor: el serafin habla / su luz estalla
+                const float a = lvShakeAmp();
+                if (a > 0.0f) {
+                    const float sx = a * sinf(g_lvT * 1.7f), sy = a * cosf(g_lvT * 2.3f);
+                    eye.x += sx; eye.y += sy; ctr.x += sx * 0.5f; ctr.y += sy * 0.5f;
+                }
+            }
+#endif
             sceGumLookAt(&eye, &ctr, &up);
             lvSetCamera(eye, ctr, up);   // autoapuntado, "lo estas mirando?" y proyeccion del HUD
 #endif

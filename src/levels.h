@@ -82,10 +82,11 @@ static float g_bsX = 0, g_bsY = 0, g_bsZ = 0;
 static int   g_bsCharge = 0, g_bsStun = 0, g_bsOrbs = 0, g_bsHurt = 0;
 static int   g_prison = 0; static float g_prX, g_prY, g_prZ, g_prAcc, g_prLX, g_prLY;
 static int   g_rosary = 0, g_rosaryCd = 0;
+// (UTF-8: drawText dibuja tildes, enie y signos de apertura)
 static const char *kBsLines[4] = {
-    "Has subido muy alto, sonador.",
-    "Todo lo que ves aqui son tus suenos.",
-    "No tengas miedo. Nada de esto duele.",
+    "Has subido muy alto, soñador.",
+    "Todo lo que ves aquí son tus sueños.",
+    "No debes tenerme miedo.",
     "Acepta tu muerte, y descansa.",
 };
 
@@ -334,7 +335,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
                     lvMessage("TE RENDISTE. DESPIERTAS AL PIE DE LA ESCALERA", 200);
                     g_bs = BS_IDLE; g_lvFade = LV_FADE; g_lvFadeTo = 2; g_lvFadeWhite = 1;
                 } else {                                      // PENSAR EN DIOS
-                    lvMessage("UNA LUZ CALIDA TE SOSTIENE. ROSARIO: TRIANGULO", 200);
+                    lvMessage("UNA LUZ CÁLIDA TE SOSTIENE. ROSARIO: TRIÁNGULO", 200);
                     g_rosary = 1; g_bs = BS_FIGHT; g_bsT = 240; g_bsHp = 36;
                     audioMusic(0);                            // la cancion de la pelea
                     audioTrackPlay(g_seraphAdp, (unsigned int)(g_seraphAdpEnd - g_seraphAdp), 32000);
@@ -363,9 +364,9 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
             if (g_bsOrbs > 0 && g_lvT % 14 == 0) { --g_bsOrbs; lvFireOrb(g_bsX, g_bsY, g_bsZ, px, py + 1.7f, pz, 0.26f, RGBA(255, 226, 150, 255)); }
             if (g_bsCharge == 0 && g_prison == 0 && g_bsStun == 0 && --g_bsT <= 0) {
                 const int r = (int)(swRand(g_lvT, 2, 9) * 100.0f);
-                if (r < 45)      { g_bsCharge = 150; lvMessage("NO LO MIRES", 150); }
+                if (r < 45)      { g_bsCharge = 150; lvMessage("¡NO LO MIRES!", 150); }
                 else if (r < 80) { g_prison = 240; g_prX = px; g_prY = py + 1.4f; g_prZ = pz; g_prAcc = 0.0f;
-                                   g_prLX = g_prLY = 0.0f; lvMessage("LA GRAVEDAD TE APRISIONA: MUEVE EL ANALOGO", 150); }
+                                   g_prLX = g_prLY = 0.0f; lvMessage("LA GRAVEDAD TE APRISIONA: MUEVE EL ANÁLOGO", 150); }
                 else             { g_bsOrbs = 6; }
                 g_bsT = 260 + (int)(swRand(g_lvT, 3, 9) * 140.0f);
             }
@@ -373,7 +374,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
             if (++g_bsDeadT == 150) {
                 if (g_lvUnlocked < 3) g_lvUnlocked = 3;
                 g_lvElevOn = 1; g_lvElevRise = 0.0f; g_rosary = 0;
-                lvMessage("EL SERAFIN SE DESVANECE. SE ABRE EL ELEVADOR", 180);
+                lvMessage("EL SERAFÍN SE DESVANECE. SE ABRE EL ELEVADOR", 180);
                 g_bsDeadT = 999;
             }
         }
@@ -425,8 +426,9 @@ static void lvDraw(float px, float py, float pz) {
         // piso 1 con el cielo apagado: la niebla se vuelve NEGRA y corta -> los muros de cielo
         // pintado se hunden en la oscuridad y solo queda el pasto y el arbol cerca
         const float k = (g_lvFloor == 1) ? g_f1Dark : 0.0f;
-        sceGuFog(30.0f - 20.0f * k, g_lvFloor == 1 ? 170.0f - 110.0f * k : 240.0f,
-                 g_lvFloor == 1 ? lvMix(RGBA(196, 214, 232, 255), RGBA(0, 0, 0, 255), k) : RGBA(232, 236, 244, 255));
+        // piso 2: neblina de LUZ (blanco calido) que se traga la escalera hacia lo lejos
+        sceGuFog(g_lvFloor == 1 ? 30.0f - 20.0f * k : 15.0f, g_lvFloor == 1 ? 170.0f - 110.0f * k : 170.0f,
+                 g_lvFloor == 1 ? lvMix(RGBA(196, 214, 232, 255), RGBA(0, 0, 0, 255), k) : RGBA(252, 246, 226, 255));
         sceGuEnable(GU_FOG);
         sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_lvGeoN, 0, g_lvGeo);
         sceGuDisable(GU_FOG);
@@ -491,6 +493,28 @@ static void lvDraw(float px, float py, float pz) {
     sceGumLoadIdentity();
 }
 
+// abanico 2D con degradado del centro al borde (resplandores y nubes)
+static void lvFan2D(int cx, int cy, int r, unsigned int cIn, unsigned int cOut, int seg) {
+    GradVertex *v = (GradVertex *)sceGuGetMemory(sizeof(GradVertex) * 3 * seg);
+    for (int s = 0; s < seg; ++s) {
+        const float a0 = 6.2831853f * s / seg, a1 = 6.2831853f * (s + 1) / seg;
+        v[s * 3 + 0] = { cIn,  (short)cx, (short)cy, 0 };
+        v[s * 3 + 1] = { cOut, (short)(cx + cosf(a0) * r), (short)(cy + sinf(a0) * r * 0.62f), 0 };
+        v[s * 3 + 2] = { cOut, (short)(cx + cosf(a1) * r), (short)(cy + sinf(a1) * r * 0.62f), 0 };
+    }
+    sceGuDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 3 * seg, 0, v);
+}
+
+// TEMBLOR de camara: mientras el serafin habla, y un golpe cuando estalla su luz
+static float lvShakeAmp() {
+    if (g_lvFloor != 2) return 0.0f;
+    float a = 0.0f;
+    if (g_bs == BS_TALK || g_bs == BS_CHOICE) a = 0.11f;
+    if (g_bsCharge > 0) a += 0.05f;
+    if (g_lvFlash > 20) a += 0.30f;
+    return a;
+}
+
 // cielo 2D de cada piso
 static void lvBackdrop() {
     if (g_lvFloor == 0) { swBackdrop(); return; }
@@ -499,9 +523,16 @@ static void lvBackdrop() {
         const float k = g_f1Dark;
         gradQuad(0, 140, lvMix(RGBA(92, 140, 196, 255), K, k), lvMix(RGBA(196, 214, 232, 255), K, k));
         gradQuad(140, SCR_HEIGHT, lvMix(RGBA(196, 214, 232, 255), K, k), lvMix(RGBA(170, 190, 210, 255), K, k));
-    } else {                // cielo abierto de nubes blancas (la referencia del ofanim)
-        gradQuad(0, 120, RGBA(176, 190, 214, 255), RGBA(236, 238, 244, 255));
-        gradQuad(120, SCR_HEIGHT, RGBA(236, 238, 244, 255), RGBA(214, 220, 232, 255));
+    } else {                // cielo de LUZ: blanco-amarillo, nubes y neblina que pasan lento
+        gradQuad(0, 120, RGBA(226, 222, 206, 255), RGBA(255, 250, 232, 255));
+        gradQuad(120, SCR_HEIGHT, RGBA(255, 250, 232, 255), RGBA(242, 236, 218, 255));
+        sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+        for (int k = 0; k < 9; ++k) {
+            const int x = ((k * 131 + (int)(g_lvT * 0.18f * (1 + k % 3))) % 680) - 100;
+            const int y = 24 + (k * 53) % 190, r = 60 + (k * 29) % 70;
+            lvFan2D(x, y, r, RGBA(255, 255, 250, 150), RGBA(255, 252, 240, 0), 16);
+        }
+        sceGuDisable(GU_BLEND);
     }
 }
 
@@ -528,6 +559,21 @@ static void lvHud(int aiming, float hp, float hpMax) {
     (void)hp; (void)hpMax;
     sceGuDisable(GU_DEPTH_TEST); sceGuDisable(GU_TEXTURE_2D);
     sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    // LUZ CEGADORA del serafin: resplandor blanco-amarillo SUMADO alrededor de el (late; al
+    // cargar su ataque se enciende al maximo) + un velo calido sobre toda la pantalla
+    if (g_lvFloor == 2 && (g_bs != BS_DEAD || g_bsDeadT < 150)) {
+        const float p = sinf(g_lvT * 0.05f);
+        int sx, sy;
+        if (lvProject(g_bsX, g_bsY, g_bsZ, sx, sy)) {
+            // "un poco" cegadora: el ofanim se tiene que seguir leyendo dentro de su luz
+            const int I = (g_bsCharge > 0) ? 255 : 105 + (int)(30.0f * p);
+            sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xFFFFFFFF);    // aditivo: suma luz
+            lvFan2D(sx, sy, 190 + (int)(22.0f * p), RGBA(255, 242, 196, I), RGBA(255, 232, 160, 0), 24);
+            lvFan2D(sx, sy, 70 + (int)(10.0f * p), RGBA(255, 255, 238, I * 3 / 4), RGBA(255, 250, 220, 0), 20);
+            sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+        }
+        drawRect(0, 0, SCR_WIDTH, SCR_HEIGHT, RGBA(255, 246, 214, 34 + (int)(16.0f * p)));
+    }
     // marcador de autoapuntado
     float tp[3];
     if (aiming && lvAimTarget(tp)) {
@@ -567,7 +613,7 @@ static void lvHud(int aiming, float hp, float hpMax) {
     fontTexOn();
     if (g_lvFloor == 2 && g_rosary) drawText(12, 59, 1.0f, RGBA(236, 216, 160, 255), "ROSARIO");
     if (dialog) {
-        drawText(40, 198, 1.0f, RGBA(236, 206, 120, 255), "SERAFIN");
+        drawText(40, 198, 1.0f, RGBA(236, 206, 120, 255), "SERAFÍN");
         if (g_bs == BS_TALK) { drawText(40, 214, 1.0f, RGBA(240, 240, 246, 255), kBsLines[g_bsLine]); drawText(380, 236, 1.0f, RGBA(160, 170, 190, 255), "X >"); }
         else {
             drawText(40, 212, 1.0f, g_bsChoice == 0 ? RGBA(255, 255, 255, 255) : RGBA(130, 136, 150, 255), g_bsChoice == 0 ? "> RENDIRSE" : "  RENDIRSE");
@@ -590,20 +636,20 @@ static void lvHud(int aiming, float hp, float hpMax) {
         drawText(160, 226, 1.0f, RGBA(150, 158, 176, 255), "X SUBIR   O SALIR");
     }
     if (g_lvNear && !g_lvMenu && !dialog && g_lvFade == 0)
-        drawText(150, 172, 1.0f, RGBA(230, 236, 246, 255), g_lvNear == 1 ? "TRIANGULO: GUARDAR" : "TRIANGULO: ELEVADOR");
-    if (g_prison > 0) drawText(150, 138, 1.0f, RGBA(220, 210, 255, 255), "MUEVE EL ANALOGO!");
+        drawText(150, 172, 1.0f, RGBA(230, 236, 246, 255), g_lvNear == 1 ? "TRIÁNGULO: GUARDAR" : "TRIÁNGULO: ELEVADOR");
+    if (g_prison > 0) drawText(150, 138, 1.0f, RGBA(220, 210, 255, 255), "¡MUEVE EL ANÁLOGO!");
     if (loading) {
         static const char *kTitle[3] = { "EL CIELO", "EL CAMPO", "LA ESCALERA BLANCA" };
         char b[12] = "PISO  ";
         b[5] = (char)('0' + shownFloor % 10); b[6] = 0;
         drawText(240 - 6 * 8, 100, 2.0f, RGBA(236, 238, 244, 255), b);
         const char *t = kTitle[shownFloor > 2 ? 0 : shownFloor];
-        int n = 0; while (t[n]) ++n;
+        const int n = textLen(t);
         drawText(240 - n * 4, 140, 1.0f, RGBA(200, 176, 120, 255), t);
         drawText(240 - 11 * 4, 210, 1.0f, RGBA(120, 126, 140, 255), "CARGANDO...");
     }
     if (g_lvMsgT > 0 && g_lvMsg && !loading) {
-        int n = 0; while (g_lvMsg[n]) ++n;
+        const int n = textLen(g_lvMsg);
         drawText(240 - n * 4, 96, 1.0f, RGBA(250, 250, 255, g_lvMsgT < 30 ? g_lvMsgT * 8 : 240), g_lvMsg);
     }
     // la mezcla queda ENCENDIDA: el texto que se dibuja despues (dialogos, SELECT) la necesita
