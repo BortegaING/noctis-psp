@@ -53,15 +53,15 @@ static bool swOnPath(int cx, int cz) { return cx == 0 && cz <= 0 && cz >= SW_ELE
 static void swLayout(int cx, int cz, SwLayout &L) {
     const bool spawnArea = (cx >= -1 && cx <= 1 && cz >= -1 && cz <= 1) || swOnPath(cx, cz);
     const float r = swRand(cx, cz, 1);
-    L.type = spawnArea ? 1 : (r < 0.70f ? 1 : (r < 0.86f ? 2 : 0));
-    L.w = 18.0f + 14.0f * swRand(cx, cz, 2);
-    L.d = 18.0f + 14.0f * swRand(cx, cz, 3);
+    L.type = spawnArea ? 1 : (r < 0.78f ? 1 : 0);                 // sin celdas-torre: losa o cielo abierto
+    L.w = 26.0f + 12.0f * swRand(cx, cz, 2);                       // losas MAS GRANDES (antes 18..32)
+    L.d = 26.0f + 12.0f * swRand(cx, cz, 3);
     L.x = cx * SW_C + (swRand(cx, cz, 4) - 0.5f) * 6.0f;
     L.z = cz * SW_C + (swRand(cx, cz, 5) - 0.5f) * 6.0f;
     L.top = (float)(swHash(cx, cz, 6) % 3u) * 2.4f;          // 0 / 2.4 / 4.8: se sube por escalones
     if (swOnPath(cx, cz)) { L.x = 0.0f; L.top = 0.0f; }   // camino RECTO y PLANO hasta el elevador
-    if (cx == 0 && cz == 0) { L.x = 0.0f; L.z = 0.0f; L.w = 26.0f; L.d = 26.0f; }
-    if (cx == 0 && cz == SW_ELEV_CZ) { L.x = 0.0f; L.z = cz * SW_C; L.w = 28.0f; L.d = 28.0f; }
+    if (cx == 0 && cz == 0) { L.x = 0.0f; L.z = 0.0f; L.w = 36.0f; L.d = 36.0f; }
+    if (cx == 0 && cz == SW_ELEV_CZ) { L.x = 0.0f; L.z = cz * SW_C; L.w = 36.0f; L.d = 36.0f; }
 }
 
 // puente de (cx,cz) hacia +X (axis 0) o +Z (axis 1). Lo "posee" la celda de menor coordenada.
@@ -229,30 +229,10 @@ static void swEmitCell(int cx, int cz, SwOut &o) {
             swSolidT(o, L.x + sx * L.w * 0.34f, L.top, L.z + sz * L.d * 0.34f, 2.4f, 2.4f, h, SW_C_MONO, true);
         }
     }
-    // ===== L nucleo: pilares bajo la losa, torre colosal, losas lejanas de abajo =====
-    if (L.type == 1) {
-        const int np = 1 + (int)(swHash(cx, cz, 20) % 3u);
-        for (int p = 0; p < np; ++p) {
-            const float ox = (p == 1) ? -0.25f : 0.25f, oz = (p == 2) ? -0.25f : 0.25f;
-            const float pw = 2.6f + 2.4f * swRand(cx, cz, 21 + p), len = 40.0f + 90.0f * swRand(cx, cz, 24 + p);
-            swSolidL(o, L.x + ox * L.w, L.top - 4.0f - len, L.z + oz * L.d, pw, pw, len, SW_C_PIL, false);
-        }
-    } else if (L.type == 2) {
-        // torre escalonada que sube desde el abismo: 3 tramos que se estrechan
-        float w = 12.0f + 12.0f * swRand(cx, cz, 30), base = -170.0f;
-        const float topY = 30.0f + 110.0f * swRand(cx, cz, 31);
-        const float hs[3] = { 0.55f, 0.30f, 0.15f };
-        for (int k = 0; k < 3; ++k) {
-            const float h = (topY - (-170.0f)) * hs[k];
-            swSolidL(o, cx * SW_C, base, cz * SW_C, w, w, h, SW_C_TOWER, true);
-            base += h; w *= 0.72f;
-        }
-    }
-    if (swRand(cx, cz, 40) < 0.55f) {   // losa suelta muy abajo: profundidad en capas
-        const float y = (L.type == 1 ? L.top : 0.0f) - 22.0f - 40.0f * swRand(cx, cz, 41);
-        swSolidL(o, cx * SW_C + (swRand(cx, cz, 42) - 0.5f) * 30.0f, y, cz * SW_C + (swRand(cx, cz, 43) - 0.5f) * 30.0f,
-                 10.0f + 12.0f * swRand(cx, cz, 44), 10.0f + 12.0f * swRand(cx, cz, 45), 3.0f, SW_C_LOW, false);
-    }
+    // ===== L nucleo: (vacio) =====
+    // Antes: pilares que bajaban 40..130u bajo cada losa, torres que subian del abismo y losas
+    // sueltas abajo. Se leian como TORRES (Benjamin: "saca las torres"); ahora las losas flotan
+    // sobre un mar de nubes (levels.h, lvBackdrop) como en un cielo real.
     o.lCore = o.ln;
     // ===== L detalle: farol frio en una esquina =====
     if (L.type == 1 && !elevCell && swRand(cx, cz, 50) < 0.45f) {
@@ -338,7 +318,7 @@ static void swUpdate(float px, float pz, int budget) {
 
 // ---------------------------------------------------------------- fondo: colosos
 static LineVertex __attribute__((aligned(16))) g_swBgBox[6000];
-static LineVertex __attribute__((aligned(16))) g_swBgRing[6400];
+static LineVertex __attribute__((aligned(16))) g_swBgRing[9000];
 static int g_swBgBoxN = 0, g_swBgRingN = 0;
 
 static unsigned int swFade(unsigned int base, float t) {    // hacia la bruma
@@ -349,83 +329,33 @@ static unsigned int swFade(unsigned int base, float t) {    // hacia la bruma
 
 // (los colosos usan swBoxLit con cBot = casi bruma: salen de la niebla, cima oscura)
 
+// FONDO: solo ENGRANAJES colosales lejos (Benjamin: fuera las torres; estructuras grandes pero a lo
+// lejos). Cada uno se arma en su espacio local (eje +Z) y se dibuja con su propia matriz: mira al
+// centro y GIRA lento sobre su eje. Siguen al jugador como un skybox con volumen.
+struct SwGear { int start, count; float x, y, z, yaw, spin; };
+static SwGear g_swGear[5];
 static void swBuildBackground() {
     int i = 0, j = 0;
     const unsigned int dark = RGBA(66, 72, 84, 255);
-    float tx[10], tz[10], tTop[10];
-    // torres colosales escalonadas en un anillo r 250..370: tramos con degradado hacia la
-    // bruma, cornisa en cada junta y dos nervaduras cruzadas por tramo (rompen la caja lisa)
-    for (int k = 0; k < 10; ++k) {
-        const float ang = 6.2831853f * k / 10.0f + (swRand(k, 0, 70) - 0.5f) * 0.4f;
-        const float r = 250.0f + 120.0f * swRand(k, 0, 71);
-        const float x = sinf(ang) * r, z = -cosf(ang) * r;
-        const float fade = 0.30f + 0.40f * (r - 250.0f) / 120.0f;
-        float w = 30.0f + 40.0f * swRand(k, 0, 72), d = 30.0f + 40.0f * swRand(k, 0, 73), base = -300.0f;
-        const int tiers = 2 + (int)(swHash(k, 0, 74) % 3u);
-        const float total = 360.0f + 260.0f * swRand(k, 0, 75);
-        for (int t = 0; t < tiers; ++t) {
-            const float h = total / tiers;
-            // la niebla pesa mas abajo: cada tramo va de "casi bruma" (base) a su tono (cima)
-            const float y0n = (float)t / tiers, y1n = (float)(t + 1) / tiers;
-            const unsigned int cBot = swFade(dark, fade + (1.0f - fade) * 0.85f * (1.0f - y0n));
-            const unsigned int cTop = swFade(dark, fade + (1.0f - fade) * 0.85f * (1.0f - y1n));
-            swBoxLit(g_swBgBox, i, x, base, z, w, d, h, cTop, cBot);
-            swBoxLit(g_swBgBox, i, x, base, z, w * 1.07f, 3.0f + 0.04f * d, h * 0.96f, cTop, cBot);   // nervadura X
-            swBoxLit(g_swBgBox, i, x, base, z, 3.0f + 0.04f * w, d * 1.07f, h * 0.96f, cTop, cBot);   // nervadura Z
-            base += h;
-            swBoxL(g_swBgBox, i, x, base - 3.0f, z, w * 1.12f, d * 1.12f, 3.0f, cTop);              // cornisa
-            w *= 0.70f; d *= 0.78f;
-        }
-        const unsigned int col = swFade(dark, fade);
-        if (swRand(k, 0, 76) < 0.5f)   // antena / aguja de servicio
-            swBoxL(g_swBgBox, i, x, base, z, 3.0f, 3.0f, 40.0f + 50.0f * swRand(k, 0, 77), col);
-        tx[k] = x; tz[k] = z; tTop[k] = base;
-    }
-    // tubos y tirantes entre torres vecinas (sin cull: addLimb tiene el winding opuesto)
-    for (int k = 0; k < 10; ++k) {
-        if (swRand(k, 4, 90) < 0.35f) continue;
-        const int n = (k + 1) % 10;
-        const float y0 = -60.0f + 140.0f * swRand(k, 4, 91), y1 = y0 + (swRand(k, 4, 92) - 0.5f) * 90.0f;
-        const unsigned int c = swFade(dark, 0.50f);
-        addLimb(g_swBgRing, j, tx[k], y0, tz[k], tx[n], y1, tz[n], 2.6f, 2.6f, 5, c, brighten(c, 1.2f));
-        if (swRand(k, 4, 93) < 0.5f)
-            addLimb(g_swBgRing, j, tx[k], y0 + 14.0f, tz[k], tx[n], y1 + 14.0f, tz[n], 1.4f, 1.4f, 4, c, c);
-    }
-    // vigas/rieles que cruzan el cielo a distintas alturas
-    for (int k = 0; k < 4; ++k) {
-        const float y = 25.0f + 70.0f * swRand(k, 1, 80), D = 210.0f + 60.0f * swRand(k, 1, 81);
-        const unsigned int col = swFade(dark, 0.35f);
-        if (k & 1) swBoxL(g_swBgBox, i, (k & 2) ? D : -D, y, 0.0f, 8.0f, 600.0f, 7.0f, col);
-        else       swBoxL(g_swBgBox, i, 0.0f, y, (k & 2) ? D : -D, 600.0f, 8.0f, 7.0f, col);
-    }
-    // plataformas colosales mas abajo (otra "planta" de la megaestructura)
-    for (int k = 0; k < 6; ++k) {
-        const float ang = 6.2831853f * (k + 0.5f) / 6.0f, r = 150.0f + 100.0f * swRand(k, 2, 82);
-        swBoxL(g_swBgBox, i, sinf(ang) * r, -90.0f - 50.0f * swRand(k, 2, 83), -cosf(ang) * r,
-                    60.0f + 60.0f * swRand(k, 2, 84), 60.0f + 60.0f * swRand(k, 2, 85), 8.0f,
-                    swFade(RGBA(120, 126, 136, 255), 0.55f));
-    }
-    // anillos-engranaje gigantes mirando al centro
-    for (int k = 0; k < 3; ++k) {
-        const float ang = 6.2831853f * k / 3.0f + 0.5f, r = 300.0f + 40.0f * swRand(k, 3, 86);
-        const float ax = sinf(ang), az = -cosf(ang);
-        const float R = 70.0f + 40.0f * swRand(k, 3, 87);
-        const float cy = 40.0f + 60.0f * swRand(k, 3, 88), cx = ax * r, cz = az * r;
-        // aro grueso y REDONDO (44 tramos) con dientes mas grandes y espaciados: el aro fino de 28
-        // tramos con dientes chicos hacia escalera (pixelado) a 480x272; y algo mas hundido en la bruma
-        const unsigned int c = swFade(dark, 0.52f);
-        swRing(g_swBgRing, j, 6400, cx, cy, cz, ax, az, R, 9.5f, 7.0f, 44, 4.5f, c);
-        // eje que atraviesa el anillo + cubo + 6 rayos: deja de ser una rosquilla plana
-        addLimb(g_swBgRing, j, cx - ax * 18.0f, cy, cz - az * 18.0f, cx + ax * 18.0f, cy, cz + az * 18.0f,
-                R * 0.14f, R * 0.14f, 8, brighten(c, 0.8f), c);
-        const float tX = -az, tZ = ax;
+    for (int k = 0; k < 5; ++k) {
+        const float ang = 6.2831853f * k / 5.0f + 0.4f + (swRand(k, 3, 89) - 0.5f) * 0.5f;
+        const float r = 400.0f + 70.0f * swRand(k, 3, 86);
+        const float R = 95.0f + 55.0f * swRand(k, 3, 87);
+        const unsigned int c = swFade(dark, 0.56f + 0.12f * (r - 400.0f) / 70.0f);
+        SwGear &g = g_swGear[k];
+        g.x = sinf(ang) * r; g.z = -cosf(ang) * r; g.y = 30.0f + 100.0f * swRand(k, 3, 88);
+        g.yaw = 3.14159265f - ang;                                    // su eje apunta al centro
+        g.spin = (0.0015f + 0.0020f * swRand(k, 3, 90)) * ((k & 1) ? 1.0f : -1.0f);
+        g.start = j;
+        swRing(g_swBgRing, j, 9000, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, R, 0.10f * R, 0.075f * R, 44, 0.05f * R, c);
+        addLimb(g_swBgRing, j, 0.0f, 0.0f, -0.2f * R, 0.0f, 0.0f, 0.2f * R, R * 0.14f, R * 0.14f, 8, brighten(c, 0.8f), c);
         for (int s = 0; s < 6; ++s) {
-            const float a = 6.2831853f * s / 6.0f + 0.3f * k, ca = cosf(a), sa = sinf(a);
-            addLimb(g_swBgRing, j, cx, cy, cz, cx + ca * (R - 6.0f) * tX, cy + sa * (R - 6.0f), cz + ca * (R - 6.0f) * tZ,
-                    4.2f, 2.8f, 6, c, brighten(c, 1.15f));
+            const float a = 6.2831853f * s / 6.0f, ca = cosf(a), sa = sinf(a);
+            addLimb(g_swBgRing, j, 0.0f, 0.0f, 0.0f, ca * (R - 0.06f * R), sa * (R - 0.06f * R), 0.0f,
+                    0.045f * R, 0.030f * R, 6, c, brighten(c, 1.15f));
         }
-    }
-    g_swBgBoxN = i; g_swBgRingN = j;
+        g.count = j - g.start;
+    }    g_swBgBoxN = i; g_swBgRingN = j;
     sceKernelDcacheWritebackAll();
 }
 
@@ -469,9 +399,17 @@ static void swDraw(float px, float pz, float fwdX, float fwdZ) {
     sceGumLoadIdentity();
     { ScePspFVector3 t = { px, 0.0f, pz }; sceGumTranslate(&t); }
     sceGuEnable(GU_CULL_FACE);
-    sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_swBgBoxN, 0, g_swBgBox);
+    if (g_swBgBoxN > 0) sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_swBgBoxN, 0, g_swBgBox);
     sceGuDisable(GU_CULL_FACE);
-    sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g_swBgRingN, 0, g_swBgRing);
+    static int s_frame = 0; ++s_frame;
+    for (int k = 0; k < 5; ++k) {                          // engranajes: miran al centro y giran lento
+        const SwGear &g = g_swGear[k];
+        sceGumLoadIdentity();
+        ScePspFVector3 t = { px + g.x, g.y, pz + g.z }; sceGumTranslate(&t);
+        sceGumRotateY(g.yaw);
+        sceGumRotateZ(g.spin * s_frame);
+        sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, g.count, 0, g_swBgRing + g.start);
+    }
     sceGumLoadIdentity();
 
     // 2) celdas con niebla HW

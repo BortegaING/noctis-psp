@@ -1701,7 +1701,7 @@ int main(void) {
 #else
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
-        sceGumPerspective(66.0f, 16.0f / 9.0f, 1.0f, 420.0f); // alcanza el telon de agujas (r 120..190) visto desde el lado opuesto del recinto
+        sceGumPerspective(66.0f, 16.0f / 9.0f, 1.0f, 640.0f); // 640: entran enteros los engranajes lejanos del cielo (r 400..470, R hasta 150)
 
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();

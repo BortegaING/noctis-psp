@@ -950,6 +950,31 @@ static void lvBackdrop() {
             lvFan2D(sx, sy, 15, RGBA(255, 255, 250, 255), RGBA(255, 252, 236, 230), 16);
             sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
         }
+        // NUBES (cielo real, menos "cuadrado"): un MAR de nubes debajo de las losas, anclado al mundo
+        // en una grilla de 90u (paralaje al moverse), y bancos altos lejanos en el horizonte. Van en el
+        // fondo, antes del 3D: las plataformas las tapan solas.
+        sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+        {
+            const float ex = g_lvEye[0], ey = g_lvEye[1], ez = g_lvEye[2];
+            const int gx = (int)floorf(ex / 90.0f), gz = (int)floorf(ez / 90.0f);
+            for (int a = 0; a < 2; ++a)                                       // 0 = altos lejanos, 1 = mar de abajo
+                for (int dz = -3; dz <= 3; ++dz)
+                    for (int dx = -3; dx <= 3; ++dx) {
+                        const int cx = gx + dx, cz = gz + dz;
+                        if (a == 0 && (dx > -3 && dx < 3 && dz > -3 && dz < 3)) continue;   // altos: solo el anillo exterior
+                        const float wx = (cx + swRand(cx, cz, 120 + a)) * 90.0f, wz = (cz + swRand(cx, cz, 122 + a)) * 90.0f;
+                        const float wy = a ? -48.0f - 22.0f * swRand(cx, cz, 124) : 35.0f + 70.0f * swRand(cx, cz, 125);
+                        int sx, sy;
+                        if (!lvProject(wx, wy, wz, sx, sy)) continue;
+                        const float d = sqrtf((wx - ex) * (wx - ex) + (wy - ey) * (wy - ey) + (wz - ez) * (wz - ez)) + 1.0f;
+                        int rr = (int)((a ? 48.0f : 70.0f) * 209.0f / d * (0.8f + 0.5f * swRand(cx, cz, 126)));
+                        if (rr < 12) continue; if (rr > 230) rr = 230;
+                        const int al = a ? 200 : 150;
+                        lvFan2D(sx, sy, rr, RGBA(255, 255, 255, al), RGBA(236, 240, 246, 0), 16);
+                        lvFan2D(sx + rr / 2, sy + rr / 8, rr * 2 / 3, RGBA(250, 251, 253, al * 3 / 4), RGBA(236, 240, 246, 0), 12);
+                    }
+        }
+        sceGuDisable(GU_BLEND);
         return;
     }
     if (lvBossFloor()) { lvBossVoidBackdrop(); return; }
