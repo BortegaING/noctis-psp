@@ -117,6 +117,25 @@ static inline float rgMix(float a, float b, float k) { return a + (b - a) * k; }
 // 0..1: cuanto esta CORRIENDO (main lo sube al mantener el nub 3 s y lo baja suave al soltar)
 static float g_hunterRunK = 0.0f;
 static int   g_hunterSlashType = 0;   // tajo del combo de sable (0 horizontal, 1 de vuelta, 2 media luna)
+static float g_hunterTurn = 0.0f;     // cuanto giro el cuerpo este frame (rad; + = a la derecha). Lo pone main.
+
+// MOVIMIENTO SECUNDARIO (2026-10-16, Benjamin: "mejora el movimiento del personaje, tiene que verse mas
+// fluido"): el abrigo y la cabeza ya no siguen al cuerpo al instante. Resortes amortiguados: al FRENAR
+// las colas siguen de largo y vuelven, al ARRANCAR se quedan atras, en una CURVA el abrigo se abre hacia
+// afuera y la cabeza mira hacia donde dobla antes que el cuerpo (anticipacion).
+static float s_coatA = 0.0f, s_coatV = 0.0f, s_swayA = 0.0f, s_swayV = 0.0f, s_headY = 0.0f, s_prevSpd = 0.0f;
+static inline float rgClampF(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+static void hunterSecondary(HunterRig &r, float spd01, int grounded) {
+    const float acc = spd01 - s_prevSpd; s_prevSpd = spd01;
+    const float tgt = grounded ? rgClampF(-acc * 10.0f, -0.6f, 0.6f) : 0.0f;   // frenar -> adelante (+)
+    s_coatV += (tgt - s_coatA) * 0.12f; s_coatV *= 0.80f; s_coatA += s_coatV;
+    r.tailL += s_coatA; r.tailR += s_coatA * 0.9f; r.flapL += s_coatA * 0.45f; r.flapR += s_coatA * 0.45f;
+    const float tz = rgClampF(-g_hunterTurn * 6.0f, -0.35f, 0.35f);           // la fuerza de la curva: afuera
+    s_swayV += (tz - s_swayA) * 0.10f; s_swayV *= 0.80f; s_swayA += s_swayV;
+    r.skirtZ += s_swayA;
+    s_headY += (rgClampF(-g_hunterTurn * 7.0f, -0.45f, 0.45f) - s_headY) * 0.15f;   // mira hacia la curva
+    r.headYaw += s_headY;
+}
 static HunterRig hunterRig(HunterPose &p, float walkPhase, float idleT, float spd01, int grounded,
                            int floating, int aiming, float meleeT, float landK) {
     HunterRig r;
@@ -179,6 +198,7 @@ static HunterRig hunterRig(HunterPose &p, float walkPhase, float idleT, float sp
         else                             { r.armR = -2.60f + 3.80f * e; r.outR = 0.20f; r.elbowR = 0.25f; }   // por encima de la cabeza
         r.armL = 0.20f; r.outL = 0.35f;                       // el otro brazo se abre para equilibrar
     }
+    hunterSecondary(r, spd01, grounded);                   // abrigo y cabeza con inercia
     if (landK > 0.0f) {                                    // ATERRIZAJE: se agacha y amortigua
         r.legL += 0.35f * landK; r.legR += 0.35f * landK;
         r.kneeL += 0.95f * landK; r.kneeR += 0.95f * landK;

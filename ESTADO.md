@@ -343,6 +343,18 @@ vida: ESTOCADA (linea roja, 22), GIRO (anillo, saltar, 18), LANZA (18, se clava 
 disparan + mas rapido. Mascara = doble dano. Botin MASCARA DE LOS OJOS (kMcItem[10], 450 ecos,
 mascara de objetos 0x7FE). Carga medida: ~29k vertices (31k en la fase 3). Prueba:
 `NOCTIS_TEST_CTFASE 2/3`. De paso: la pantalla de carga mostraba "PISO 0" para el 10.
+**SABLE ESTILO ZERO (2026-10-16, "que la espada haga dano, como zero de megaman x"):** Circulo =
+combo de 3 (diagonal, de vuelta, MEDIA LUNA grande por encima con dano doble); alcance
+kMelee.reach * 0.42 (~5; 6 la ultima); dano kMelee.damage / 4 (katana 7/14); pega una vez por
+tajo via lvShotHit (muestrea 14 puntos del arco en los frames 1..4); paso adelante, destello de
+impacto, audioSlash; con un blanco a tiro se vuelve hacia el (sirve con L). Las medias lunas se
+paran DE FRENTE delante del personaje (slashPoint en main.cpp): un arco horizontal visto desde
+la camara de atras era una raya. Pose por tajo: g_hunterSlashType (rig.h).
+**MOVIMIENTO (2026-10-16, "tiene que verse mas fluido"):** el modelo del hunter estaba ESPEJADO
+en X (se giraba por +heroYaw; heroYaw = "adelante (sin,-cos)" pide -heroYaw): yendo a un lado
+miraba al otro. Ademas: giro segun la velocidad, camara con inercia (resorte en el punto que
+sigue, distancia que se acorta al instante y vuelve lento) y movimiento secundario del abrigo y
+la cabeza (rig.h hunterSecondary, g_hunterTurn).
 **ELEVADOR AL CIELO (2026-10-16, Benjamin: "necesito volver al piso 0 para comprar con el
 mercader"):** el menu del elevador va de 0 a 12; 0 = EL CIELO (MERCADER). Llegando en el elevador
 (g_lvViaElev) apareces delante de la puerta del elevador del cielo mirando al mercader, no al

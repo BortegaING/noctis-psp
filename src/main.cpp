@@ -1483,7 +1483,12 @@ int main(void) {
                 float d = want - heroYaw;
                 while (d >  3.14159265f) d -= 6.28318531f;
                 while (d < -3.14159265f) d += 6.28318531f;
-                heroYaw += d * 0.22f;
+                // casi parado gira rapido en el lugar; corriendo, en arco (no pega latigazos)
+                const float sp01 = sqrtf(velX * velX + velZ * velZ) / FP_SPEED;
+                float k = 0.26f - 0.07f * (sp01 > 1.0f ? 1.0f : sp01) - 0.05f * runK;
+                float step = d * k; const float cap = 0.30f;
+                if (step > cap) step = cap; if (step < -cap) step = -cap;
+                heroYaw += step;
             }
             // -- head-bob por velocidad --
             float spd = sqrtf(velX * velX + velZ * velZ);
@@ -1950,7 +1955,19 @@ int main(void) {
                                 ? 0.0f : 2.2f;
                 }
                 dbgCamBack = camBack;
-                ScePspFVector3 eye = { playerX - fX * camBack + uX * CAM_UP, playerY - fY * camBack + uY * CAM_UP, playerZ - fZ * camBack + uZ * CAM_UP };
+                // CAMARA CON INERCIA (2026-10-16, "mas fluido"): el punto que sigue la camara persigue al
+                // jugador con un resorte (un poco mas blando en altura: los saltos se acompanan, no se
+                // copian). La distancia se acorta YA si hay un muro y se recupera despacio. Un salto de
+                // mas de 8 (cambio de piso, respawn, gravedad) la pone en su lugar de golpe.
+                static float s_cx = 0.0f, s_cy = 0.0f, s_cz = 0.0f, s_back = 9.0f; static int s_camInit = 0;
+                {
+                    const float jx = playerX - s_cx, jy = playerY - s_cy, jz = playerZ - s_cz;
+                    if (!s_camInit || jx * jx + jy * jy + jz * jz > 64.0f || gravG != 0) { s_cx = playerX; s_cy = playerY; s_cz = playerZ; s_back = camBack; s_camInit = 1; }
+                    else { s_cx += jx * 0.22f; s_cy += jy * 0.16f; s_cz += jz * 0.22f; }
+                    s_back += (camBack - s_back) * (camBack < s_back ? 0.6f : 0.08f);
+                }
+                const float cpx = s_cx, cpy = s_cy, cpz = s_cz; camBack = s_back;
+                ScePspFVector3 eye = { cpx - fX * camBack + uX * CAM_UP, cpy - fY * camBack + uY * CAM_UP, cpz - fZ * camBack + uZ * CAM_UP };
                 // LA VISTA AHORA SIGUE AL CABECEO. Antes habia un (void)camPitch: la camara
                 // tenia un angulo FIJO mientras el rayo de gravedad SI usaba camPitch, que el
                 // D-pad mueve casi 74 grados arriba y abajo. O sea que "la gravedad va a la
@@ -1960,7 +1977,7 @@ int main(void) {
                 // raros al mirar al cenit, y el rayo y la imagen ya apuntan a lo mismo.
                 const float cpv = cosf(camPitch), spv = sinf(camPitch);
                 const float aX = fX * cpv + uX * spv, aY = fY * cpv + uY * spv, aZ = fZ * cpv + uZ * spv;
-                ScePspFVector3 ctr = { playerX + aX * 4.0f + uX * 1.8f, playerY + aY * 4.0f + uY * 1.8f, playerZ + aZ * 4.0f + uZ * 1.8f };
+                ScePspFVector3 ctr = { cpx + aX * 4.0f + uX * 1.8f, cpy + aY * 4.0f + uY * 1.8f, cpz + aZ * 4.0f + uZ * 1.8f };
                 ScePspFVector3 up  = { uX, uY, uZ };
 #if NOCTIS_SKYWORLD
                 {   // temblor: el serafin habla / su luz estalla
@@ -2048,6 +2065,9 @@ int main(void) {
                 }
                 // hunterRig ajusta tambien pose.bobY/lean (aterrizaje), por eso va ANTES del cuerpo
                 g_hunterSlashType = meleeType;   // la pose del brazo depende del tajo del combo
+                {   static float s_prevYaw = 0.0f; float d = heroYaw - s_prevYaw;
+                    while (d > 3.14159265f) d -= 6.28318531f; while (d < -3.14159265f) d += 6.28318531f;
+                    g_hunterTurn = (fabsf(d) < 0.8f) ? d : 0.0f; s_prevYaw = heroYaw; }   // (un dash gira de golpe: no cuenta)
                 const HunterRig rig = hunterRig(pose, walkPhase, idleT, speed01, grounded, floatingNow,
                                                 aiming, meleeFx > 0 ? meleeFx / 14.0f : 0.0f, landK);
                 pose.roll += turnLean;                                  // se inclina hacia la curva
@@ -2060,7 +2080,11 @@ int main(void) {
                 else if (gravG == 3) gm.z = 1.5708f; else if (gravG == 4) gm.x = 1.5708f;
                 else if (gravG == 5) gm.x = -1.5708f;
                 sceGumRotateXYZ(&gm);
-                ScePspFVector3 fy = { 0.0f, heroYaw + pose.yawSway, 0.0f };
+                // heroYaw vale "adelante = (sin, -cos)"; para que el modelo (que mira a -Z) quede mirando ahi
+                // hay que girarlo por -heroYaw. Con +heroYaw quedaba ESPEJADO en X: yendo a la derecha
+                // miraba a la izquierda y en cada curva giraba al reves (Benjamin, 2026-10-16: "el
+                // movimiento tiene que verse mas fluido"; caminando derecho no se notaba).
+                ScePspFVector3 fy = { 0.0f, -(heroYaw + pose.yawSway), 0.0f };
                 sceGumRotateXYZ(&fy);
                 ScePspFVector3 bob = { pose.bobX * HUNTER_BOB_SCALE, pose.bobY * HUNTER_BOB_SCALE, 0.0f };
                 sceGumTranslate(&bob);
