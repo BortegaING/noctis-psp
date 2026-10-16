@@ -12,7 +12,12 @@
 // - Antes TODAS las armas hacian 2 de dano en los pisos: ahora cada una el suyo (kMcDmg).
 //
 // Guardado (campos del NoctisSave que el mundo del cielo no usaba): money = ecos,
-// questDone = objetos (bit = piso del jefe), ownedRanged = armas, curRanged = la equipada.
+// questDone = objetos (bit = piso del jefe), ownedRanged = armas, curRanged = la equipada,
+// upgrades = la lanza de Gabriel (bits 0-1: fe 0..3, bit 2: cargada).
+//
+// LANZA DE GABRIEL (arma 10, Benjamin): no se vende, la deja el arcangel al caer. Se elige como
+// cualquier otra (L + ABAJO). Al impactar hace su dano y, aparte, estalla en LUZ (dano de luz).
+// Un tiro por carga: se recarga con FE, rezando 3 rosarios (TRIANGULO, cuando curan).
 // Solo se guarda en los pilares (lvSaveNow), igual que el piso y las mejoras.
 //
 // Se incluye al FINAL de levels.h (usa lvDrawAt, lvLookAngles, lvMessage, swLayout...);
@@ -21,14 +26,17 @@
 #ifndef MERCADER_H
 #define MERCADER_H
 
-static const char *kMcItem[8] = { "", "LÁGRIMA DEL CIELO", "PLUMA DEL SERAFÍN", "FRASCO DE AZUFRE",
+// objeto de cada jefe, por piso (4 = Gabriel: su "objeto" es la lanza misma)
+static const char *kMcItem[9] = { "", "LÁGRIMA DEL CIELO", "PLUMA DEL SERAFÍN", "FRASCO DE AZUFRE", "LANZA DE GABRIEL",
                                   "CORONA DEL CONQUISTADOR", "FILO DE LA GUERRA", "BALANZA ROTA", "CENIZA VERDE" };
-static const int kMcBossEcos[8] = { 0, 60, 200, 250, 300, 350, 400, 500 };   // por jefe (el piso 1 ademas 3 por ojo)
+static const int kMcBossEcos[9] = { 0, 60, 200, 250, 350, 300, 350, 400, 500 };   // por jefe (el piso 1 ademas 3 por ojo)
+static const int MC_SPEAR = 10;      // la lanza de Gabriel (kRanged[10])
 // tienda (indice = arma de kRanged): precio en ecos y objeto que pide (piso del jefe; 0 = ninguno)
-static const int kMcPrice[10] = { 0, 600, 200, 700, 450, 800, 500, 250, 900, 1500 };
-static const int kMcNeed[10]  = { 0,   5,   0,   3,   1,   4,   2,   0,   6,    7 };
-// dano por bala en los pisos (vida de los jefes: 60..120). La pistola sigue en 2.
-static const int kMcDmg[10]   = { 2,   9,   4,  20,   2,  17,   5,   3,  12,   30 };
+static const int kMcPrice[11] = { 0, 600, 200, 700, 450, 800, 500, 250, 900, 1500, 0 };
+static const int kMcNeed[11]  = { 0,   6,   0,   3,   1,   5,   2,   0,   7,    8, 0 };
+// dano por bala en los pisos (los jefes tienen 100..160). La pistola sigue en 2; la lanza 40 + luz.
+static const int kMcDmg[11]   = { 2,   9,   4,  20,   2,  17,   5,   3,  12,   30, 40 };
+static const int MC_LIGHT_DMG = 25;  // el estallido de luz de la lanza, aparte del impacto
 
 static int      g_mcEcos = 0;
 static uint32_t g_mcItems = 0;       // objetos de jefe (bit = piso 1..7)
@@ -45,6 +53,9 @@ static LineVertex __attribute__((aligned(16))) g_mcV[420];
 static int      g_mcN = 0;
 static float    g_mcBX = 0.0f, g_mcBZ = 6.0f;       // ultima posicion conocida del jefe (pisos 3..7)
 static int      g_mcBossSeen = 0;
+static int      g_mcSpearReady = 0, g_mcFe = 0, g_mcSpearMsgT = 0;   // la lanza: cargada / rosarios rezados (0..3)
+static int      g_mcSvUpg = 0;
+static float    g_mcLbX = 0.0f, g_mcLbY = 0.0f, g_mcLbZ = 0.0f; static int g_mcLbT = 0, g_mcLbFx = 0;   // estallido de luz
 
 struct McDrop { float x, y, z; int item, ecos, on; };
 static McDrop g_mcDrop[2];
@@ -55,17 +66,35 @@ static void mcInit() {
     buildMechanic(g_mcV, i, rFrame(0.0f, 0.0f, 0.0f, -1.0f));   // mira a -Z: lvLookAngles lo gira hacia el jugador
     g_mcN = i;
 }
-static void mcLoadSave(int ecos, uint32_t items, uint32_t owned, int cur) {
+static void mcLoadSave(int ecos, uint32_t items, uint32_t owned, int cur, uint32_t upg) {
     g_mcSvEcos = (ecos < 0) ? 0 : (ecos > 99999 ? 99999 : ecos);
-    g_mcSvItems = items & 0xFEu;
-    g_mcSvOwned = (owned & 0x3FFu) | 1u;
+    g_mcSvItems = items & 0x1FEu;
+    g_mcSvOwned = (owned & 0x7FFu) | 1u;
+    g_mcSvUpg = (int)(upg & 7u);
     g_mcSvCur = (cur >= 0 && cur < kRangedCount && ((g_mcSvOwned >> cur) & 1u)) ? cur : 0;
 }
-static void mcNewGame()   { g_mcEcos = 0; g_mcItems = 0; g_mcOwned = 1; g_mcEquip = 0; }
-static void mcApplySave() { g_mcEcos = g_mcSvEcos; g_mcItems = g_mcSvItems; g_mcOwned = g_mcSvOwned; g_mcEquip = g_mcSvCur; }
+static void mcNewGame()   { g_mcEcos = 0; g_mcItems = 0; g_mcOwned = 1; g_mcEquip = 0; g_mcSpearReady = 0; g_mcFe = 0; }
+static void mcApplySave() {
+    g_mcEcos = g_mcSvEcos; g_mcItems = g_mcSvItems; g_mcOwned = g_mcSvOwned; g_mcEquip = g_mcSvCur;
+    g_mcFe = g_mcSvUpg & 3; if (g_mcFe > 3) g_mcFe = 3; g_mcSpearReady = (g_mcSvUpg >> 2) & 1;
+}
 static void mcSave(NoctisSave &sv) {
     sv.money = g_mcEcos; sv.questDone = g_mcItems; sv.ownedRanged = g_mcOwned; sv.curRanged = g_mcCur;
+    sv.upgrades = (uint32_t)((g_mcFe & 3) | (g_mcSpearReady ? 4 : 0));
 }
+// ---------------------------------------------------------------- la lanza de Gabriel
+static void mcOnRosary() {   // cada rosario rezado (cuando cura) suma fe; con 3, la lanza vuelve
+    if (!((g_mcOwned >> MC_SPEAR) & 1u) || g_mcSpearReady) return;
+    if (++g_mcFe >= 3) { g_mcFe = 0; g_mcSpearReady = 1; lvMessage("TU FE RECARGÓ LA LANZA DE GABRIEL", 160); audioBell(); }
+}
+static void mcSpearThrown() { g_mcSpearReady = 0; g_mcFe = 0; }
+static void mcSpearEmpty() {
+    if (g_mcSpearMsgT > 0) return;
+    static char m[48] = "LA LANZA ESPERA TU FE: 0/3 ROSARIOS";
+    m[22] = (char)('0' + g_mcFe);
+    lvMessage(m, 110); g_mcSpearMsgT = 120;
+}
+static void mcLightBurst(float x, float y, float z) { g_mcLbX = x; g_mcLbY = y; g_mcLbZ = z; g_mcLbT = 10; g_mcLbFx = 36; }
 static void mcAddEcos(int n) { g_mcEcos += n; if (g_mcEcos > 99999) g_mcEcos = 99999; }
 
 // ---------------------------------------------------------------- botin
@@ -92,7 +121,7 @@ static void mcDrop(float x, float z, float refY, int item, int ecos) {
 }
 // un jefe cayo: ecos siempre, su objeto solo si todavia no lo tienes
 static void mcBossDown(int floor, float x, float z, float refY) {
-    if (floor < 1 || floor > 7) return;
+    if (floor < 1 || floor > 8) return;
     const int item = ((g_mcItems >> floor) & 1u) ? 0 : floor;
     mcDrop(x, z, refY, item, kMcBossEcos[floor]);
 }
@@ -103,6 +132,11 @@ static void mcTrackBoss(float x, float z) { g_mcBX = x; g_mcBZ = z; }
 #endif
 static void mcBossCheck(int done, int floor, float refY) {
     if (NOCTIS_TEST_BOTIN && g_lvT >= 180) done = 1;
+    if (done && !g_mcBossSeen && floor == 4) {           // GABRIEL: ecos y su lanza, en la mano
+        g_mcBossSeen = 1; mcAddEcos(kMcBossEcos[4]);
+        if (!((g_mcOwned >> MC_SPEAR) & 1u)) { g_mcOwned |= 1u << MC_SPEAR; g_mcItems |= 1u << 4; g_mcSpearReady = 1; g_mcFe = 0; }
+        return;
+    }
     if (done && !g_mcBossSeen) { g_mcBossSeen = 1; mcBossDown(floor, g_mcBX, g_mcBZ, refY); }
 }
 static void mcEnterFloor(int floor) {
@@ -138,6 +172,9 @@ static int mcUpdate(float px, float py, float pz, int edge) {
             d.on = 0;
         }
     }
+    if (g_mcSpearMsgT > 0) --g_mcSpearMsgT;
+    if (g_mcLbFx > 0) --g_mcLbFx;
+    if (g_mcLbT > 0 && --g_mcLbT == 0) lvShotHit(g_mcLbX, g_mcLbY, g_mcLbZ, MC_LIGHT_DMG);   // la LUZ, aparte del impacto
     g_mcNearOn = g_mcOn && lvDist2(px, 0.0f, pz, g_mcX, 0.0f, g_mcZ) < 4.6f * 4.6f && fabsf(py - g_mcY) < 2.5f;
     if (g_mcSayT > 0) --g_mcSayT;
     if (!g_mcShop) return 0;
@@ -146,7 +183,8 @@ static int mcUpdate(float px, float py, float pz, int edge) {
     if (edge & PSP_CTRL_CIRCLE) { g_mcShop = 0; return 1; }
     if (edge & PSP_CTRL_CROSS) {
         const int w = g_mcSel, need = kMcNeed[w];
-        if ((g_mcOwned >> w) & 1u) {
+        if (w == MC_SPEAR && !((g_mcOwned >> w) & 1u)) mcSay("Esa no se vende. Pertenece a un arcángel.");
+        else if ((g_mcOwned >> w) & 1u) {
             if (w == g_mcCur) mcSay("Ya la lleva en la mano.");
             else { g_mcEquip = w; mcSay("Bien. Esa es la suya ahora."); }
         } else if (need && !((g_mcItems >> need) & 1u)) mcSay("Sin lo que pide, no la abro. Mire abajo.");
@@ -187,6 +225,22 @@ static void mcDrawLoot(float x, float y, float z, int gold) {
 }
 static void mcDraw(float px, float py, float pz) {
     for (int k = 0; k < 2; ++k) if (g_mcDrop[k].on) mcDrawLoot(g_mcDrop[k].x, g_mcDrop[k].y, g_mcDrop[k].z, g_mcDrop[k].item != 0);
+    if (g_mcLbFx > 0) {   // estallido de LUZ de la lanza: esfera blanca que crece y anillos
+        const float p = 1.0f - g_mcLbFx / 36.0f, R = 1.0f + 7.0f * p;
+        const unsigned int cIn = RGBA(255, 252, 235, (int)(230.0f * (1.0f - p))), cOut = RGBA(255, 240, 190, 0);
+        LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 3 * 16);
+        for (int s = 0; s < 16; ++s) {
+            const float a0 = 6.2831853f * s / 16, a1 = 6.2831853f * (s + 1) / 16;
+            const float c0 = cosf(a0) * R, s0 = sinf(a0) * R, c1 = cosf(a1) * R, s1 = sinf(a1) * R;
+            v[s * 3 + 0] = { cIn, g_mcLbX, g_mcLbY, g_mcLbZ };
+            v[s * 3 + 1] = { cOut, g_mcLbX + g_lvRight[0] * c0 + g_lvUp[0] * s0, g_mcLbY + g_lvRight[1] * c0 + g_lvUp[1] * s0, g_mcLbZ + g_lvRight[2] * c0 + g_lvUp[2] * s0 };
+            v[s * 3 + 2] = { cOut, g_mcLbX + g_lvRight[0] * c1 + g_lvUp[0] * s1, g_mcLbY + g_lvRight[1] * c1 + g_lvUp[1] * s1, g_mcLbZ + g_lvRight[2] * c1 + g_lvUp[2] * s1 };
+        }
+        sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xFFFFFFFF); sceGuDepthMask(GU_TRUE);
+        sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, 48, 0, v);
+        lvRing3D(g_mcLbX, g_mcLbY, g_mcLbZ, R * 1.3f, 0.4f, RGBA(255, 246, 200, (int)(200.0f * (1.0f - p))));
+        sceGuDepthMask(GU_FALSE); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
+    }
     if (!g_mcOn || g_menu) return;
     float yaw, pitch; lvLookAngles(g_mcX, g_mcY + 1.5f, g_mcZ, px, py + 1.7f, pz, yaw, pitch);
     lvDrawAt(g_mcV, g_mcN, g_mcX, g_mcY, g_mcZ, yaw, 0.0f, 1.3f);
@@ -210,6 +264,12 @@ static void mcHud() {
         fontTexOn(); drawText(12, 87, 1.0f, RGBA(150, 220, 255, 255), b); sceGuDisable(GU_TEXTURE_2D);
     }
     if (mcNear() && !g_lvMenu) { fontTexOn(); drawText(150, 172, 1.0f, RGBA(230, 236, 246, 255), "TRIÁNGULO: COMERCIAR"); sceGuDisable(GU_TEXTURE_2D); }
+    if (g_mcCur == MC_SPEAR && !g_mcShop) {   // la lanza en la mano: cargada o cuanta fe le falta
+        int n = 0; const char *l = g_mcSpearReady ? "LANZA LISTA" : "FE "; while (*l) b[n++] = *l++;
+        if (!g_mcSpearReady) { b[n++] = (char)('0' + g_mcFe); b[n++] = '/'; b[n++] = '3'; }
+        b[n] = 0;
+        fontTexOn(); drawText(12, 101, 1.0f, g_mcSpearReady ? RGBA(255, 236, 160, 255) : RGBA(170, 176, 196, 255), b); sceGuDisable(GU_TEXTURE_2D);
+    }
     if (!g_mcShop) return;
     const unsigned int GOLD = RGBA(236, 206, 120, 255), WHITE = RGBA(240, 240, 246, 255), DIM = RGBA(120, 126, 142, 255);
     sceGuDisable(GU_TEXTURE_2D);
@@ -226,8 +286,9 @@ static void mcHud() {
         const int owned = (g_mcOwned >> w) & 1u, need = kMcNeed[w], have = !need || ((g_mcItems >> need) & 1u);
         const unsigned int c = (w == g_mcSel) ? WHITE : (owned || have) ? RGBA(190, 196, 210, 255) : DIM;
         if (w == g_mcSel) drawText(44, y, 1.0f, GOLD, ">");
-        drawText(56, y, 1.0f, c, kRanged[w].name);
+        drawText(56, y, 1.0f, c, (w == MC_SPEAR && !owned) ? "???" : kRanged[w].name);
         if (w == g_mcCur) drawText(340, y, 1.0f, GOLD, "EN MANO");
+        else if (w == MC_SPEAR && !owned) drawText(340, y, 1.0f, DIM, "NO SE VENDE");
         else if (owned) drawText(340, y, 1.0f, RGBA(140, 210, 150, 255), "TUYA");
         else { int n = mcItoa(b, kMcPrice[w]); if (need) { b[n++] = ' '; b[n++] = '+'; b[n] = 0; }
                drawText(340, y, 1.0f, have ? RGBA(150, 220, 255, 255) : DIM, b); }
@@ -235,8 +296,10 @@ static void mcHud() {
     {   // detalle del arma elegida: dano real en los pisos, cargador y lo que pide
         const int w = g_mcSel, need = kMcNeed[w];
         int n = 0; const char *l = "DAÑO "; while (*l) b[n++] = *l++;
-        n += mcItoa(b + n, kMcDmg[w]); l = "   CARGADOR "; while (*l) b[n++] = *l++;
-        mcItoa(b + n, kRanged[w].magazine);
+        n += mcItoa(b + n, kMcDmg[w]);
+        if (w == MC_SPEAR) { l = " + LUZ "; while (*l) b[n++] = *l++; n += mcItoa(b + n, MC_LIGHT_DMG); l = "   FE "; while (*l) b[n++] = *l++;
+                             b[n++] = (char)('0' + (g_mcSpearReady ? 3 : g_mcFe)); b[n++] = '/'; b[n++] = '3'; b[n] = 0; }
+        else { l = "   CARGADOR "; while (*l) b[n++] = *l++; mcItoa(b + n, kRanged[w].magazine); }
         drawText(48, 198, 1.0f, RGBA(196, 200, 212, 255), b);
         if (need) {
             const int have = (g_mcItems >> need) & 1u;

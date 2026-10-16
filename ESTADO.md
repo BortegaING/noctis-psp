@@ -258,9 +258,19 @@ y DETENER EL TIEMPO lo deja al esfumarse. 150 de vida en 3 fases (100/50): tride
 invertido en el piso, columnas de fuego en estrella, VISIONES DE MUERTE (carne con gusanos y venas,
 ojo que se abre, calaveras, sigilos, palabras: todo procedural en 2D, bpHudHorror) y en la fase 3
 la cueva sangra + destellos subliminales. Prueba: `NOCTIS_TEST_BPFASE 2/3` (0 al commitear).
-PENDIENTE pedido por Benjamin: Gabriel (piso 4 nuevo, jinetes a 5-8) con su lanza de regalo
-(arma: dano + dano de luz, se recarga con FE = 3 rosarios), fases para los jinetes, serafin que
-controla el cuerpo y pregunta "Pensar en Dios o Rendirse" en cada fase.
+PENDIENTE pedido por Benjamin: fases + mas vida para los jinetes, serafin que controla el cuerpo
+cada vez mas y pregunta "Pensar en Dios o Rendirse" en cada fase.
+
+**GABRIEL, PISO 4 (2026-10-16, src/boss_gabriel.h; los jinetes pasaron a 5-8):** enojado porque usaste
+el nombre de Dios contra Baphomet. Colosal (~40 de alto, GB_S 8) flotando a 125 del centro de una
+plataforma de marmol de radio 30 (sin baranda). Entrada: cinematica bajando del cielo + dialogo con
+eleccion. Fase 1: rayos de luz en cadena, plumas de luz, RESPLANDOR (si lo miras te deja ciego: velo
+blanco). Al 55% (88/160): cinematica "SEÑOR, ¿ES TU VOLUNTAD QUE ACABE CON EL?" (lvCineBoss, nuevo en
+boss_api.h) + "Que asi sea" y desde ahi la LANZA: sale de muy lejos (entra en cuadro como un punto y
+crece), 3/4 de la plataforma en ROJO y un cuarto a salvo en ORO, impacto 42. Vencido: te agarra, te
+saca del borde y caen en picada (g_lvNoFallDeath) -> fundido blanco -> piso 5. Te deja su LANZA
+(arma 10, MC_SPEAR): 40 + 25 de LUZ aparte (estallido), un tiro por carga, se recarga con FE = 3
+rosarios que curen (mcOnRosary). Pruebas: `NOCTIS_TEST_GBFASE 2` (voluntad+lanzas) / `3` (caida).
 
 ## Como se trabaja
 - Compilar (**solo en el PC**, WSL): `bash tools/build.sh` dentro de

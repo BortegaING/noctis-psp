@@ -30,6 +30,7 @@ static const RangedWeapon kRanged[] = {
     { "Dispersor de Fragmentos",     14,   700,    15,  10,    1600,   6 }, // 7 escopeta abanico corto
     { "Bobina de Singularidad",      58,   520,    50,  20,    2000,   7 }, // 8 orbe gravitacional pierce
     { "Reliquia del Abismo",        120,  1500,    75,  40,    3500,   2 }, // 9 reliquia, el mas letal
+    { "Lanza de Gabriel",           200,  1500,    90,   0,       0,   1 }, // 10 regalo del arcangel: un tiro por carga de FE
 };
 static const int kRangedCount = (int)(sizeof(kRanged) / sizeof(kRanged[0]));
 

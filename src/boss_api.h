@@ -50,10 +50,15 @@ static int g_lvPowerTime = 0;        // 1 = el jugador tiene el poder de detener
 static int g_lvGiveTimePower = 0;    // un modulo pone 1 para otorgarlo (levels.h lo guarda)
 static int g_lvNoHeal = 0;           // 1 = el rosario no cura en este piso (jinete palido)
 static int g_lvDashInv = 0;          // frames de DASH que le quedan al jugador (main lo pone)
+static int g_lvNoFallDeath = 0;      // 1 = el jugador puede caer bajo el piso sin "morir" (caidas guionadas)
 
 // ---------------------------------------------------------------- helpers de levels.h
 // (definidos mas abajo en levels.h; aqui solo declarados para que los modulos los usen)
 static void  lvMessage(const char *m, int frames);
+// cinematica de jefe a medida: la camara gira alrededor de (fx,fy,fz); rk escala la distancia,
+// zm cuanto se acerca (1 = a la mitad), h0 sube/baja la camara. Mientras dura, XX_Update NO corre
+// (animar con g_lvT, que si avanza). Titulo y subtitulo en la tarjeta.
+static void  lvCineBoss(float fx, float fy, float fz, float rk, float zm, float h0, const char *title, const char *sub);
 static void  lvFireOrb(float x, float y, float z, float tx, float ty, float tz, float spd, unsigned int col);
 static void  lvDrawAt(LineVertex *v, int n, float x, float y, float z, float yaw, float pitch, float scale, float roll);
 static void  lvLookAngles(float x, float y, float z, float tx, float ty, float tz, float &yaw, float &pitch);

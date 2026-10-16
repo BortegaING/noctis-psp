@@ -32,6 +32,9 @@ static int   g_menu = 1, g_menuSel = 0, g_menuT = 0;
 static int   g_optMusic = 1, g_optShake = 1, g_optFps = 1;   // opciones (se guardan en eventFlags 10..12)
 static int   g_svHas = 0; static uint32_t g_svFlags = 0;      // partida guardada (CARGAR PARTIDA)
 static int   g_cine = 0;                                      // frames de cinematica de jefe (ver mas abajo)
+static float g_cineRk = 1.0f;   // escala de la distancia de la camara (los ojos: el enjambre es grande)
+static float g_cineZm = 1.0f;   // cuanto se acerca (1 = de R a R/2)
+static float g_cineH0 = 0.0f;   // altura extra de la camara (negativa = desde abajo, mirando arriba)
 static void  lvCineStart(float fx, float fy, float fz, float px, float pz, const char *title, const char *sub);
 static int   g_lvT = 0;                    // frames desde que se entro al piso
 static int   g_lvPrevBtn = 0;
@@ -133,55 +136,62 @@ static float lvDist2(float ax, float ay, float az, float bx, float by, float bz)
 #else
 LV_STUB(bp)
 #endif
+#if __has_include("boss_gabriel.h")
+#include "boss_gabriel.h"    // 4 EL ARCANGEL GABRIEL (luz, lanza del cielo, la caida a la tierra)
+#else
+LV_STUB(gb)
+#endif
 #if __has_include("boss_white.h")
-#include "boss_white.h"      // 4 el jinete blanco (arco, trompeta)
+#include "boss_white.h"      // 5 el jinete blanco (arco, trompeta)
 #else
 LV_STUB(bw)
 #endif
 #if __has_include("boss_red.h")
-#include "boss_red.h"        // 5 el jinete rojo (embestida, grito)
+#include "boss_red.h"        // 6 el jinete rojo (embestida, grito)
 #else
 LV_STUB(br)
 #endif
 #if __has_include("boss_black.h")
-#include "boss_black.h"      // 6 el jinete negro (balanza, dados)
+#include "boss_black.h"      // 7 el jinete negro (balanza, dados)
 #else
 LV_STUB(bk)
 #endif
 #if __has_include("boss_pale.h")
-#include "boss_pale.h"       // 7 el jinete palido + Hades (moscas, no cura)
+#include "boss_pale.h"       // 8 el jinete palido + Hades (moscas, no cura)
 #else
 LV_STUB(bv)
 #endif
-static int lvBossFloor() { return g_lvFloor >= 3 && g_lvFloor <= 7; }
-#define LV_BOSS(fn, ...) (g_lvFloor == 3 ? bp_##fn(__VA_ARGS__) : g_lvFloor == 4 ? bw_##fn(__VA_ARGS__) : \
-                          g_lvFloor == 5 ? br_##fn(__VA_ARGS__) : g_lvFloor == 6 ? bk_##fn(__VA_ARGS__) : bv_##fn(__VA_ARGS__))
+static int lvBossFloor() { return g_lvFloor >= 3 && g_lvFloor <= 8; }
+#define LV_BOSS(fn, ...) (g_lvFloor == 3 ? bp_##fn(__VA_ARGS__) : g_lvFloor == 4 ? gb_##fn(__VA_ARGS__) : \
+                          g_lvFloor == 5 ? bw_##fn(__VA_ARGS__) : g_lvFloor == 6 ? br_##fn(__VA_ARGS__) : \
+                          g_lvFloor == 7 ? bk_##fn(__VA_ARGS__) : bv_##fn(__VA_ARGS__))
 static void lvBossEnter(BossIO &io, float *sx, float *sy, float *sz) {
     int nb = 0;
     switch (g_lvFloor) {
         case 3: bp_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
-        case 4: bw_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
-        case 5: br_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
-        case 6: bk_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
+        case 4: gb_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
+        case 5: bw_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
+        case 6: br_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
+        case 7: bk_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
         default: bv_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
     }
     g_cityCount = nb;
 }
 static void lvBossVoidUpdate(BossIO &io) {
-    switch (g_lvFloor) { case 3: bp_Update(io); break; case 4: bw_Update(io); break; case 5: br_Update(io); break;
-                         case 6: bk_Update(io); break; default: bv_Update(io); break; }
+    switch (g_lvFloor) { case 3: bp_Update(io); break; case 4: gb_Update(io); break; case 5: bw_Update(io); break;
+                         case 6: br_Update(io); break; case 7: bk_Update(io); break; default: bv_Update(io); break; }
 }
 static void lvBossVoidDraw(float px, float py, float pz) {
-    switch (g_lvFloor) { case 3: bp_Draw(px, py, pz); break; case 4: bw_Draw(px, py, pz); break; case 5: br_Draw(px, py, pz); break;
-                         case 6: bk_Draw(px, py, pz); break; default: bv_Draw(px, py, pz); break; }
+    switch (g_lvFloor) { case 3: bp_Draw(px, py, pz); break; case 4: gb_Draw(px, py, pz); break; case 5: bw_Draw(px, py, pz); break;
+                         case 6: br_Draw(px, py, pz); break; case 7: bk_Draw(px, py, pz); break; default: bv_Draw(px, py, pz); break; }
 }
 static void lvBossVoidHud(BossIO &io) {
-    switch (g_lvFloor) { case 3: bp_Hud(io); break; case 4: bw_Hud(io); break; case 5: br_Hud(io); break;
-                         case 6: bk_Hud(io); break; default: bv_Hud(io); break; }
+    switch (g_lvFloor) { case 3: bp_Hud(io); break; case 4: gb_Hud(io); break; case 5: bw_Hud(io); break;
+                         case 6: br_Hud(io); break; case 7: bk_Hud(io); break; default: bv_Hud(io); break; }
 }
 static void lvBossVoidBackdrop() {
-    switch (g_lvFloor) { case 3: bp_Backdrop(); break; case 4: bw_Backdrop(); break; case 5: br_Backdrop(); break;
-                         case 6: bk_Backdrop(); break; default: bv_Backdrop(); break; }
+    switch (g_lvFloor) { case 3: bp_Backdrop(); break; case 4: gb_Backdrop(); break; case 5: bw_Backdrop(); break;
+                         case 6: br_Backdrop(); break; case 7: bk_Backdrop(); break; default: bv_Backdrop(); break; }
 }
 static int g_rosaryHas = 0;   // (reservado)
 static int g_timeCd = 0;      // espera del poder de detener el tiempo
@@ -190,7 +200,7 @@ static void mcInit(); static void mcNewGame(); static void mcApplySave(); static
 static void mcAddEcos(int n); static void mcBossDown(int floor, float x, float z, float refY);
 static void mcTrackBoss(float x, float z); static void mcBossCheck(int done, int floor, float refY);
 static void mcEnterFloor(int floor); static int mcUpdate(float px, float py, float pz, int edge);
-static int mcNear(); static void mcOpen(); static int mcBlocks();
+static int mcNear(); static void mcOpen(); static int mcBlocks(); static void mcOnRosary();
 static void mcDraw(float px, float py, float pz); static void mcHud();
 
 static void lvInit(uint32_t flags) {
@@ -219,7 +229,7 @@ static void lvApplySave() {
     g_rosary = (f >> 8) & 1u;
     g_lvPowerTime = (f >> 9) & 1u;
 }
-static int lvSavedFloor() { int fl = (int)(g_svFlags & 15u); return (fl > 7) ? 0 : fl; }
+static int lvSavedFloor() { int fl = (int)(g_svFlags & 15u); return (fl > 8) ? 0 : fl; }
 static uint32_t lvFlags() {
     return 0x80000000u | (uint32_t)g_lvFloor | ((uint32_t)g_lvUnlocked << 4)
          | ((uint32_t)(g_rosary ? 1 : 0) << 8) | ((uint32_t)(g_lvPowerTime ? 1 : 0) << 9)
@@ -228,7 +238,7 @@ static uint32_t lvFlags() {
 
 // entra a un piso: geometria, colision, spawn, estado de enemigos
 static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, float &camYaw) {
-    g_lvFloor = floor; g_lvT = 0; g_lvMenu = 0; g_prison = 0; g_bsCharge = 0;
+    g_lvFloor = floor; g_lvT = 0; g_lvMenu = 0; g_prison = 0; g_bsCharge = 0; g_lvNoFallDeath = 0;
     mcEnterFloor(floor);                                                // botin pendiente fuera; mercader solo en el cielo
     audioTrackStop(); audioMusic(g_optMusic);                           // cada piso arranca con la musica tranquila
     for (int k = 0; k < 16; ++k) g_orbs[k].life = 0;
@@ -299,9 +309,12 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
     // CINEMATICA de presentacion del jefe (si todavia no lo venciste)
     g_cine = 0;
     if (floor == 2 && g_lvUnlocked < 3) lvCineStart(g_bsX, g_bsY, g_bsZ, px, pz, "EL SERAFÍN", "OFANIM");
-    if (floor >= 3) {   // estos jefes pelean cada vez que entras: la presentacion va siempre (X la salta)
-        static const char *kT[5] = { "BAPHOMET", "EL JINETE BLANCO", "EL JINETE ROJO", "EL JINETE NEGRO", "EL JINETE PÁLIDO" };
-        static const char *kS[5] = { "EL QUE ESPERA JUNTO AL FUEGO", "CONQUISTA", "GUERRA", "HAMBRE", "MUERTE. HADES LO SIGUE" };
+    if (floor == 4) {   // GABRIEL: la camara abajo, mirandolo bajar del cielo con lanza y escudo
+        lvCineStart(0.0f, 40.0f, -125.0f, px, pz, "EL ARCÁNGEL GABRIEL", "LA IRA DEL CIELO");
+        g_cineRk = 1.7f; g_cineZm = 0.4f; g_cineH0 = -30.0f;
+    } else if (floor >= 3) {   // estos jefes pelean cada vez que entras: la presentacion va siempre (X la salta)
+        static const char *kT[6] = { "BAPHOMET", "", "EL JINETE BLANCO", "EL JINETE ROJO", "EL JINETE NEGRO", "EL JINETE PÁLIDO" };
+        static const char *kS[6] = { "EL QUE ESPERA JUNTO AL FUEGO", "", "CONQUISTA", "GUERRA", "HAMBRE", "MUERTE. HADES LO SIGUE" };
         float t[3] = { 0.0f, 6.0f, 0.0f };
         if (!LV_BOSS(AimTarget, t)) { t[0] = 0.0f; t[1] = 6.0f; t[2] = 0.0f; }
         lvCineStart(t[0], t[1], t[2], px, pz, kT[floor - 3], kS[floor - 3]);
@@ -311,10 +324,10 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
 // ---------------------------------------------------------------- guardado
 // descripcion del XMB (antes del piso 3 en adelante decia "Piso 2. La escalera blanca.")
 static const char *lvSaveDesc() {
-    static const char *k[8] = { "El cielo. Camino al elevador.", "Piso 1. El campo y el arbol.", "Piso 2. La escalera blanca.",
-                                "Piso 3. La cueva.", "Piso 4. El jinete blanco.", "Piso 5. El jinete rojo.",
-                                "Piso 6. El jinete negro.", "Piso 7. El jinete palido." };
-    return (g_lvFloor >= 0 && g_lvFloor < 8) ? k[g_lvFloor] : k[0];
+    static const char *k[9] = { "El cielo. Camino al elevador.", "Piso 1. El campo y el arbol.", "Piso 2. La escalera blanca.",
+                                "Piso 3. La cueva.", "Piso 4. El arcangel.", "Piso 5. El jinete blanco.",
+                                "Piso 6. El jinete rojo.", "Piso 7. El jinete negro.", "Piso 8. El jinete palido." };
+    return (g_lvFloor >= 0 && g_lvFloor < 9) ? k[g_lvFloor] : k[0];
 }
 static void lvSaveFrame() {
     sceGuStart(GU_DIRECT, g_list);
@@ -405,9 +418,10 @@ static void lvFireOrb(float x, float y, float z, float tx, float ty, float tz, f
 static const int LV_CINE = 330;
 static float g_cineFx = 0, g_cineFy = 0, g_cineFz = 0, g_cineA0 = 0;
 static const char *g_cineTitle = 0, *g_cineSub = 0;
-static float g_cineRk = 1.0f;   // escala de la distancia de la camara (los ojos: el enjambre es grande)
-static float g_cineZm = 1.0f;   // cuanto se acerca (1 = de R a R/2)
-static float g_cineH0 = 0.0f;   // altura extra de la camara (negativa = desde abajo, mirando arriba)
+static void lvCineBoss(float fx, float fy, float fz, float rk, float zm, float h0, const char *title, const char *sub) {
+    lvCineStart(fx, fy, fz, g_lvEye[0], g_lvEye[2], title, sub);
+    g_cineRk = rk; g_cineZm = zm; g_cineH0 = h0;
+}
 static void lvCineStart(float fx, float fy, float fz, float px, float pz, const char *title, const char *sub) {
     g_cine = LV_CINE; g_cineFx = fx; g_cineFy = fy; g_cineFz = fz;
     g_cineA0 = atan2f(px - fx, pz - fz);                     // arranca del lado del jugador
@@ -589,10 +603,10 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
         if (edge & PSP_CTRL_UP)   { if (--g_lvMenuSel < 1) g_lvMenuSel = 12; }
         if (edge & PSP_CTRL_DOWN) { if (++g_lvMenuSel > 12) g_lvMenuSel = 1; }
         if (edge & PSP_CTRL_CIRCLE) g_lvMenu = 0;
-        if ((edge & PSP_CTRL_SELECT) && g_lvUnlocked < 7) { g_lvUnlocked = 7; lvMessage("PRUEBAS: PISOS 1-7 ABIERTOS", 90); }   // atajo de desarrollo
+        if ((edge & PSP_CTRL_SELECT) && g_lvUnlocked < 8) { g_lvUnlocked = 8; lvMessage("PRUEBAS: PISOS 1-8 ABIERTOS", 90); }   // atajo de desarrollo
         if (edge & PSP_CTRL_CROSS) {
             if (g_lvMenuSel > g_lvUnlocked) lvMessage("ESE PISO SIGUE CERRADO", 90);
-            else if (g_lvMenuSel > 7)       lvMessage("PISO EN CONSTRUCCIÓN", 90);
+            else if (g_lvMenuSel > 8)       lvMessage("PISO EN CONSTRUCCIÓN", 90);
             else if (g_lvMenuSel == g_lvFloor) g_lvMenu = 0;
             else { g_lvMenu = 0; g_lvFade = LV_FADE; g_lvFadeTo = g_lvMenuSel; g_lvFadeWhite = 0; }
         }
@@ -609,7 +623,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
         if (g_lvNear == 2) { g_lvMenu = 1; g_lvMenuSel = (g_lvFloor < 12) ? g_lvFloor + 1 : 1; return; }
         if (mcNear()) { mcOpen(); return; }                   // EL MERCADER
         if (g_rosary && !g_lvNoHeal) {                        // ROSARIO (se queda para siempre)
-            if (g_rosaryCd == 0 && hp < hpMax) { hp += 35.0f; if (hp > hpMax) hp = hpMax; g_rosaryCd = 600; lvMessage("EL ROSARIO TE SOSTIENE", 70); }
+            if (g_rosaryCd == 0 && hp < hpMax) { hp += 35.0f; if (hp > hpMax) hp = hpMax; g_rosaryCd = 600; lvMessage("EL ROSARIO TE SOSTIENE", 70); mcOnRosary(); }
             else if (g_rosaryCd > 0) lvMessage("EL ROSARIO AUN DESCANSA", 50);
         }
     }
@@ -797,14 +811,18 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
             if (!done && LV_BOSS(AimTarget, bt)) mcTrackBoss(bt[0], bt[2]);
             mcBossCheck(done, g_lvFloor, g_lvSpawnY);
         }
-        if (LV_BOSS(Done) && g_lvUnlocked <= g_lvFloor) {
+        if (g_lvFloor == 4 && LV_BOSS(Done) && g_lvFade == 0) {   // GABRIEL: caes con el a la tierra
+            if (g_lvUnlocked < 5) g_lvUnlocked = 5;
+            g_lvFade = LV_FADE; g_lvFadeTo = 5; g_lvFadeWhite = 1;   // (sin caida mortal hasta lvEnter: sigue cayendo)
+            lvMessage("CAES A LA TIERRA. LA LANZA DE GABRIEL ES TUYA (L + ABAJO)", 300);
+        } else if (LV_BOSS(Done) && g_lvUnlocked <= g_lvFloor) {
             g_lvUnlocked = g_lvFloor + 1; g_lvElevOn = 1; g_lvElevRise = 0.0f; g_lvNoHeal = 0;
             lvMessage("SE ABRE EL ELEVADOR", 150);
         }
     }
 
     // ---- muerte / caida al vacio ----
-    if (hp <= 0.0f || py < g_lvSpawnY - 60.0f) {
+    if (hp <= 0.0f || (py < g_lvSpawnY - 60.0f && !g_lvNoFallDeath)) {
         if (g_lvFloor == 2 && g_bs == BS_FIGHT) { float lx, ly, lz; f2LandingTop(&lx, &ly, &lz); px = lx; py = ly + 0.2f; pz = lz + 8.0f; }
         else { px = g_lvSpawnX; py = g_lvSpawnY + 0.2f; pz = g_lvSpawnZ; }
         vy = 0.0f; hp = hpMax; lvAttacksReset();
@@ -1164,7 +1182,7 @@ static void lvHud(int aiming, float hp, float hpMax) {
     }
     if (g_lvMenu) {
         drawText(198, 40, 1.0f, RGBA(236, 206, 120, 255), "ELEVADOR");
-        static const char *kNames[13] = { "", "EL CAMPO", "LA ESCALERA", "LA CUEVA", "JINETE BLANCO", "JINETE ROJO", "JINETE NEGRO", "JINETE PÁLIDO", "???", "???", "???", "???", "???" };
+        static const char *kNames[13] = { "", "EL CAMPO", "LA ESCALERA", "LA CUEVA", "EL ARCÁNGEL", "JINETE BLANCO", "JINETE ROJO", "JINETE NEGRO", "JINETE PÁLIDO", "???", "???", "???", "???" };
         for (int f = 1; f <= 12; ++f) {
             char b[32]; int n = 0;
             b[n++] = (f == g_lvMenuSel) ? '>' : ' '; b[n++] = ' ';
@@ -1183,7 +1201,7 @@ static void lvHud(int aiming, float hp, float hpMax) {
         drawText(150, 172, 1.0f, RGBA(230, 236, 246, 255), g_lvNear == 1 ? "TRIÁNGULO: GUARDAR" : "TRIÁNGULO: ELEVADOR");
     if (g_prison > 0) drawText(150, 138, 1.0f, RGBA(220, 210, 255, 255), "¡MUEVE EL ANÁLOGO!");
     if (loading) {
-        static const char *kTitle[8] = { "EL CIELO", "EL CAMPO", "LA ESCALERA BLANCA", "LA CUEVA", "EL JINETE BLANCO", "EL JINETE ROJO", "EL JINETE NEGRO", "EL JINETE PÁLIDO" };
+        static const char *kTitle[9] = { "EL CIELO", "EL CAMPO", "LA ESCALERA BLANCA", "LA CUEVA", "EL ARCÁNGEL", "EL JINETE BLANCO", "EL JINETE ROJO", "EL JINETE NEGRO", "EL JINETE PÁLIDO" };
         char b[12] = "PISO  ";
         b[5] = (char)('0' + shownFloor % 10); b[6] = 0;
         drawText(240 - 6 * 8, 100, 2.0f, RGBA(236, 238, 244, 255), b);

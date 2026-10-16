@@ -35,6 +35,8 @@ static WeaponFX weaponFX(int idx) {
             f.speed = 1.70f; f.size = 0.36f; f.col = RGBA(200, 60,230,255); f.spread = 1; f.pierce = 1; f.fireFrames = 22; break;
         case 9: // Reliquia del Abismo    - orbe dorado enorme, EL MAS LENTO, atraviesa, look raro/antiguo
             f.speed = 1.05f; f.size = 0.42f; f.col = RGBA(255,205, 90,255); f.spread = 1; f.pierce = 1; f.fireFrames = 46; break;
+        case 10: // Lanza de Gabriel      - lanza de luz larga y blanca-dorada (la fe la recarga)
+            f.speed = 2.0f; f.size = 0.55f; f.col = RGBA(255,240,170,255); f.spread = 1; f.pierce = 1; f.fireFrames = 40; break;
         default: break;
     }
     return f;
@@ -53,6 +55,7 @@ static unsigned int weaponMuzzle(int idx) {
         case 7: return RGBA(255,190,120,255); // naranja fragmentacion
         case 8: return RGBA(240,160,255,255); // magenta claro
         case 9: return RGBA(255,235,170,255); // dorado palido
+        case 10: return RGBA(255,250,220,255); // luz del arcangel
         default: return RGBA(255,255,255,255);
     }
 }

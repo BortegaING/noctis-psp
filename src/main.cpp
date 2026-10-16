@@ -700,7 +700,7 @@ static int g_npcVerts = 0;
 static int g_npcKilled[64] = {0};   // (robots = habitantes, no enemigos; el kill-system queda inerte)
 
 // ===== ARMA / DISPAROS (L apunta, R dispara) =====
-struct Shot { float x, y, z, vx, vy, vz; int life; unsigned int col; float size; int pierce; int dmg; };   // dmg: el del arma (pisos)
+struct Shot { float x, y, z, vx, vy, vz; int life; unsigned int col; float size; int pierce; int dmg; int light; };   // dmg: el del arma (pisos); light: la lanza de Gabriel
 static Shot g_shots[24];
 // chispa/estallido al derribar un robot (feedback de impacto)
 struct Spark { float x, y, z; int life; };
@@ -1303,7 +1303,7 @@ int main(void) {
 #if NOCTIS_SKYWORLD
     swInit(&playerX, &playerY, &playerZ);   // el guardado es del sector viejo: aqui se arranca en la losa (0,0)
     lvInit(sv.eventFlags);                  // piso y pisos abiertos de la ultima partida del mundo nuevo
-    if (sv.eventFlags & 0x80000000u) mcLoadSave(sv.money, sv.questDone, sv.ownedRanged, sv.curRanged);   // ecos/objetos/armas (CARGAR PARTIDA los aplica)
+    if (sv.eventFlags & 0x80000000u) mcLoadSave(sv.money, sv.questDone, sv.ownedRanged, sv.curRanged, sv.upgrades);   // ecos/objetos/armas (CARGAR PARTIDA los aplica)
     lvEnter(g_lvFloor, playerX, playerY, playerZ, heroYaw, camYaw);
 #endif
     float gvr = 0.0f, gvf = 0.0f, gvg = 0.0f;   // vel en el plano (right,fwd) + a lo largo de la gravedad
@@ -1506,6 +1506,7 @@ int main(void) {
                 prevCycle = cyc;
                 if (want >= 0 && want < kRangedCount && want < 16) {
                     curRanged = want; ammoMag[curRanged] = kRanged[curRanged].magazine; reloadCD = 0; fireCD = 0;
+                    if (curRanged == MC_SPEAR) ammoMag[MC_SPEAR] = g_mcSpearReady ? 1 : 0;
                 }
                 g_mcCur = curRanged;
             }
@@ -1529,6 +1530,12 @@ int main(void) {
             if (aiming && (pad.Buttons & PSP_CTRL_RTRIGGER) && fireCD == 0 && reloadCD == 0) {
                 WeaponFX wf = weaponFX(curRanged);
                 int cost = kRanged[curRanged].energyCost;
+#if NOCTIS_SKYWORLD
+                if (curRanged == MC_SPEAR) {   // LANZA DE GABRIEL: un tiro por carga de FE (3 rosarios)
+                    ammoMag[MC_SPEAR] = g_mcSpearReady ? 1 : 0;
+                    if (!g_mcSpearReady) { mcSpearEmpty(); fireCD = 30; }
+                }
+#endif
                 if (ammoMag[curRanged] > 0 && en >= (float)cost) {
                     // AUTOAPUNTADO: con un blanco en el cono de la mirada, la bala sale en 3D
                     // directo hacia el (ojos en el cielo, el serafin), con vida suficiente
@@ -1554,13 +1561,17 @@ int main(void) {
                             g_shots[s].vx = dx * wf.speed; g_shots[s].vy = dy * wf.speed; g_shots[s].vz = dz * wf.speed;
                             g_shots[s].life = life; g_shots[s].col = wf.col; g_shots[s].size = wf.size; g_shots[s].pierce = wf.pierce;
                             g_shots[s].dmg = kMcDmg[curRanged];   // cada arma su dano (mercader.h)
+                            g_shots[s].light = (curRanged == MC_SPEAR);  // la lanza: ademas, dano de luz al impactar
                             break;
                         }
                     }
                     // cadencia 1.7x mas lenta (y el dano por bala sube a 2: levels.h LV_SHOT_DMG)
                     ammoMag[curRanged]--; en -= (float)cost; fireCD = NOCTIS_SKYWORLD ? (wf.fireFrames * 17) / 10 : wf.fireFrames;
+#if NOCTIS_SKYWORLD
+                    if (curRanged == MC_SPEAR) mcSpearThrown();
+#endif
                     muzzle = 4; muzzleCol = weaponMuzzle(curRanged);
-                } else if (ammoMag[curRanged] == 0) {   // recarga automatica
+                } else if (ammoMag[curRanged] == 0 && !(NOCTIS_SKYWORLD && curRanged == MC_SPEAR)) {   // recarga automatica (la lanza no: fe)
                     ammoMag[curRanged] = kRanged[curRanged].magazine;
                     reloadCD = kRanged[curRanged].reloadMs / 16;
                 }
@@ -1768,6 +1779,7 @@ int main(void) {
                 if (--g_shots[s].life <= 0) continue;
 #if NOCTIS_SKYWORLD
                 if (lvShotHit(g_shots[s].x, g_shots[s].y, g_shots[s].z, g_shots[s].dmg)) {   // ojo o serafin: una sola vez
+                    if (g_shots[s].light) mcLightBurst(g_shots[s].x, g_shots[s].y, g_shots[s].z);   // la luz estalla aparte
                     for (int q = 0; q < 12; ++q) if (g_sparks[q].life <= 0) {
                         g_sparks[q].x = g_shots[s].x; g_sparks[q].y = g_shots[s].y; g_sparks[q].z = g_shots[s].z;
                         g_sparks[q].life = 16; break;
@@ -2186,8 +2198,8 @@ int main(void) {
                 st.gravName = kGravName[gravG];
                 st.px = playerX; st.pz = playerZ; st.yaw = heroYaw;
                 {
-                    static const char *kZone[8] = { "CIELO", "PISO 1", "PISO 2", "PISO 3", "PISO 4", "PISO 5", "PISO 6", "PISO 7" };
-                    st.district = !NOCTIS_SKYWORLD ? "CAMPANARIO" : kZone[(g_lvFloor >= 0 && g_lvFloor < 8) ? g_lvFloor : 0];
+                    static const char *kZone[9] = { "CIELO", "PISO 1", "PISO 2", "PISO 3", "PISO 4", "PISO 5", "PISO 6", "PISO 7", "PISO 8" };
+                    st.district = !NOCTIS_SKYWORLD ? "CAMPANARIO" : kZone[(g_lvFloor >= 0 && g_lvFloor < 9) ? g_lvFloor : 0];
                 }
                 st.matTaken = objMaterialsTaken(); st.matTotal = objMaterialCount();
 #if NOCTIS_SKYWORLD
