@@ -217,6 +217,11 @@ izquierda (apunta con ese brazo); sol en el cielo; vineta suave.
   480 (el chequeo decia "< 420"). Al cambiar un modelo, contar lo que de verdad genera.
 - Despues de armar geometria en RAM: `sceKernelDcacheWritebackAll()` (el GE lee RAM, no la cache).
   `lvEnter` no lo hacia; en la PSP real lo ultimo escrito podia dibujarse viejo.
+- **Texto 2D que "no aparece" = prueba de profundidad encendida.** Si un HUD termina con
+  `sceGuEnable(GU_DEPTH_TEST)`, el texto dibujado despues se recorta contra el 3D y no se ve. Antes
+  de dibujar 2D, apagarla.
+- **Nunca editar fuentes con Get-Content/Set-Content de PowerShell 5.1:** lee sin BOM como ANSI y
+  al reescribir en UTF-8 los acentos quedan dobles ("Â¡"). Editar con Python (bytes + utf-8).
 
 **PISO 1 (2026-10-15, Benjamin: "el arbol y los ojos los siento muy cerca"; "los ojos no tienen
 que estar flotando, deben estar en las paredes"):** campo 280x280 (era 120), muros de 150, se
@@ -283,6 +288,35 @@ crece), 3/4 de la plataforma en ROJO y un cuarto a salvo en ORO, impacto 42. Ven
 saca del borde y caen en picada (g_lvNoFallDeath) -> fundido blanco -> piso 5. Te deja su LANZA
 (arma 10, MC_SPEAR): 40 + 25 de LUZ aparte (estallido), un tiro por carga, se recarga con FE = 3
 rosarios que curen (mcOnRosary). Pruebas: `NOCTIS_TEST_GBFASE 2` (voluntad+lanzas) / `3` (caida).
+
+**EL CEMENTERIO, PISO 2 NUEVO (2026-10-16, src/boss_cementerio.h, prefijo bc_). LOS PISOS CORRIERON:
+Serafin 3, Baphomet 4, Gabriel 5, jinetes 6-9.** Los numeros viven en un enum de levels.h (`LVF_SKY`
+.. `LVF_PALE`, `LVF_LAST = 9`); todo lo que indexaba por piso (LV_BOSS, cinematicas, kTitle, kZone,
+kMcItem/kMcBossEcos/kMcNeed, mascara de objetos 0x3FE) ya usa esos nombres. Arena: pasto, muro de
++-44, 20 lapidas (4x5), cripta en (0,-30), 4 ANGELES que senalan las tumbas kBcTarget {4,3,17,14},
+12 arboles afuera, llegada en z=26, elevador en (-13,28) (en sx-8,sz-8 caia entre las tumbas y la
+camara se metia en la cabina). ACERTIJO: Triangulo frente a una tumba enciende su vela; una que no
+senalan apaga todas (tinte de frio). Las 4 -> BCS_RISE + lvCineBoss "EL REY ESQUELETO". Rey: 120
+de vida, escala 2.3, levanta oleadas de 4/5/7 siervos (vida 6); con siervos en pie es invulnerable
+("ROMPE A SUS SIERVOS PRIMERO"), sin ellos queda EXPUESTO 400 frames (300 en furia). 66% puas de
+hueso, 33% furia. Muere -> g_lvGiveNecro. Se repite al reentrar. Botin: CORONA DE HUESO, 150 ecos.
+**EL CUERVO (src/cuervo.h):** en cada piso, en un tocon junto a la llegada, del lado CONTRARIO al
+pilar de guardado. Triangulo = 3 consejos del piso (kCvLines; en el cementerio cambian cuando el
+rey despierta). Guardar/elevador tienen prioridad sobre el cuervo.
+**NECROMANCIA (src/necro.h):** Cuadrado con el poder elegido (g_lvPowerSel; R + ARRIBA cambia, por
+eso el DASH ahora sale al SOLTAR R, y no si R se uso con ARRIBA). 3 esqueletos (g_bcSkelV, ojos
+verdes) te siguen y tiran huesos que PERSIGUEN al blanco (nkTarget = autoapuntado del jefe, ojo
+mas cercano o serafin); 20 s, espera 35 s. 1 de 6: CORAJE con ametralladora (trazadoras, su
+frase va en subtitulo propio nkHud porque los avisos del jefe la tapaban). Al obtenerla sale una
+TARJETA de 3 lineas (lvPowerCard; el lvMessage de una linea se salia de la pantalla). Guardado:
+eventFlags bit 13 (necro) y 14 (poder elegido). HUD: "NECROMANCIA"/"TIEMPO" + barra de espera.
+Pruebas: `NOCTIS_TEST_BCREY 1/2` (rey al entrar / con 15 de vida) y `NOCTIS_TEST_NECRO 1/2` (los dos
+poderes / siempre Coraje), en boss_cementerio.h.
+**Arreglo de paso:** varios HUD de jefe (cementerio, Baphomet, Gabriel, rojo) terminan con
+`sceGuEnable(GU_DEPTH_TEST)` y todo el texto que lvHud dibujaba despues (avisos, GUARDAR, mensajes)
+se recortaba contra el piso: lvHud ahora apaga la profundidad tras el HUD del jefe.
+**Pendiente de decidir (Benjamin):** el Acto III tenia 4 pisos (altar, silencio, catedral, puesto 12)
+y ahora quedan 10-12: juntar dos o subir a 13 (docs/HISTORIA.md).
 
 ## Como se trabaja
 - Compilar (**solo en el PC**, WSL): `bash tools/build.sh` dentro de

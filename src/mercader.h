@@ -26,20 +26,20 @@
 #ifndef MERCADER_H
 #define MERCADER_H
 
-// objeto de cada jefe, por piso (4 = Gabriel: su "objeto" es la lanza misma)
-static const char *kMcItem[9] = { "", "LÁGRIMA DEL CIELO", "PLUMA DEL SERAFÍN", "FRASCO DE AZUFRE", "LANZA DE GABRIEL",
-                                  "CORONA DEL CONQUISTADOR", "FILO DE LA GUERRA", "BALANZA ROTA", "CENIZA VERDE" };
-static const int kMcBossEcos[9] = { 0, 60, 200, 250, 350, 300, 350, 400, 500 };   // por jefe (el piso 1 ademas 3 por ojo)
+// objeto de cada jefe, por piso (LVF_*; Gabriel: su "objeto" es la lanza misma)
+static const char *kMcItem[10] = { "", "LÁGRIMA DEL CIELO", "CORONA DE HUESO", "PLUMA DEL SERAFÍN", "FRASCO DE AZUFRE", "LANZA DE GABRIEL",
+                                   "CORONA DEL CONQUISTADOR", "FILO DE LA GUERRA", "BALANZA ROTA", "CENIZA VERDE" };
+static const int kMcBossEcos[10] = { 0, 60, 150, 200, 250, 350, 300, 350, 400, 500 };   // por jefe (el piso 1 ademas 3 por ojo)
 static const int MC_SPEAR = 10;      // la lanza de Gabriel (kRanged[10])
 // tienda (indice = arma de kRanged): precio en ecos y objeto que pide (piso del jefe; 0 = ninguno)
 static const int kMcPrice[11] = { 0, 600, 200, 700, 450, 800, 500, 250, 900, 1500, 0 };
-static const int kMcNeed[11]  = { 0,   6,   0,   3,   1,   5,   2,   0,   7,    8, 0 };
+static const int kMcNeed[11]  = { 0,   7,   0,   4,   1,   6,   3,   2,   8,    9, 0 };   // piso del jefe (LVF_*)
 // dano por bala en los pisos (los jefes tienen 100..160). La pistola sigue en 2; la lanza 40 + luz.
 static const int kMcDmg[11]   = { 2,   9,   4,  20,   2,  17,   5,   3,  12,   30, 40 };
 static const int MC_LIGHT_DMG = 25;  // el estallido de luz de la lanza, aparte del impacto
 
 static int      g_mcEcos = 0;
-static uint32_t g_mcItems = 0;       // objetos de jefe (bit = piso 1..7)
+static uint32_t g_mcItems = 0;       // objetos de jefe (bit = piso 1..9)
 static uint32_t g_mcOwned = 1;       // armas a distancia (bit 0 = pistola, de fabrica)
 static int      g_mcEquip = -1;      // pedido de arma para main (-1 = nada)
 static int      g_mcCur = 0;         // arma equipada (main la copia cada frame, para guardarla)
@@ -68,7 +68,7 @@ static void mcInit() {
 }
 static void mcLoadSave(int ecos, uint32_t items, uint32_t owned, int cur, uint32_t upg) {
     g_mcSvEcos = (ecos < 0) ? 0 : (ecos > 99999 ? 99999 : ecos);
-    g_mcSvItems = items & 0x1FEu;
+    g_mcSvItems = items & 0x3FEu;
     g_mcSvOwned = (owned & 0x7FFu) | 1u;
     g_mcSvUpg = (int)(upg & 7u);
     g_mcSvCur = (cur >= 0 && cur < kRangedCount && ((g_mcSvOwned >> cur) & 1u)) ? cur : 0;
@@ -121,7 +121,7 @@ static void mcDrop(float x, float z, float refY, int item, int ecos) {
 }
 // un jefe cayo: ecos siempre, su objeto solo si todavia no lo tienes
 static void mcBossDown(int floor, float x, float z, float refY) {
-    if (floor < 1 || floor > 8) return;
+    if (floor < 1 || floor > LVF_LAST) return;
     const int item = ((g_mcItems >> floor) & 1u) ? 0 : floor;
     mcDrop(x, z, refY, item, kMcBossEcos[floor]);
 }
@@ -132,9 +132,9 @@ static void mcTrackBoss(float x, float z) { g_mcBX = x; g_mcBZ = z; }
 #endif
 static void mcBossCheck(int done, int floor, float refY) {
     if (NOCTIS_TEST_BOTIN && g_lvT >= 180) done = 1;
-    if (done && !g_mcBossSeen && floor == 4) {           // GABRIEL: ecos y su lanza, en la mano
-        g_mcBossSeen = 1; mcAddEcos(kMcBossEcos[4]);
-        if (!((g_mcOwned >> MC_SPEAR) & 1u)) { g_mcOwned |= 1u << MC_SPEAR; g_mcItems |= 1u << 4; g_mcSpearReady = 1; g_mcFe = 0; }
+    if (done && !g_mcBossSeen && floor == LVF_GABRIEL) {   // GABRIEL: ecos y su lanza, en la mano
+        g_mcBossSeen = 1; mcAddEcos(kMcBossEcos[LVF_GABRIEL]);
+        if (!((g_mcOwned >> MC_SPEAR) & 1u)) { g_mcOwned |= 1u << MC_SPEAR; g_mcItems |= 1u << LVF_GABRIEL; g_mcSpearReady = 1; g_mcFe = 0; }
         return;
     }
     if (done && !g_mcBossSeen) { g_mcBossSeen = 1; mcBossDown(floor, g_mcBX, g_mcBZ, refY); }

@@ -1229,7 +1229,7 @@ int main(void) {
     // ---- DASH (R sin apuntar; con L, R dispara): rafaga corta en la direccion del nub ----
     const float DASH_SPEED = 0.55f;                  // 5x el paso: ~8 unidades contando la salida
     const int   DASH_FRAMES = 10, DASH_CD = 36;      // dura 1/6 s; se recarga en 0.6 s
-    int   dashT = 0, dashCD = 0, dashFx = 0, prevR = 0;
+    int   dashT = 0, dashCD = 0, dashFx = 0, prevR = 0, rMod = 0, prevUpR = 0;   // rMod: R se uso con ARRIBA (cambiar de poder): no hay dash
     float dashX = 0.0f, dashZ = 0.0f;                // direccion del dash (unitaria, en XZ)
     float dashSX = 0.0f, dashSY = 0.0f, dashSZ = 0.0f, dashEX = 0.0f, dashEY = 0.0f, dashEZ = 0.0f;   // estela
     // ---- CORRER: el nub sostenido 3 s hacia un mismo lado (Benjamin) ----
@@ -1400,14 +1400,21 @@ int main(void) {
             velZ += (mvZ * spdTarget - velZ) * FP_ACCEL;
             if (mvLen < 0.001f && grounded) { velX -= velX * FP_STOP; velZ -= velZ * FP_STOP; }
             const float strafeIn = 0.0f;   // ya no hay strafe: el personaje encara lo que camina
-            // -- DASH: R sin L. Hacia donde apunta el nub, o al frente si esta suelto. Pisa la
-            // velocidad DASH_FRAMES frames y sale al paso (sin frenazo ni deslizamiento largo).
+            // -- DASH: R sin L, AL SOLTARLO (desde 2026-10-16: R + ARRIBA cambia de poder, y si el dash
+            // saliera al apretar, cambiar de poder te haria dashear). Hacia donde apunta el nub, o al
+            // frente si esta suelto. Pisa la velocidad DASH_FRAMES frames y sale al paso.
             // Mientras dura, los golpes esquivables (orbes, ondas, embestidas, flechas, guadana...)
             // te atraviesan: g_lvDashInv, contrato en boss_api.h. Sirve en el aire.
             const int dashing = (dashT > 0) ? 1 : 0;
             {
-                const int rNow = (pad.Buttons & PSP_CTRL_RTRIGGER) ? 1 : 0;
-                if (rNow && !prevR && !(pad.Buttons & PSP_CTRL_LTRIGGER) && dashCD == 0 && dashT == 0) {
+                const int rNow = (pad.Buttons & PSP_CTRL_RTRIGGER) ? 1 : 0, upNow = (pad.Buttons & PSP_CTRL_UP) ? 1 : 0;
+                const int lNow = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
+                if (rNow && !prevR) rMod = 0;
+#if NOCTIS_SKYWORLD
+                if (rNow && !lNow && upNow && (!prevUpR || !prevR)) { rMod = 1; lvCyclePower(); }   // R + ARRIBA: cambiar de poder
+#endif
+                prevUpR = upNow;
+                if (!rNow && prevR && !rMod && !lNow && dashCD == 0 && dashT == 0) {
                     float dx = mvX, dz = mvZ, l = mvLen;
                     if (l < 0.2f) { dx = sinf(heroYaw); dz = -cosf(heroYaw); l = 1.0f; }
                     dashX = dx / l; dashZ = dz / l; dashT = DASH_FRAMES; dashCD = DASH_CD; dashFx = 24;
@@ -2204,8 +2211,8 @@ int main(void) {
                 st.gravName = kGravName[gravG];
                 st.px = playerX; st.pz = playerZ; st.yaw = heroYaw;
                 {
-                    static const char *kZone[9] = { "CIELO", "PISO 1", "PISO 2", "PISO 3", "PISO 4", "PISO 5", "PISO 6", "PISO 7", "PISO 8" };
-                    st.district = !NOCTIS_SKYWORLD ? "CAMPANARIO" : kZone[(g_lvFloor >= 0 && g_lvFloor < 9) ? g_lvFloor : 0];
+                    static const char *kZone[10] = { "CIELO", "PISO 1", "PISO 2", "PISO 3", "PISO 4", "PISO 5", "PISO 6", "PISO 7", "PISO 8", "PISO 9" };
+                    st.district = !NOCTIS_SKYWORLD ? "CAMPANARIO" : kZone[(g_lvFloor >= 0 && g_lvFloor <= LVF_LAST) ? g_lvFloor : 0];
                 }
                 st.matTaken = objMaterialsTaken(); st.matTotal = objMaterialCount();
 #if NOCTIS_SKYWORLD
@@ -2220,7 +2227,7 @@ int main(void) {
                 }
                 st.objLabel = "OJOS "; st.matTaken = g_eyesKilled;
                 st.matTotal = (g_lvFloor == 1 && g_eyesOn && g_lvUnlocked < 2) ? 30 : 0;
-                if (g_lvFloor == 2 && g_bs == BS_FIGHT) { st.objLabel = "LUZ "; st.matTaken = g_bsHp; st.matTotal = BS_HP; }
+                if (g_lvFloor == LVF_SERAPH && g_bs == BS_FIGHT) { st.objLabel = "LUZ "; st.matTaken = g_bsHp; st.matTotal = BS_HP; }
 #endif
                 st.pickTimer = pickTimer;
                 st.pickName = (pickedType >= 0 && pickedType < kMaterialCount) ? kMaterials[pickedType].name : 0;

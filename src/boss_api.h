@@ -48,6 +48,9 @@ struct BossIO {
 static int g_lvTimeStop = 0;         // frames de tiempo detenido (poder de Baphomet)
 static int g_lvPowerTime = 0;        // 1 = el jugador tiene el poder de detener el tiempo
 static int g_lvGiveTimePower = 0;    // un modulo pone 1 para otorgarlo (levels.h lo guarda)
+static int g_lvPowerNecro = 0;       // 1 = NECROMANCIA (la deja el Rey Esqueleto)
+static int g_lvGiveNecro = 0;        // un modulo pone 1 para otorgarla
+static int g_lvPowerSel = 0;         // poder de CUADRADO: 0 = detener el tiempo, 1 = necromancia (R + ARRIBA cambia)
 static int g_lvNoHeal = 0;           // 1 = el rosario no cura en este piso (jinete palido)
 static int g_lvDashInv = 0;          // frames de DASH que le quedan al jugador (main lo pone)
 static int g_lvNoFallDeath = 0;      // 1 = el jugador puede caer bajo el piso sin "morir" (caidas guionadas)
