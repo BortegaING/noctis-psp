@@ -1232,6 +1232,12 @@ int main(void) {
     int   dashT = 0, dashCD = 0, dashFx = 0, prevR = 0;
     float dashX = 0.0f, dashZ = 0.0f;                // direccion del dash (unitaria, en XZ)
     float dashSX = 0.0f, dashSY = 0.0f, dashSZ = 0.0f, dashEX = 0.0f, dashEY = 0.0f, dashEZ = 0.0f;   // estela
+    // ---- CORRER: el nub sostenido 3 s hacia un mismo lado (Benjamin) ----
+    const int   RUN_HOLD = 180;                      // 3 s a 60 pasos por segundo (ritmo fijo)
+    const float RUN_MULT = 1.75f;                    // corriendo = 1.75x el paso
+    int   runHold = 0, running = 0;
+    float runAX = 0.0f, runAZ = 0.0f;                // direccion del NUB (no del mundo) que se sostiene
+    float runK = 0.0f;                               // 0..1 suavizado: velocidad, pose y camara
     for (int s = 0; s < 24; ++s) g_shots[s].life = 0;
     for (int s = 0; s < 12; ++s) g_sparks[s].life = 0;
     const int   SHOT_LIFE = 55;
@@ -1365,8 +1371,29 @@ int main(void) {
             const float mvX = fX * (-wishZ) + rX * wishX;          // nub arriba (wishZ<0) = adelante
             const float mvZ = fZ * (-wishZ) + rZ * wishX;
             const float mvLen = sqrtf(mvX * mvX + mvZ * mvZ);
-            velX += (mvX * FP_SPEED - velX) * FP_ACCEL;
-            velZ += (mvZ * FP_SPEED - velZ) * FP_ACCEL;
+            // -- CORRER: se mide sobre el NUB, no sobre el mundo: girar la camara con la cruceta no
+            // corta la cuenta. Hay que tenerlo casi a fondo y dentro de un cono de ~35 grados durante
+            // RUN_HOLD frames. Ya corriendo se puede doblar (la direccion sigue al nub); se corta al
+            // soltar, al dar un giro brusco (>60 grados de golpe) o al apuntar.
+            {
+                const float wl = sqrtf(wishX * wishX + wishZ * wishZ);
+                const int aimNow = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
+                if (running) {
+                    const float dx = wl > 0.001f ? wishX / wl : 0.0f, dz = wl > 0.001f ? wishZ / wl : 0.0f;
+                    if (wl < 0.5f || aimNow || dx * runAX + dz * runAZ < 0.5f) { running = 0; runHold = 0; }
+                    else { runAX = dx; runAZ = dz; }
+                } else if (wl >= 0.8f && !aimNow) {
+                    const float dx = wishX / wl, dz = wishZ / wl;
+                    if (runHold == 0 || dx * runAX + dz * runAZ < 0.82f) { runAX = dx; runAZ = dz; runHold = 1; }
+                    else if (++runHold >= RUN_HOLD) running = 1;
+                } else runHold = 0;
+                runK += ((running ? 1.0f : 0.0f) - runK) * (running ? 0.06f : 0.12f);   // arranca en ~1/2 s, frena antes
+                if (runK < 0.001f) runK = 0.0f;
+                g_hunterRunK = runK;
+            }
+            const float spdTarget = FP_SPEED * (1.0f + (RUN_MULT - 1.0f) * runK);
+            velX += (mvX * spdTarget - velX) * FP_ACCEL;
+            velZ += (mvZ * spdTarget - velZ) * FP_ACCEL;
             if (mvLen < 0.001f && grounded) { velX -= velX * FP_STOP; velZ -= velZ * FP_STOP; }
             const float strafeIn = 0.0f;   // ya no hay strafe: el personaje encara lo que camina
             // -- DASH: R sin L. Hacia donde apunta el nub, o al frente si esta suelto. Pisa la
@@ -1580,7 +1607,7 @@ int main(void) {
             moving = (velX * velX + velZ * velZ > 0.0004f) ? 1 : 0;
             // La fase avanza con la DISTANCIA recorrida (1.4 rad por unidad ~ zancada de 4.5u
             // por ciclo): los pies acompanan al suelo en vez de patinar a ritmo fijo.
-            if (moving && grounded) walkPhase += 1.4f * spdNow;
+            if (moving && grounded) walkPhase += (1.4f - 0.35f * runK) * spdNow;   // corriendo: zancada mas larga
             idleT += 0.05f;
             landK *= 0.84f; if (landK < 0.01f) landK = 0.0f;
             {   // inclinarse hacia la curva (heroYaw crece = gira a la derecha = roll +)
@@ -1772,7 +1799,7 @@ int main(void) {
 #else
             sceGumMatrixMode(GU_PROJECTION);
             sceGumLoadIdentity();
-            sceGumPerspective(66.0f, 16.0f / 9.0f, 1.0f, 640.0f); // 640: entran enteros los engranajes lejanos del cielo (r 400..470, R hasta 150)
+            sceGumPerspective(66.0f + 6.0f * runK, 16.0f / 9.0f, 1.0f, 640.0f); // 640: entran enteros los engranajes lejanos del cielo (r 400..470, R hasta 150); corriendo la camara se abre 6 grados
 
             sceGumMatrixMode(GU_VIEW);
             sceGumLoadIdentity();

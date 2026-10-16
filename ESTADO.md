@@ -236,6 +236,13 @@ rapidos: orbes ~2 s de vuelo (velocidad = distancia/120, tope 2.0), cada ojo cad
 hasta 6 orbes en el aire y 0.4 s entre uno y otro (los otros pisos siguen con 3 y 0.75 s).
 Quieto, te bajan de 100 a 60 en ~9 s: hay que moverse.
 
+**CORRER (2026-10-16, Benjamin: "debe correr despues de mantener 3 segundos el analogo hacia una
+direccion"):** nub casi a fondo (>= 0.8) dentro de un cono de ~35 grados durante 180 frames ->
+corre a 1.75x. La cuenta se mide sobre el NUB (girar la camara no la corta); ya corriendo se puede
+doblar, y se corta al soltar (< 0.5), al dar un giro brusco (> 60 grados) o al apuntar. Pose de
+carrera en rig.h (`g_hunterRunK`), zancada mas larga, la camara se abre 6 grados.
+`goto_floor.py` afloja el nub a 0.7 un instante cada 2.8 s para NO correr (llega por tiempo).
+
 ## Como se trabaja
 - Compilar (**solo en el PC**, WSL): `bash tools/build.sh` dentro de
   `wsl -d Ubuntu-24.04 -u root` (desde Git Bash anteponer `MSYS_NO_PATHCONV=1`).

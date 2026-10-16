@@ -103,6 +103,8 @@ static void drawBlobShadow(float x, float gy, float z, float aboveGround) {
 //   spd01   velocidad 0..1 (normalizada a la velocidad REAL de carrera)
 //   landK   1 al aterrizar fuerte, decae solo (lo maneja main)
 //   meleeT  1 al empezar el tajo, 0 al terminar
+// 0..1: cuanto esta CORRIENDO (main lo sube al mantener el nub 3 s y lo baja suave al soltar)
+static float g_hunterRunK = 0.0f;
 static HunterRig hunterRig(HunterPose &p, float walkPhase, float idleT, float spd01, int grounded,
                            int floating, int aiming, float meleeT, float landK) {
     HunterRig r;
@@ -117,6 +119,15 @@ static HunterRig hunterRig(HunterPose &p, float walkPhase, float idleT, float sp
     r.skirtX = -0.22f * spd01 - 0.05f * spd01 * sinf(walkPhase * 2.0f) + 0.02f * sinf(idleT * 0.8f);
     r.skirtZ = 1.4f * p.roll + 0.04f * spd01 * sinf(walkPhase);
 
+    if (g_hunterRunK > 0.0f && grounded && !floating) {   // CORRER: zancada larga, codos a 90, torso adelante
+        const float k = g_hunterRunK;
+        r.legL *= 1.0f + 0.45f * k; r.legR *= 1.0f + 0.45f * k;
+        r.kneeL *= 1.0f + 0.55f * k; r.kneeR *= 1.0f + 0.55f * k;
+        r.armL *= 1.0f + 0.85f * k; r.armR *= 1.0f + 0.85f * k;
+        r.elbowL += 0.95f * k; r.elbowR += 0.95f * k;
+        r.skirtX -= 0.28f * k;                             // el abrigo vuela atras
+        p.lean += 0.20f * k;
+    }
     if (!grounded && !floating) r.skirtX += 0.30f;        // cayendo: el aire levanta el faldon
     if (floating) {
         // LEVITACION: brazos abiertos, piernas colgando juntas, todo flota lento
