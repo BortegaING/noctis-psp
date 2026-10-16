@@ -1337,6 +1337,9 @@ int main(void) {
                 wishX = (ax / mag) * k;   // derecha = +X
                 wishZ = (ay / mag) * k;   // arriba (ay<0) = adelante (-Z)
             }
+#if NOCTIS_SKYWORLD
+            if (g_lvCtrlInvert) { wishX = -wishX; wishZ = -wishZ; }   // POSESION del serafin: el nub al reves
+#endif
             // ===== MIRADA: SIEMPRE, con CUALQUIER gravedad =====
             // Esto vivia DENTRO del bloque de gravedad normal, y ahi estaba el bug de
             // quedarse pegado a una pared: al cambiar de gravedad, camYaw y camPitch
@@ -1423,6 +1426,9 @@ int main(void) {
                 g_lvDashInv = dashT;
 #endif
             }
+#if NOCTIS_SKYWORLD
+            velX += g_lvPushX; velZ += g_lvPushZ;   // POSESION: el serafin te camina el cuerpo
+#endif
             // -- colision por ejes separados (desliza por muros) --
             float nx = playerX + velX; if (!blocked(nx, playerZ, playerY)) playerX = nx; else velX = 0.0f;
             float nz = playerZ + velZ; if (!blocked(playerX, nz, playerY)) playerZ = nz; else velZ = 0.0f;

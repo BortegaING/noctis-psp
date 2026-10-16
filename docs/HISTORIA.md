@@ -1,146 +1,149 @@
-# NOCTIS: LA TORRE — propuesta de historia
+# NOCTIS: LA TORRE — la historia
 
-Estado: APROBADA (2026-10-16): Benjamin eligio "El ultimo soñador" ("la historia me gusto
-mucho, dejala asi"). CONTEXTO REAL: el juego son los sueños de Benjamin, literalmente lo que
-sueña (algunos fueron premoniciones). Los jinetes son solo jefes (pesadillas), sin el
-andamiaje de los sellos. Le gustan los jefes tipo "la catedral" (megaestructuras vivas).
-Los coleccionables seran PREMONICIONES: fragmentos de sueño que anuncian lo que viene y dan
-pistas de verdad. HECHO: botin de los jefes + EL MERCADER (src/mercader.h).
-Problema que resuelve: hoy el juego se termina en 30-50 minutos (7 peleas en fila, sin nada
-entre una y otra). Meta: 3 a 5 horas, sin depender de rellenar con peleas mas largas.
+Estado: APROBADA por Benjamin (2026-10-16): "la historia me gustó mucho, déjala así".
+Actualizada el mismo día con lo que se construyó y pidió después (Baphomet, Gabriel, el Serafín
+que posee, el mercader, el botín y la lanza).
+
+**Contexto real:** el juego son los sueños de Benjamin, literalmente lo que sueña. Algunos
+fueron premoniciones. Cada piso de la Torre es uno de esos sueños.
 
 ---
 
-## 1. Lo que el juego YA cuenta (y nadie ha unido)
+## 1. La verdad: el último soñador
 
-Todo esto ya esta escrito en el codigo; la historia nueva no lo cambia, lo explica.
+Hace siglos el mundo se acabó. Los últimos humanos se durmieron dentro de la Torre: una
+máquina de sueños que mueven las ruedas del cielo (los engranajes colosales del piso 0, que son
+los Ofanim de Ezequiel: ruedas cubiertas de ojos). Unos robots la cuidan desde entonces, sin
+saber ya para quién.
 
-- **El sueño.** El Serafin te llama "soñador" y dice "Todo lo que ves aquí son tus sueños"
-  y "Acepta tu muerte, y descansa". Al morir el juego dice "DESPIERTAS". Baphomet te maldice:
-  "Jamás dormirás tranquilo. Nos veremos... abajo."
-- **El cielo es un decorado.** El piso 1 tiene muros pintados de cielo que se APAGAN y se
-  llenan de ojos: "EL CIELO TE MIRA".
-- **Ruedas llenas de ojos.** Los Ofanim (Ezequiel 1) son ruedas cubiertas de ojos. El cielo
-  del piso 0 esta lleno de ENGRANAJES colosales que giran. Son lo mismo.
-- **Los siete sellos.** Los pisos 4-7 son los 4 primeros sellos del Apocalipsis (cap. 6).
-  Faltan tres: el 5º (las almas bajo el altar), el 6º (el sol negro, el cielo que se enrolla
-  como un pergamino) y el 7º ("silencio en el cielo como por media hora").
-- **12 pisos.** El elevador marca 12; del 8 al 12 dice "???" / "PISO EN CONSTRUCCIÓN".
-- **Seis robots sin usar** (src/dialogue.h, 84 lineas) que hablan de una humanidad que ya no
-  esta: "Servimos a alguien. No recuerdo a quién." / "Yo apagué las luces. Me lo pidieron." /
-  "Mi orden dice: no dejar subir a nadie." / "Puesto 12. Sin relevo desde hace mucho." /
-  "Último mensaje humano: sin descifrar." / "Hay una señal debajo. No la entiendo." /
-  "Llevo cartas a nombres que no existen." / "Así empezó la otra vez. Con un giro."
+Uno a uno, los durmientes murieron soñando. Queda uno: **tú**.
 
-## 2. La verdad (recomendada): el ultimo soñador
+La Torre quiere apagarse. Mientras sigas soñando, sus guardianes no tienen relevo; por eso casi
+todo lo que encuentras te pide lo mismo: que descanses. Pero tus sueños no son solo tuyos:
+algunos se cumplen. Arriba, en el piso 12, está tu cuerpo dormido. Abajo, Baphomet espera.
 
-Hace siglos el mundo se acabo (los siete sellos ya se abrieron, afuera). Los ultimos humanos
-se durmieron dentro de la Torre: una maquina de sueños que mueven las ruedas del cielo. Los
-robots la cuidan desde entonces, sin saber ya para quien.
-
-Uno a uno, los durmientes murieron soñando. Queda uno: **tu**.
-
-La Torre quiere apagarse. Mientras sigas soñando, sus guardianes no tienen relevo; por eso
-todo lo que encuentras te pide lo mismo: que descanses. Los jinetes no son enemigos de
-verdad: son el fin del mundo, recordado por tu sueño. Arriba, en el piso 12, esta tu cuerpo
-dormido. Abajo, Baphomet espera: el es quien se alimenta de los sueños que nadie despierta.
-
-Cada pieza que ya existe encaja:
-
-| Lo que hay hoy | Lo que significa |
+| Lo que ya está en el juego | Lo que significa |
 |---|---|
 | "DESPIERTAS" al morir | No te dejas morir: el sueño te devuelve |
-| El cielo pintado que se apaga | El decorado del sueño; el Anciano lo apago ("Me lo pidieron") |
-| Ojos en los muros | Los Ofanim, los ojos de la maquina: te vigilan |
-| "Acepta tu muerte, y descansa" | La Torre pidiendo apagarse |
-| "Nos veremos... abajo" | El final secreto |
-| "Puesto 12. Sin relevo" | El Guardian del piso 12, ultimo obstaculo |
-| "Último mensaje humano: sin descifrar" | El hilo de toda la partida (ver 3.1) |
+| El cielo pintado del piso 1 que se apaga | El decorado del sueño se cae |
+| Los ojos en los muros | Los ojos de la máquina: el cielo te mira |
+| "Acepta tu muerte, y descansa" (Serafín) | La Torre pidiendo apagarse |
+| "Nos veremos... abajo" (Baphomet) | El final secreto |
+| "Puesto 12. Sin relevo" (robots) | El Guardián del piso 12 |
 
-### Alternativas (elige una)
-- **B. El moribundo.** No hay fin del mundo: el cazador se esta muriendo (un hospital, una
-  batalla) y la Torre es su agonia. Cada piso es una etapa de soltar. Mas intimo, menos lore.
-- **C. El portador de la luz.** Baphomet no exagera: el cazador es un angel caido que vuelve a
-  subir al cielo, y los jinetes y el Serafin intentan frenarlo. Mas oscuro; el final "bueno"
-  es dudoso.
+---
 
-## 3. Como se convierte en horas de juego
+## 2. La historia piso por piso
 
-### 3.1 El hilo: el ultimo mensaje humano
-UNIDAD 44 (robot archivista) vive en el cielo, junto al elevador. Tiene un mensaje humano
-corrupto. Cada **memoria** que le traes descifra un trozo y lo muestra en pantalla:
-"MENSAJE: 34 %". El mensaje completo es lo ultimo que dejo alguien que te conocio.
+### Acto I — El sueño se vuelve pesadilla
 
-### 3.2 Memorias escondidas (3 por piso)
-Fragmentos brillantes escondidos en cada piso. Al tomarlos, una tarjeta de texto con un
-recuerdo del cazador (su vida antes de dormir). Algunas solo aparecen despues de vencer al
-jefe; otras piden las mecanicas: el DASH para cruzar un hueco, CORRER para llegar antes de
-que algo se cierre, DETENER EL TIEMPO para pasar entre aspas que giran.
-- Pisos 1-7: 21 memorias. Pisos 8-12: 15 mas. Total 36.
-- Menu MEMORIAS (pausa) para releerlas.
+**Piso 0 — El cielo (el hub).** Losas sobre el vacío, nubes de tormenta y engranajes colosales
+que giran a lo lejos. Aquí vive **EL MERCADER** (robot oxidado con un farol, en la losa del
+elevador): "Nadie firmó la orden de parar. Sigo vendiendo." Cambia ecos y objetos de jefe por
+armas. Desde aquí se sube a cada piso en el elevador.
 
-### 3.3 El cielo como hub: los seis robots
-El piso 0 deja de ser un pasillo: cada robot tiene su losa y su papel. Lo que dicen cambia
-con cada jefe vencido (volver a hablarles es parte del juego).
-- **UNIDAD 44**: el mensaje (3.1).
-- **EL MERCADER** (HECHO, 2026-10-16, el robot oxidado del mecanico: "Nadie firmó la orden de parar.
-  Sigo vendiendo."): vende armas por ECOS + el OBJETO del jefe que cada una pide. Antes:
-  MECANICO, repara armas con los materiales que
-  sueltan los jefes. Desbloquea las 10 armas a distancia y las 10 de cuerpo a cuerpo que ya
-  estan en game_data.h y weapons_geo.h y hoy no se usan.
-- **MENSAJERO** ("Llevo cartas a nombres que no existen."): te da cartas. Son para los
-  durmientes muertos del piso 8: entregarlas es una mision secundaria.
-- **ANCIANO** ("Yo apagué las luces."): cuenta el pasado a pedazos. Fue el quien apago el
-  cielo del piso 1.
-- **TECNICO** ("Hay una señal debajo."): la pista del final secreto.
-- **GUARDIAN** ("Mi orden dice: no dejar subir a nadie."): no te deja pasar al piso 8 sin
-  suficientes memorias. Es tambien el jefe del piso 12.
+**Piso 1 — El campo.** Un campo enorme con un árbol gigante, rodeado de muros pintados de
+cielo. De pronto **el cielo se apaga** y los muros se llenan de **30 ojos** incrustados que te
+miran y te disparan. Al cerrarse el último, se abre el elevador.
+Botín: LÁGRIMA DEL CIELO.
 
-### 3.4 Los pisos 8 a 12 (los sellos que faltan)
-| Piso | Nombre | Que es | Como se juega |
-|---|---|---|---|
-| 8 | EL ALTAR | 5º sello: las almas bajo el altar | Sin jefe. Capsulas de durmientes muertos; leer sus nombres, entregar las cartas del Mensajero. Exploracion y relato |
-| 9 | EL SOL NEGRO | 6º sello: terremoto, luna de sangre, estrellas que caen, el cielo se enrolla | Huida: las losas se derrumban detras, caen estrellas. Correr y dash |
-| 10 | EL SILENCIO | 7º sello: "silencio en el cielo" | Piso sin sonido. Los ojos vuelven: si corres o disparas te ven. Sigilo |
-| 11 | LA CATEDRAL | Las siete trompetas; la catedral viva de DESIGN.md | Jefe: la catedral que te persigue y te vigila con campanas |
-| 12 | EL PUESTO 12 | El Guardian y tu cuerpo dormido | Pelea con el Guardian o, con todas las memorias, relevarlo de su puesto. Despues: el final |
+**Piso 2 — La escalera blanca. El Serafín (Ofanim).** Una escalera de luz hacia un ojo gigante
+con aros llenos de ojos y seis alas. "Has subido muy alto, soñador... Acepta tu muerte, y
+descansa." Eliges: **Rendirse** (despiertas al pie de la escalera) o **Pensar en Dios** (una
+luz cálida te sostiene: obtienes el **ROSARIO**).
+La pelea tiene 3 fases. En cada una vuelve a hablarte y a preguntarte, y **te controla cada vez
+más el cuerpo** (POSESIÓN): primero te invierte el control; al final te arrastra hacia él y te
+obliga a mirarlo mientras carga la luz que quema.
+Botín: PLUMA DEL SERAFÍN.
 
-### 3.5 Finales
-- **DESCANSAR.** Aceptas lo que pidio el Serafin. La Torre se apaga; los robots por fin
-  descansan. Final triste y en paz.
-- **DESPERTAR.** Abres el septimo sello. Sales: el cielo de verdad, no pintado. El mensaje
-  de UNIDAD 44 completo se lee entero. Final con esperanza.
-- **ABAJO (secreto).** Con la maldicion de Baphomet y la señal del Tecnico se abre el piso
-  -1. Baphomet: "Le dije que nos veríamos." Pelea final y la verdad de quien construyo la
-  Torre.
+**Piso 3 — La cueva. Baphomet.** Traje de gala negro, cabeza de cabra, una fogata.
+"¿Por qué estás aquí? Conversemos." / Tú: "Qué buen perfume tiene..." / *De pronto piensas en
+Dios: una luz en el cielo.* / "¿Piensas en Él... en mi casa? Me has traicionado."
+La pelea es una pesadilla: te atrapa en su mente y te muestra **visiones de muerte** (carne
+podrida con gusanos, un ojo que se abre en la carne, calaveras, sigilos, palabras como
+"TRAIDOR"). En la fase 2 empuña un **tridente** y el piso arde en un pentagrama invertido; en la
+3, la cueva sangra.
+Al caer, rezas el **Padre Nuestro** y una **luz del cielo** lo derrota: "Maldito seas, portador
+de la luz... Jamás dormirás tranquilo. Nos veremos... abajo." Al esfumarse, su tiempo queda
+contigo: **DETENER EL TIEMPO**.
+Botín: FRASCO DE AZUFRE.
 
-La eleccion del Serafin (rendirse / pensar en Dios) y el cuestionario del perfume de
-Baphomet empiezan a tener consecuencias: dialogos distintos y que finales se abren.
+### Acto II — La caída
 
-## 4. Cuantas horas (estimacion)
+**Piso 4 — El Arcángel Gabriel.** Alguien, muy arriba, vio esa luz. Gabriel baja del cielo con
+lanza y escudo: "Detente, soñador. Vi la luz que hiciste caer sobre la bestia. Usaste el nombre
+de Dios como un arma." Le respondes ("Solo quería salir de esa cueva" / "Dios estaba conmigo")
+y empieza la pelea.
+Nunca baja: es colosal y ataca desde el cielo con **rayos de luz** (como el que venció a
+Baphomet), **plumas de luz** y un **resplandor** que te deja ciego si lo miras. Al 55%: "Señor,
+¿es tu voluntad que acabe con él?"... "Que así sea." Saca su **lanza**, que cae en picada desde
+lejos (pequeña al principio, gigante al final) y golpea 3/4 de la plataforma.
+Al vencerlo: "Si he de caer... caerás conmigo." **Te agarra y caen los dos a la tierra**, como
+el ángel que arrojó a Satanás.
+Recompensa: **LA LANZA DE GABRIEL** (arma). Su impacto hace daño y, aparte, estalla en luz. Pero
+la luz no se presta: se recarga con **fe**, rezando **3 rosarios**.
+
+**Pisos 5 a 8 — La tierra: los cuatro jinetes.** El fin del mundo, recordado por tu sueño. Son
+pesadillas-jefe, y se vuelven a pelear cada vez que entras (se juntan ecos):
+- **5. El Jinete Blanco — Conquista.** Arco, lluvia de flechas, trompeta que confunde.
+  Botín: CORONA DEL CONQUISTADOR.
+- **6. El Jinete Rojo — Guerra.** Embestidas, grito que aturde. Botín: FILO DE LA GUERRA.
+- **7. El Jinete Negro — Hambre.** La balanza, los dados. Botín: BALANZA ROTA.
+- **8. El Jinete Pálido + Hades — Muerte.** Hordas de moscas; el rosario no cura.
+  Botín: CENIZA VERDE.
+
+### Acto III — Volver a subir (por construir)
+
+| Piso | Nombre | Qué es |
+|---|---|---|
+| 9 | EL ALTAR | Las cápsulas de los durmientes muertos. Sin jefe: leer sus nombres, entregar las cartas del Mensajero |
+| 10 | EL SILENCIO | Un piso sin sonido. Los ojos vuelven: si corres o disparas, te ven. Sigilo |
+| 11 | LA CATEDRAL | Jefe: una catedral viva que te persigue y te vigila con campanas |
+| 12 | EL PUESTO 12 | El Guardián ("Mi orden dice: no dejar subir a nadie") y tu cuerpo dormido |
+
+### Los finales
+- **DESCANSAR.** Aceptas lo que pidió el Serafín. La Torre se apaga; los robots descansan.
+- **DESPERTAR.** Sales: el cielo de verdad, no pintado. Final con esperanza.
+- **ABAJO (secreto).** Con la maldición de Baphomet se abre el piso -1: "Le dije que nos
+  veríamos." La pelea final y la verdad de quién construyó la Torre.
+
+---
+
+## 3. Lo que hace que dure horas
+
+- **Botín y mercader (HECHO).** Cada jefe suelta ECOS (cada vez que cae) y su OBJETO (la
+  primera vez). El mercader vende las 10 armas a distancia; las mejores piden el objeto de un
+  jefe. Comprar todo pide varias vueltas a los jinetes.
+- **Premoniciones (por hacer).** Fragmentos de sueño escondidos en cada piso. Anuncian lo que
+  viene y dan pistas de verdad, como el punto débil de un jefe. Algunas piden el DASH, CORRER
+  o DETENER EL TIEMPO para alcanzarlas. Un menú para releerlas.
+- **Los robots del cielo (por hacer).** UNIDAD 44, Mensajero, Anciano, Técnico y Guardián:
+  lo que dicen cambia con cada jefe vencido. Ninguno explica del todo qué pasó; la verdad
+  llega a pedazos.
+- **Finales distintos** según tus elecciones (Serafín, Gabriel, la maldición).
+
 | Parte | Tiempo |
 |---|---|
-| Hoy (pisos 0-7) | 30-50 min |
-| Memorias + hub + robots en pisos 0-7 | +45-60 min |
-| Armas del Mecanico (materiales, probar armas) | +20-30 min |
-| Pisos 8-12 | +1.5-2 h |
-| Finales distintos (2a y 3a vuelta) | +1 h |
-| **Total** | **3.5-5 h** |
+| Pisos 0-8 hoy (con fases, más vida, Gabriel) | 1-1.5 h |
+| Juntar ecos y armas del mercader | +30-45 min |
+| Premoniciones + robots | +45-60 min |
+| Pisos 9-12 | +1.5-2 h |
+| Finales distintos | +1 h |
+| **Total** | **4-6 h** |
 
-## 5. Orden de construccion
-1. **Fase 1, "La voz de la Torre"** (una sesion): prologo al JUGAR (4 tarjetas), UNIDAD 44 en
-   el cielo con dialogos que cambian segun el progreso, 2-3 memorias en los pisos 1-7, menu
-   MEMORIAS. Ademas arreglar la descripcion del XMB de los pisos 3-7 (todos dicen "Piso 2").
-2. **Fase 2, "El taller"**: Mecanico, materiales de los jefes, armas desbloqueables.
-3. **Fase 3**: pisos 8, 9 y 10 + Mensajero/cartas + Guardian.
-4. **Fase 4**: pisos 11 y 12, los tres finales, el piso -1.
+---
 
-## Notas tecnicas
-- Guardado: `eventFlags` usa los bits 0-12 y 31. Las memorias (36 bits) caben en
-  `invResLo`/`invResHi` del NoctisSave, que en el mundo del cielo no se usan (eran los
-  recursos del sector viejo).
-- Todo es texto: tarjetas y dialogos son baratos en la PSP. Lo caro son los pisos 8-12
-  (escenario + jefe, ~1000 lineas cada uno, como los jinetes).
-- Robots: los modelos y dialogos estan en src/robots.h y src/dialogue.h (sector viejo).
-- Regla de los robots que se mantiene: NINGUNO explica del todo que le paso a la humanidad.
-  La verdad la cuentan las memorias y el mensaje, a pedazos.
+## 4. Controles que la historia usa
+- **R sin L:** dash (atraviesa los golpes esquivables). **Stick 3 s:** correr.
+- **L:** apuntar. **R con L:** disparar. **L + abajo:** cambiar de arma.
+- **Triángulo:** hablar, guardar, comerciar, rezar el rosario (y cargar la fe de la lanza).
+- **Cuadrado:** detener el tiempo (desde Baphomet).
+
+## 5. Notas técnicas
+- Código: Serafín y ojos en `src/levels.h`; jefes en `src/boss_*.h` (Baphomet `bp_`, Gabriel
+  `gb_`, jinetes `bw_ br_ bk_ bv_`); botín, mercader y lanza en `src/mercader.h`.
+- Guardado: `eventFlags` (piso, pisos abiertos, rosario, tiempo, opciones); `money` = ecos;
+  `questDone` = objetos de jefe; `ownedRanged`/`curRanged` = armas; `upgrades` = fe de la lanza.
+  Las premoniciones irán en `invResLo`/`invResHi`.
+- Banderas de prueba (siempre en 0 al commitear): `NOCTIS_TEST_BOTIN`, `NOCTIS_TEST_BPFASE`,
+  `NOCTIS_TEST_GBFASE`.

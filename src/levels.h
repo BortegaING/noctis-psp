@@ -94,11 +94,28 @@ static int   g_prison = 0; static float g_prX, g_prY, g_prZ, g_prAcc, g_prLX, g_
 static int   g_rosary = 0, g_rosaryCd = 0;
 // el serafin VUELA alrededor del descanso (orbita); ataques que piden SALTAR o moverse
 static float g_bsAng = 3.14159f, g_bsAngV = 0.006f;
-static const int BS_HP = 90;
+static const int BS_HP = 180;              // era 90 (Benjamin: "mas vida a los jefes")
+static const int BS_PH2 = 120, BS_PH3 = 60;  // vida a la que te vuelve a hablar y te controla mas
+#ifndef NOCTIS_TEST_BSFASE
+#define NOCTIS_TEST_BSFASE 0   // PRUEBA: 2 o 3 = la pelea arranca en esa fase y poseyendote. 0 al commitear
+#endif
+// FASES del serafin (Benjamin, 2026-10-16): "que el serafin te controle cada vez mas el cuerpo, y
+// tendras que responderle Pensar en Dios o Rendirte". En cada fase te habla y te vuelve a preguntar;
+// desde la 2 usa la POSESION: te invierte el nub, y en la 3 ademas te arrastra hacia el y te gira la
+// camara para que lo mires (mientras carga la luz que quema si lo miras).
+static int   g_bsPhase = 1, g_bsAsk = 0, g_bsPosT = 0, g_bsFaithT = 0;
+// lo que main aplica al jugador (control del cuerpo): nub al reves y un empuje que te camina
+static int   g_lvCtrlInvert = 0;
+static float g_lvPushX = 0.0f, g_lvPushZ = 0.0f;
+static const char *kBsPhase[2][2] = {
+    { "Tu cuerpo ya empieza a ser mío.", "¿Por qué sigues peleando, soñador?" },
+    { "Ya no sientes tus manos.", "Ríndete. Descansa en mí." },
+};
 static int   g_waveT = 0, g_waveHit = 0; static float g_waveX = 0, g_waveZ = 0;       // 3 ondas por el piso
 static int   g_sweepT = 0, g_sweepCd = 0; static float g_sweepA = 0;                  // rayo que barre a ras
 static int   g_pillT = 0; static float g_pillX[6], g_pillZ[6];                        // columnas de luz
-static void lvAttacksReset() { g_waveT = g_sweepT = g_pillT = 0; g_bsCharge = 0; g_prison = 0; g_bsOrbs = 0; }
+static void lvAttacksReset() { g_waveT = g_sweepT = g_pillT = 0; g_bsCharge = 0; g_prison = 0; g_bsOrbs = 0;
+                               g_bsPosT = 0; g_lvCtrlInvert = 0; g_lvPushX = g_lvPushZ = 0.0f; }
 // (UTF-8: drawText dibuja tildes, enie y signos de apertura)
 static const char *kBsLines[4] = {
     "Has subido muy alto, soñador.",
@@ -299,7 +316,8 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
         g_bsX = lx; g_bsY = ly + 11.0f; g_bsZ = lz - 6.0f;
         g_lvElevX = lx; g_lvElevY = ly; g_lvElevZ = lz - 8.0f;
         g_lvElevOn = (g_lvUnlocked >= 3); g_lvElevRise = g_lvElevOn ? 1.0f : 0.0f;
-        g_bs = (g_lvUnlocked >= 3) ? BS_DEAD : BS_IDLE; g_bsHp = BS_HP; g_bsDeadT = 999; g_bsLine = 0; g_bsAng = 3.14159f; lvAttacksReset();
+        g_bs = (g_lvUnlocked >= 3 && !NOCTIS_TEST_BSFASE) ? BS_DEAD : BS_IDLE; g_bsHp = BS_HP; g_bsDeadT = 999; g_bsLine = 0; g_bsAng = 3.14159f; lvAttacksReset();
+        g_bsPhase = 1; g_bsAsk = 0; g_bsFaithT = 0;
     }
     // el GE lee la RAM, no la cache de la CPU: sin esto, lo ultimo que se escribio de la geometria
     // del piso (hasta 16 KB) puede llegar viejo al dibujarse en la PSP real (el emulador no lo nota)
@@ -388,7 +406,12 @@ static bool lvShotHit(float x, float y, float z, int dmg) {
     }
     if (g_lvFloor == 2 && g_bs == BS_FIGHT && lvDist2(x, y, z, g_bsX, g_bsY, g_bsZ) < 5.0f * 5.0f) {
         g_bsHurt = 6;
-        g_bsHp -= dmg; if (g_bsHp <= 0) { g_bs = BS_DEAD; g_bsDeadT = 0; lvAttacksReset(); audioTrackStop(); audioMusic(g_optMusic); }
+        g_bsHp -= dmg;
+        if (g_bsHp > 0) {   // CAMBIO DE FASE: te vuelve a hablar y a preguntar
+            const int ph = (g_bsHp > BS_PH2) ? 1 : (g_bsHp > BS_PH3 ? 2 : 3);
+            if (ph > g_bsPhase) { g_bsPhase = ph; g_bs = BS_TALK; g_bsLine = 0; g_bsAsk = 1; lvAttacksReset(); g_lvFlash = 20; }
+        }
+        if (g_bsHp <= 0) { g_bs = BS_DEAD; g_bsDeadT = 0; lvAttacksReset(); audioTrackStop(); audioMusic(g_optMusic); }
         return true;
     }
     return false;
@@ -684,16 +707,21 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
         float lx, ly, lz; f2LandingTop(&lx, &ly, &lz);
         if (g_bs == BS_IDLE && py > ly - 0.6f && fabsf(pz - lz) < 12.0f) { g_bs = BS_TALK; g_bsLine = 0; }
         else if (g_bs == BS_TALK) {
-            if (edge & PSP_CTRL_CROSS) { if (++g_bsLine >= 4) { g_bs = BS_CHOICE; g_bsChoice = 1; } }
+            if (edge & PSP_CTRL_CROSS) { if (++g_bsLine >= (g_bsAsk ? 2 : 4)) { g_bs = BS_CHOICE; g_bsChoice = 1; } }
         } else if (g_bs == BS_CHOICE) {
             if (edge & (PSP_CTRL_UP | PSP_CTRL_DOWN)) g_bsChoice ^= 1;
             if (edge & PSP_CTRL_CROSS) {
                 if (g_bsChoice == 0) {                       // RENDIRSE
                     lvMessage("TE RENDISTE. DESPIERTAS AL PIE DE LA ESCALERA", 200);
                     g_bs = BS_IDLE; g_lvFade = LV_FADE; g_lvFadeTo = 2; g_lvFadeWhite = 1;
+                } else if (g_bsAsk) {                         // PENSAR EN DIOS (otra vez, en mitad de la pelea)
+                    lvMessage("UNA LUZ CÁLIDA TE DEVUELVE EL CUERPO... POR AHORA", 200);
+                    g_bs = BS_FIGHT; g_bsAsk = 0; g_bsT = 150; g_bsFaithT = 420;   // 7 s sin posesion
+                    hp += 20.0f; if (hp > hpMax) hp = hpMax;
                 } else {                                      // PENSAR EN DIOS
                     lvMessage("UNA LUZ CÁLIDA TE SOSTIENE. ROSARIO: TRIÁNGULO", 200);
-                    g_rosary = 1; g_bs = BS_FIGHT; g_bsT = 240; g_bsHp = BS_HP;
+                    g_rosary = 1; g_bs = BS_FIGHT; g_bsT = 240; g_bsHp = BS_HP; g_bsPhase = 1;
+                    if (NOCTIS_TEST_BSFASE >= 2) { g_bsPhase = NOCTIS_TEST_BSFASE; g_bsHp = (g_bsPhase == 2) ? BS_PH2 : BS_PH3; g_bsT = 30; g_bsPosT = 300; if (g_bsPhase >= 3) g_bsCharge = 220; }
                     audioMusic(0);                            // la cancion de la pelea
                     if (g_optMusic) audioTrackPlay(g_seraphAdp, (unsigned int)(g_seraphAdpEnd - g_seraphAdp), 32000);
                 }
@@ -701,6 +729,21 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
         } else if (g_bs == BS_FIGHT && g_lvTimeStop == 0) {      // tiempo detenido: el serafin se congela
             if (g_bsStun > 0) --g_bsStun;
             if (g_bsHurt > 0) --g_bsHurt;
+            if (g_bsFaithT > 0) --g_bsFaithT;
+            // ---- POSESION: el nub al reves; en la fase 3 te arrastra hacia el y te gira la vista ----
+            if (g_bsPosT > 0) {
+                --g_bsPosT;
+                g_lvCtrlInvert = 1;
+                if (g_bsPhase >= 3) {
+                    float dx = g_bsX - px, dz = g_bsZ - pz; const float l = sqrtf(dx * dx + dz * dz) + 0.001f;
+                    g_lvPushX = dx / l * 0.045f; g_lvPushZ = dz / l * 0.045f;
+                    float d = atan2f(g_bsX - px, -(g_bsZ - pz)) - camYaw;   // la cruceta (0.045) le gana por poco
+                    while (d > 3.14159265f) d -= 6.28318531f;
+                    while (d < -3.14159265f) d += 6.28318531f;
+                    camYaw += (d > 0.0f ? 1.0f : -1.0f) * (fabsf(d) < 0.035f ? fabsf(d) : 0.035f);
+                }
+                if (g_bsPosT == 0) { g_lvCtrlInvert = 0; g_lvPushX = g_lvPushZ = 0.0f; lvMessage("RECUPERAS TU CUERPO", 80); }
+            }
             // ataque de LUZ: carga y estalla; si lo estas mirando, te quema
             if (g_bsCharge > 0 && --g_bsCharge == 0) {
                 const float dx = g_bsX - g_lvEye[0], dy = g_bsY - g_lvEye[1], dz = g_bsZ - g_lvEye[2];
@@ -769,9 +812,14 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
                         }
                 --g_pillT;
             }
-            if (g_bsCharge == 0 && g_prison == 0 && g_bsStun == 0 && g_waveT == 0 && g_sweepT == 0 && g_pillT == 0 && --g_bsT <= 0) {
+            if (g_bsCharge == 0 && g_prison == 0 && g_bsStun == 0 && g_waveT == 0 && g_sweepT == 0 && g_pillT == 0 && g_bsPosT == 0 && --g_bsT <= 0) {
                 const int r = (int)(swRand(g_lvT, 2, 9) * 100.0f);
-                if (r < 18)      { g_bsCharge = 150; lvMessage("¡NO LO MIRES!", 150); }
+                if (g_bsPhase >= 2 && g_bsFaithT == 0 && swRand(g_lvT, 5, 9) < (g_bsPhase == 2 ? 0.30f : 0.45f)) {
+                    g_bsPosT = (g_bsPhase == 2) ? 300 : 400;
+                    if (g_bsPhase >= 3) { g_bsCharge = 220; lvMessage("YA NO ERES TUYO. ¡NO LO MIRES!", 180); }   // te obliga a mirarlo mientras carga
+                    else lvMessage("EL SERAFÍN TOMA TU CUERPO", 150);
+                }
+                else if (r < 18) { g_bsCharge = 150; lvMessage("¡NO LO MIRES!", 150); }
                 else if (r < 32) { g_prison = 240; g_prX = px; g_prY = py + 1.4f; g_prZ = pz; g_prAcc = 0.0f;
                                    g_prLX = g_prLY = 0.0f; lvMessage("LA GRAVEDAD TE APRISIONA: MUEVE EL ANÁLOGO", 150); }
                 else if (r < 46) { g_bsOrbs = 6; }
@@ -788,7 +836,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
                     }
                 }
                 if (swRand(g_lvT, 7, 9) < 0.5f) g_bsAngV = -g_bsAngV;   // cambia el sentido de su vuelta
-                g_bsT = 200 + (int)(swRand(g_lvT, 3, 9) * 120.0f);
+                g_bsT = (200 + (int)(swRand(g_lvT, 3, 9) * 120.0f)) * (g_bsPhase == 1 ? 10 : g_bsPhase == 2 ? 8 : 6) / 10;
             }
         } else if (g_bs == BS_DEAD && g_bsDeadT < 999) {
             if (++g_bsDeadT == 150) {
@@ -1168,13 +1216,23 @@ static void lvHud(int aiming, float hp, float hpMax) {
             drawRect(140, 200, (120 - g_lvFade) * 200 / 90, 3, RGBA(200, 176, 120, 255));
         }
     }
+    // POSESION del serafin: velo dorado-violeta que late en los bordes y el aviso
+    if (g_lvFloor == 2 && g_bsPosT > 0) {
+        sceGuDisable(GU_TEXTURE_2D);
+        const int a = 70 + (int)(50.0f * sinf(g_lvT * 0.15f));
+        drawRect(0, 0, SCR_WIDTH, 26, RGBA(150, 110, 200, a)); drawRect(0, SCR_HEIGHT - 26, SCR_WIDTH, 26, RGBA(150, 110, 200, a));
+        drawRect(0, 26, 26, SCR_HEIGHT - 52, RGBA(150, 110, 200, a)); drawRect(SCR_WIDTH - 26, 26, 26, SCR_HEIGHT - 52, RGBA(150, 110, 200, a));
+        drawRect(0, 0, SCR_WIDTH, SCR_HEIGHT, RGBA(255, 236, 190, 16 + g_bsPhase * 8));
+        fontTexOn(); drawText(202, 36, 1.0f, RGBA(255, 236, 200, 220), "POSESIÓN"); sceGuDisable(GU_TEXTURE_2D);
+    }
     // textos
     fontTexOn();
     if (g_rosary) drawText(12, 59, 1.0f, g_lvNoHeal ? RGBA(120, 110, 100, 255) : RGBA(236, 216, 160, 255), "ROSARIO");
     if (g_lvPowerTime) drawText(12, 73, 1.0f, RGBA(170, 200, 255, 255), "TIEMPO");
     if (dialog) {
         drawText(40, 198, 1.0f, RGBA(236, 206, 120, 255), "SERAFÍN");
-        if (g_bs == BS_TALK) { drawText(40, 214, 1.0f, RGBA(240, 240, 246, 255), kBsLines[g_bsLine]); drawText(380, 236, 1.0f, RGBA(160, 170, 190, 255), "X >"); }
+        if (g_bs == BS_TALK) { drawText(40, 214, 1.0f, RGBA(240, 240, 246, 255), g_bsAsk ? kBsPhase[(g_bsPhase >= 3) ? 1 : 0][g_bsLine & 1] : kBsLines[g_bsLine]);
+                               drawText(380, 236, 1.0f, RGBA(160, 170, 190, 255), "X >"); }
         else {
             drawText(40, 212, 1.0f, g_bsChoice == 0 ? RGBA(255, 255, 255, 255) : RGBA(130, 136, 150, 255), g_bsChoice == 0 ? "> RENDIRSE" : "  RENDIRSE");
             drawText(40, 226, 1.0f, g_bsChoice == 1 ? RGBA(255, 236, 170, 255) : RGBA(130, 136, 150, 255), g_bsChoice == 1 ? "> PENSAR EN DIOS" : "  PENSAR EN DIOS");
