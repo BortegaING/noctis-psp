@@ -700,7 +700,7 @@ static int g_npcVerts = 0;
 static int g_npcKilled[64] = {0};   // (robots = habitantes, no enemigos; el kill-system queda inerte)
 
 // ===== ARMA / DISPAROS (L apunta, R dispara) =====
-struct Shot { float x, y, z, vx, vy, vz; int life; unsigned int col; float size; int pierce; };
+struct Shot { float x, y, z, vx, vy, vz; int life; unsigned int col; float size; int pierce; int dmg; };   // dmg: el del arma (pisos)
 static Shot g_shots[24];
 // chispa/estallido al derribar un robot (feedback de impacto)
 struct Spark { float x, y, z; int life; };
@@ -1224,7 +1224,7 @@ int main(void) {
     int   curRanged = 0, curMelee = 0;
     int   ammoMag[16];
     for (int k = 0; k < kRangedCount && k < 16; ++k) ammoMag[k] = kRanged[k].magazine;
-    int   prevDR = 0, prevDL = 0, prevDU = 0, prevDD = 0, prevCircle = 0;
+    int   prevDR = 0, prevDL = 0, prevDU = 0, prevDD = 0, prevCircle = 0, prevCycle = 0;
     int   meleeCD = 0, meleeFx = 0;
     // ---- DASH (R sin apuntar; con L, R dispara): rafaga corta en la direccion del nub ----
     const float DASH_SPEED = 0.55f;                  // 5x el paso: ~8 unidades contando la salida
@@ -1303,6 +1303,7 @@ int main(void) {
 #if NOCTIS_SKYWORLD
     swInit(&playerX, &playerY, &playerZ);   // el guardado es del sector viejo: aqui se arranca en la losa (0,0)
     lvInit(sv.eventFlags);                  // piso y pisos abiertos de la ultima partida del mundo nuevo
+    if (sv.eventFlags & 0x80000000u) mcLoadSave(sv.money, sv.questDone, sv.ownedRanged, sv.curRanged);   // ecos/objetos/armas (CARGAR PARTIDA los aplica)
     lvEnter(g_lvFloor, playerX, playerY, playerZ, heroYaw, camYaw);
 #endif
     float gvr = 0.0f, gvf = 0.0f, gvg = 0.0f;   // vel en el plano (right,fwd) + a lo largo de la gravedad
@@ -1490,6 +1491,25 @@ int main(void) {
             (void)prevTri;
 
             aiming = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
+#if NOCTIS_SKYWORLD
+            // ---- ARMAS del mercader: lo que pide la tienda (comprar/equipar, CARGAR PARTIDA, JUGAR)
+            // y L + ABAJO en la cruceta = la siguiente arma que tengas. Al cambiar sale con el cargador lleno.
+            {
+                int want = -1;
+                if (g_mcEquip >= 0) { want = g_mcEquip; g_mcEquip = -1; }
+                const int cyc = (aiming && (pad.Buttons & PSP_CTRL_DOWN)) ? 1 : 0;
+                if (cyc && !prevCycle)
+                    for (int k = 1; k <= kRangedCount; ++k) {
+                        const int w = (curRanged + k) % kRangedCount;
+                        if ((g_mcOwned >> w) & 1u) { if (w != curRanged) { want = w; lvMessage(kRanged[w].name, 70); } break; }
+                    }
+                prevCycle = cyc;
+                if (want >= 0 && want < kRangedCount && want < 16) {
+                    curRanged = want; ammoMag[curRanged] = kRanged[curRanged].magazine; reloadCD = 0; fireCD = 0;
+                }
+                g_mcCur = curRanged;
+            }
+#endif
             if (aiming) {
                 // Al apuntar, el personaje encara HACIA DONDE MIRA LA CAMARA. Antes
                 // encaraba el eje -Z del MUNDO (dA = 0 - heroYaw), resto de cuando la
@@ -1533,6 +1553,7 @@ int main(void) {
                             g_shots[s].x = mx; g_shots[s].y = my; g_shots[s].z = mz;
                             g_shots[s].vx = dx * wf.speed; g_shots[s].vy = dy * wf.speed; g_shots[s].vz = dz * wf.speed;
                             g_shots[s].life = life; g_shots[s].col = wf.col; g_shots[s].size = wf.size; g_shots[s].pierce = wf.pierce;
+                            g_shots[s].dmg = kMcDmg[curRanged];   // cada arma su dano (mercader.h)
                             break;
                         }
                     }
@@ -1746,7 +1767,7 @@ int main(void) {
                 g_shots[s].z += g_shots[s].vz;
                 if (--g_shots[s].life <= 0) continue;
 #if NOCTIS_SKYWORLD
-                if (lvShotHit(g_shots[s].x, g_shots[s].y, g_shots[s].z)) {   // ojo o serafin: una sola vez
+                if (lvShotHit(g_shots[s].x, g_shots[s].y, g_shots[s].z, g_shots[s].dmg)) {   // ojo o serafin: una sola vez
                     for (int q = 0; q < 12; ++q) if (g_sparks[q].life <= 0) {
                         g_sparks[q].x = g_shots[s].x; g_sparks[q].y = g_shots[s].y; g_sparks[q].z = g_shots[s].z;
                         g_sparks[q].life = 16; break;

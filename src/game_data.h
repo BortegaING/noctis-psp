@@ -22,9 +22,9 @@ static const RangedWeapon kRanged[] = {
     // name                         dmg  rateMs rangeM ener reloadMs mag
     { "Pistola de Pulsos",           10,   110,    22,   2,     800,  18 }, // 0 sidearm rapido debil
     { "Lanza Gravitacional",         44,   420,    65,  12,    1800,   8 }, // 1 slug pesado violeta
-    { "Carabina Energetica",         20,   200,    48,   5,    1100,  24 }, // 2 automatica equilibrada
-    { "Canon de Particulas",        100,  1300,    42,  34,    3200,   3 }, // 3 lento enorme, atraviesa
-    { "Repetidor del Vacio",          8,    80,    30,   3,    1000,  30 }, // 4 full-auto, el mas rapido
+    { "Carabina Energética",         20,   200,    48,   5,    1100,  24 }, // 2 automatica equilibrada
+    { "Cañón de Partículas",        100,  1300,    42,  34,    3200,   3 }, // 3 lento enorme, atraviesa
+    { "Repetidor del Vacío",          8,    80,    30,   3,    1000,  30 }, // 4 full-auto, el mas rapido
     { "Aguja de Riel",               85,   900,   130,  15,    2200,   5 }, // 5 railgun largo, atraviesa
     { "Haz de Resonancia",           26,   160,    55,   6,    1400,  20 }, // 6 haz sostenido que ensarta
     { "Dispersor de Fragmentos",     14,   700,    15,  10,    1600,   6 }, // 7 escopeta abanico corto

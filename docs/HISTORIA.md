@@ -1,6 +1,11 @@
 # NOCTIS: LA TORRE — propuesta de historia
 
-Estado: PROPUESTA (2026-10-16). Benjamin elige el rumbo antes de construir.
+Estado: APROBADA (2026-10-16): Benjamin eligio "El ultimo soñador" ("la historia me gusto
+mucho, dejala asi"). CONTEXTO REAL: el juego son los sueños de Benjamin, literalmente lo que
+sueña (algunos fueron premoniciones). Los jinetes son solo jefes (pesadillas), sin el
+andamiaje de los sellos. Le gustan los jefes tipo "la catedral" (megaestructuras vivas).
+Los coleccionables seran PREMONICIONES: fragmentos de sueño que anuncian lo que viene y dan
+pistas de verdad. HECHO: botin de los jefes + EL MERCADER (src/mercader.h).
 Problema que resuelve: hoy el juego se termina en 30-50 minutos (7 peleas en fila, sin nada
 entre una y otra). Meta: 3 a 5 horas, sin depender de rellenar con peleas mas largas.
 
@@ -78,7 +83,9 @@ que algo se cierre, DETENER EL TIEMPO para pasar entre aspas que giran.
 El piso 0 deja de ser un pasillo: cada robot tiene su losa y su papel. Lo que dicen cambia
 con cada jefe vencido (volver a hablarles es parte del juego).
 - **UNIDAD 44**: el mensaje (3.1).
-- **MECANICO** ("Nadie firmó la orden de parar. Sigo."): repara armas con los materiales que
+- **EL MERCADER** (HECHO, 2026-10-16, el robot oxidado del mecanico: "Nadie firmó la orden de parar.
+  Sigo vendiendo."): vende armas por ECOS + el OBJETO del jefe que cada una pide. Antes:
+  MECANICO, repara armas con los materiales que
   sueltan los jefes. Desbloquea las 10 armas a distancia y las 10 de cuerpo a cuerpo que ya
   estan en game_data.h y weapons_geo.h y hoy no se usan.
 - **MENSAJERO** ("Llevo cartas a nombres que no existen."): te da cartas. Son para los

@@ -243,6 +243,14 @@ doblar, y se corta al soltar (< 0.5), al dar un giro brusco (> 60 grados) o al a
 carrera en rig.h (`g_hunterRunK`), zancada mas larga, la camara se abre 6 grados.
 `goto_floor.py` afloja el nub a 0.7 un instante cada 2.8 s para NO correr (llega por tiempo).
 
+**BOTIN + MERCADER (2026-10-16, src/mercader.h):** ECOS (moneda) y un OBJETO por jefe (solo la
+1a vez): ojos 3 c/u + 60 (LAGRIMA DEL CIELO), serafin 200 (PLUMA), Baphomet 250 (FRASCO DE
+AZUFRE), blanco 300 (CORONA), rojo 350 (FILO DE LA GUERRA), negro 400 (BALANZA ROTA), palido 500
+(CENIZA VERDE). Baphomet y los jinetes se repiten al reentrar: se juntan ecos. EL MERCADER en la
+losa del elevador del cielo (TRIANGULO): 10 armas a distancia por ecos + objeto. Cada arma su dano
+en los pisos (`kMcDmg`, antes todas 2). L + ABAJO = siguiente arma. Guardado: money, questDone
+(objetos), ownedRanged, curRanged (solo en los pilares). Prueba sin pelear: `NOCTIS_TEST_BOTIN 1`.
+
 ## Como se trabaja
 - Compilar (**solo en el PC**, WSL): `bash tools/build.sh` dentro de
   `wsl -d Ubuntu-24.04 -u root` (desde Git Bash anteponer `MSYS_NO_PATHCONV=1`).

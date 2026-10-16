@@ -185,11 +185,19 @@ static void lvBossVoidBackdrop() {
 }
 static int g_rosaryHas = 0;   // (reservado)
 static int g_timeCd = 0;      // espera del poder de detener el tiempo
+// ---- botin de los jefes y EL MERCADER: src/mercader.h (se incluye al final de este archivo) ----
+static void mcInit(); static void mcNewGame(); static void mcApplySave(); static void mcSave(NoctisSave &sv);
+static void mcAddEcos(int n); static void mcBossDown(int floor, float x, float z, float refY);
+static void mcTrackBoss(float x, float z); static void mcBossCheck(int done, int floor, float refY);
+static void mcEnterFloor(int floor); static int mcUpdate(float px, float py, float pz, int edge);
+static int mcNear(); static void mcOpen(); static int mcBlocks();
+static void mcDraw(float px, float py, float pz); static void mcHud();
 
 static void lvInit(uint32_t flags) {
     g_lvElevN = f1BuildElevator(g_lvElevV, 600);
     g_lvEyeN = f1BuildEye(g_lvEyeV, 560);
     g_lvEyeFarN = f1BuildEyeFar(g_lvEyeFarV, 200);
+    mcInit();
     g_lvSerBodyN = f2BuildSeraphBody(g_lvSerBody, 900);
     g_lvSerWingN = f2BuildSeraphWing(g_lvSerWing, 420);
     const float rr[3] = { 5.5f, 6.5f, 7.5f };
@@ -221,6 +229,7 @@ static uint32_t lvFlags() {
 // entra a un piso: geometria, colision, spawn, estado de enemigos
 static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, float &camYaw) {
     g_lvFloor = floor; g_lvT = 0; g_lvMenu = 0; g_prison = 0; g_bsCharge = 0;
+    mcEnterFloor(floor);                                                // botin pendiente fuera; mercader solo en el cielo
     audioTrackStop(); audioMusic(g_optMusic);                           // cada piso arranca con la musica tranquila
     for (int k = 0; k < 16; ++k) g_orbs[k].life = 0;
     heroYaw = 0.0f; camYaw = 0.0f;
@@ -300,6 +309,13 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
 }
 
 // ---------------------------------------------------------------- guardado
+// descripcion del XMB (antes del piso 3 en adelante decia "Piso 2. La escalera blanca.")
+static const char *lvSaveDesc() {
+    static const char *k[8] = { "El cielo. Camino al elevador.", "Piso 1. El campo y el arbol.", "Piso 2. La escalera blanca.",
+                                "Piso 3. La cueva.", "Piso 4. El jinete blanco.", "Piso 5. El jinete rojo.",
+                                "Piso 6. El jinete negro.", "Piso 7. El jinete palido." };
+    return (g_lvFloor >= 0 && g_lvFloor < 8) ? k[g_lvFloor] : k[0];
+}
 static void lvSaveFrame() {
     sceGuStart(GU_DIRECT, g_list);
     sceGuClearColor(RGBA(14, 16, 22, 255)); sceGuClear(GU_COLOR_BUFFER_BIT | GU_DEPTH_BUFFER_BIT);
@@ -310,11 +326,11 @@ static void lvSaveFrame() {
 }
 static void lvSaveNow(NoctisSave &sv) {
     sv.eventFlags = lvFlags();
+    mcSave(sv);                                                // ecos, objetos de jefe y armas
     saveAuto(sv);                                              // copia rapida propia (la que carga el juego)
     const bool ok = saveUtilWrite(&sv, sizeof(NoctisSave), g_icon0Png, g_icon0PngSize, g_pic1Png, g_pic1PngSize,
                                   "PROJECT NOCTIS", "La Torre",
-                                  g_lvFloor == 0 ? "El cielo. Camino al elevador." :
-                                  g_lvFloor == 1 ? "Piso 1. El campo y el arbol." : "Piso 2. La escalera blanca.",
+                                  lvSaveDesc(),
                                   lvSaveFrame);
     lvMessage(ok ? "PARTIDA GUARDADA" : "GUARDADO RAPIDO (SIN XMB)", 120);
 }
@@ -344,22 +360,22 @@ static int lvAimTarget(float out[3], float shotSpeed = 0.0f) {
     return found;
 }
 // la bala toco un blanco? (aplica el dano)
-static const int LV_SHOT_DMG = 2;   // disparo mas lento y con mas dano (main lo frena)
-static bool lvShotHit(float x, float y, float z) {
-    if (lvBossFloor()) return LV_BOSS(ShotHit, x, y, z, LV_SHOT_DMG);
+// dmg: el del arma que disparo la bala (mercader.h kMcDmg; la pistola hace 2)
+static bool lvShotHit(float x, float y, float z, int dmg) {
+    if (lvBossFloor()) return LV_BOSS(ShotHit, x, y, z, dmg);
     if (g_lvFloor == 1 && g_eyesOn) {
         for (int k = 0; k < 30; ++k) {
             LvEye &e = g_eyes[k];
             if (!e.alive || e.delay > 0 || e.die) continue;
             if (lvDist2(x, y, z, e.x, e.y, e.z) < (2.4f * F1_EYE_S) * (2.4f * F1_EYE_S)) {   // el ojo es F1_EYE_S veces mas grande
-                e.hp -= LV_SHOT_DMG; if (e.hp <= 0) { e.die = 14; g_eyesKilled++; }
+                e.hp -= dmg; if (e.hp <= 0) { e.die = 14; g_eyesKilled++; mcAddEcos(3); }   // cada ojo: 3 ecos
                 return true;
             }
         }
     }
     if (g_lvFloor == 2 && g_bs == BS_FIGHT && lvDist2(x, y, z, g_bsX, g_bsY, g_bsZ) < 5.0f * 5.0f) {
         g_bsHurt = 6;
-        g_bsHp -= LV_SHOT_DMG; if (g_bsHp <= 0) { g_bs = BS_DEAD; g_bsDeadT = 0; lvAttacksReset(); audioTrackStop(); audioMusic(g_optMusic); }
+        g_bsHp -= dmg; if (g_bsHp <= 0) { g_bs = BS_DEAD; g_bsDeadT = 0; lvAttacksReset(); audioTrackStop(); audioMusic(g_optMusic); }
         return true;
     }
     return false;
@@ -449,10 +465,10 @@ static void lvMenuUpdate(int edge, float &camYaw) {
     if ((edge & PSP_CTRL_CIRCLE) && g_menu != 1) { g_menuSel = (g_menu == 2) ? 2 : 3; g_menu = 1; return; }
     if (!(edge & PSP_CTRL_CROSS)) return;
     if (g_menu == 1) {
-        if (g_menuSel == 0) { g_menu = 0; g_lvFade = 30; g_lvFadeTo = -1; g_lvFadeWhite = 0; }   // JUGAR (de cero)
+        if (g_menuSel == 0) { g_menu = 0; g_lvFade = 30; g_lvFadeTo = -1; g_lvFadeWhite = 0; mcNewGame(); }   // JUGAR (de cero)
         else if (g_menuSel == 1) {                                                              // CARGAR PARTIDA
             if (!g_svHas) { lvMessage("NO HAY PARTIDA GUARDADA", 100); return; }
-            lvApplySave(); g_menu = 0;
+            lvApplySave(); mcApplySave(); g_menu = 0;
             const int fl = lvSavedFloor();
             if (fl > 0) { g_lvFade = LV_FADE; g_lvFadeTo = fl; }     // con pantalla de carga del piso
             else        { g_lvFade = 30; g_lvFadeTo = -1; }
@@ -532,7 +548,7 @@ static int lvBlocks() {
     if (g_menu) return 1;                                         // menu principal abierto
     if (g_cine > 0) return 1;                                     // cinematica de jefe
     return g_lvMenu || g_lvFade > 0 || g_prison > 0 || (g_lvFloor == 2 && (g_bs == BS_TALK || g_bs == BS_CHOICE))
-        || (lvBossFloor() && g_lvFade == 0 && LV_BOSS(Blocks));
+        || (lvBossFloor() && g_lvFade == 0 && LV_BOSS(Blocks)) || mcBlocks();
 }
 
 static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, float &vy, float &hp, float hpMax,
@@ -582,6 +598,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
         }
         return;
     }
+    if (mcUpdate(px, py, pz, edge)) return;                      // botin a recoger; tienda abierta = consume los botones
 
     // ---- cercania: guardado / elevador ----
     g_lvNear = 0;
@@ -590,6 +607,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
     if (edge & PSP_CTRL_TRIANGLE) {
         if (g_lvNear == 1) { lvSaveNow(sv); return; }
         if (g_lvNear == 2) { g_lvMenu = 1; g_lvMenuSel = (g_lvFloor < 12) ? g_lvFloor + 1 : 1; return; }
+        if (mcNear()) { mcOpen(); return; }                   // EL MERCADER
         if (g_rosary && !g_lvNoHeal) {                        // ROSARIO (se queda para siempre)
             if (g_rosaryCd == 0 && hp < hpMax) { hp += 35.0f; if (hp > hpMax) hp = hpMax; g_rosaryCd = 600; lvMessage("EL ROSARIO TE SOSTIENE", 70); }
             else if (g_rosaryCd > 0) lvMessage("EL ROSARIO AUN DESCANSA", 50);
@@ -639,6 +657,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
             if (g_eyesKilled >= 30 && g_lvUnlocked < 2) {
                 g_lvUnlocked = 2; g_lvElevOn = 1; g_lvElevRise = 0.0f;
                 lvMessage("LOS OJOS SE CIERRAN. SE ABRE UN ELEVADOR", 180);
+                mcBossDown(1, 0.0f, 14.0f, 0.0f);                // botin al pie del arbol, del lado de la llegada
             }
         }
     }
@@ -763,6 +782,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
                 g_lvElevOn = 1; g_lvElevRise = 0.0f;   // el rosario se QUEDA
                 lvMessage("EL SERAFÍN SE DESVANECE. SE ABRE EL ELEVADOR", 180);
                 g_bsDeadT = 999;
+                { float lx, ly, lz; f2LandingTop(&lx, &ly, &lz); mcBossDown(2, lx, lz + 4.0f, ly); }   // en el descanso
             }
         }
     }
@@ -772,6 +792,11 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
         BossIO io = { px, py, pz, vy, hp, hpMax, grounded, camYaw, btn, edge,
                       ((int)pad.Lx - 128) / 128.0f, ((int)pad.Ly - 128) / 128.0f, (btn & PSP_CTRL_LTRIGGER) ? 1 : 0 };
         lvBossVoidUpdate(io);
+        {   // botin: se sigue al jefe mientras vive y se suelta donde cae (cada vez que cae)
+            float bt[3]; const int done = LV_BOSS(Done);
+            if (!done && LV_BOSS(AimTarget, bt)) mcTrackBoss(bt[0], bt[2]);
+            mcBossCheck(done, g_lvFloor, g_lvSpawnY);
+        }
         if (LV_BOSS(Done) && g_lvUnlocked <= g_lvFloor) {
             g_lvUnlocked = g_lvFloor + 1; g_lvElevOn = 1; g_lvElevRise = 0.0f; g_lvNoHeal = 0;
             lvMessage("SE ABRE EL ELEVADOR", 150);
@@ -947,6 +972,7 @@ static void lvDraw(float px, float py, float pz) {
     if (lvBossFloor()) lvBossVoidDraw(px, py, pz);   // jefe, enemigos y efectos del piso
     // orbes
     for (int k = 0; k < 16; ++k) if (g_orbs[k].life > 0) lvBox(g_orbs[k].x, g_orbs[k].y - 0.35f, g_orbs[k].z, 0.7f, 0.7f, g_orbs[k].col);
+    mcDraw(px, py, pz);                                      // botin en el suelo + el mercader (cielo)
     sceGumLoadIdentity();
 }
 
@@ -1151,7 +1177,9 @@ static void lvHud(int aiming, float hp, float hpMax) {
         }
         drawText(160, 226, 1.0f, RGBA(150, 158, 176, 255), "X SUBIR   O SALIR");
     }
-    if (g_lvNear && !g_lvMenu && !dialog && g_lvFade == 0)
+    mcHud();                                                  // ecos, aviso del mercader y la tienda
+    fontTexOn();                                              // mcHud la deja apagada
+    if (g_lvNear && !g_lvMenu && !dialog && g_lvFade == 0 && !mcBlocks())
         drawText(150, 172, 1.0f, RGBA(230, 236, 246, 255), g_lvNear == 1 ? "TRIÁNGULO: GUARDAR" : "TRIÁNGULO: ELEVADOR");
     if (g_prison > 0) drawText(150, 138, 1.0f, RGBA(220, 210, 255, 255), "¡MUEVE EL ANÁLOGO!");
     if (loading) {
@@ -1171,3 +1199,5 @@ static void lvHud(int aiming, float hp, float hpMax) {
     // la mezcla queda ENCENDIDA: el texto que se dibuja despues (dialogos, SELECT) la necesita
     sceGuDisable(GU_TEXTURE_2D); sceGuEnable(GU_DEPTH_TEST);
 }
+
+#include "mercader.h"   // botin de los jefes + EL MERCADER (usa lo de arriba)
