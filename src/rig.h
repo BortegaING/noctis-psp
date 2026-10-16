@@ -116,6 +116,7 @@ static inline float rgMix(float a, float b, float k) { return a + (b - a) * k; }
 //   meleeT  1 al empezar el tajo, 0 al terminar
 // 0..1: cuanto esta CORRIENDO (main lo sube al mantener el nub 3 s y lo baja suave al soltar)
 static float g_hunterRunK = 0.0f;
+static int   g_hunterSlashType = 0;   // tajo del combo de sable (0 horizontal, 1 de vuelta, 2 media luna)
 static HunterRig hunterRig(HunterPose &p, float walkPhase, float idleT, float spd01, int grounded,
                            int floating, int aiming, float meleeT, float landK) {
     HunterRig r;
@@ -171,10 +172,12 @@ static HunterRig hunterRig(HunterPose &p, float walkPhase, float idleT, float sp
         r.armR = 0.30f; r.elbowR = 0.50f; r.outR = 0.22f;   // el sable queda abajo, listo
         r.head = -0.05f;
     }
-    if (meleeT > 0.0f) {                                   // TAJO: de arriba-adelante a abajo-atras
-        r.armR = -0.75f + 2.70f * meleeT;
-        r.outR = 0.55f * meleeT;
-        r.elbowR = 0.35f * meleeT;
+    if (meleeT > 0.0f) {                                   // TAJO (combo de Zero): rapido al principio
+        const float k = 1.0f - meleeT, e = 1.0f - (1.0f - k) * (1.0f - k) * (1.0f - k);
+        if (g_hunterSlashType == 0)      { r.armR = 1.25f; r.outR = 1.30f - 2.10f * e; r.elbowR = 0.15f; }   // de derecha a izquierda
+        else if (g_hunterSlashType == 1) { r.armR = 1.25f; r.outR = -0.80f + 2.10f * e; r.elbowR = 0.15f; }  // de vuelta
+        else                             { r.armR = -2.60f + 3.80f * e; r.outR = 0.20f; r.elbowR = 0.25f; }   // por encima de la cabeza
+        r.armL = 0.20f; r.outL = 0.35f;                       // el otro brazo se abre para equilibrar
     }
     if (landK > 0.0f) {                                    // ATERRIZAJE: se agacha y amortigua
         r.legL += 0.35f * landK; r.legR += 0.35f * landK;

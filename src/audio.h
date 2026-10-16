@@ -257,6 +257,7 @@ static int g_muArpT = 4000;
 static int g_stLvl = 0, g_stLvlT = 0, g_stLp = 0, g_stHp = 0;      // estatica: nivel Q15 (actual/objetivo) + filtros
 static int g_sirOn = 0, g_sirE = 0; static unsigned int g_sirPh = 0, g_sirLfo = 0;   // sirena: pedido, envolvente Q15, fases
 static int g_drLvl = 0, g_drLvlT = 0; static unsigned int g_drPh[3] = { 0, 0, 0 };  // zumbido: nivel Q15 + 3 osciladores
+static int g_slE = 0, g_slK = 0, g_slLp = 0;                                        // tajo de sable: "fsshh" que baja
 
 // --- estado de audioFrame() ---
 static float g_afPrevWalk = 0.0f;
@@ -559,6 +560,12 @@ static inline void auRenderBlock(short *out)
             }
             g_sirPh = ph;
         }
+        // -- tajo de sable: ruido sin graves cuyo corte BAJA (de "fsss" brillante a soplo) --
+        if (g_slE > 64) {
+            int lp = g_slLp; const int k = g_slK, e = g_slE;
+            for (i = 0; i < NOCTIS_AUDIO_CHUNK; ++i) { const int n = auNoise(); lp += ((n - lp) * k) >> 15; dry[i] += ((n - lp) * e) >> 17; }
+            g_slLp = lp; g_slE -= (g_slE >> 6) + 1; g_slK -= g_slK >> 7;
+        }
         // -- zumbido grave: dos senoidales de 55 Hz casi iguales (late) y una quinta --
         g_drLvl += (g_drLvlT - g_drLvl) >> 8;
         if (g_drLvl > 64) {
@@ -742,6 +749,7 @@ static inline void audioUpdate(void)
 // apaga sola en ~1 s) y zumbido grave 0..1. Todo se suaviza solo; levels.h los apaga al cambiar de piso.
 static inline void audioStatic(float lvl) { if (lvl < 0.0f) lvl = 0.0f; if (lvl > 1.0f) lvl = 1.0f; g_stLvlT = (int)(lvl * 32767.0f); }
 static inline void audioSiren(int on) { if (on && !g_sirOn) g_sirLfo = 0xC0000000u; g_sirOn = on ? 1 : 0; }   // arranca grave
+static inline void audioSlash(float s) { if (s < 0.0f) s = 0.0f; if (s > 1.0f) s = 1.0f; g_slE = (int)(s * 32767.0f); g_slK = 26000; g_slLp = 0; }
 static inline void audioDrone(float lvl) { if (lvl < 0.0f) lvl = 0.0f; if (lvl > 1.0f) lvl = 1.0f; g_drLvlT = (int)(lvl * 32767.0f); }
 
 // Musica ambient. 1 = suena (fundido de entrada ~2 s), 0 = fundido de salida ~2 s.

@@ -669,6 +669,31 @@ static int g_chUpperV = 0, g_chHeadV = 0, g_chLegV = 0, g_chArmV = 0, g_chSwordV
 // buildChar_upper / _head / _leg / _arm / _sword (partes con pivot en el origen)
 #include "agent_character.h"
 
+// ---- el ARCO del tajo de sable (lo usan el golpe y su media luna) ----
+// alcance: el de cada hoja (kMelee.reach) llevado a la escala de Zero; la media luna, 1.25x
+static float slashReach(int melee, int type) { return kMelee[melee].reach * 0.42f * (type == 2 ? 1.25f : 1.0f); }
+// punto del arco del tajo 'type': t = 0..1 a lo largo del arco, rr = fraccion del radio; el personaje
+// mira a yaw. La camara va DETRAS: un arco horizontal (o uno vertical hacia adelante) se ve DE CANTO,
+// como una raya. Por eso las medias lunas se paran DE FRENTE delante del personaje, como los sprites
+// de Zero: 0 = de arriba-derecha, por encima, a abajo-izquierda; 1 = al reves; 2 = la grande del final
+// del combo, de abajo-derecha por encima de la cabeza hasta abajo-izquierda.
+static void slashPoint(int type, float yaw, float px, float py, float pz, float R, float t, float rr, float &x, float &y, float &z) {
+    const float fx = sinf(yaw), fz = -cosf(yaw), rx = cosf(yaw), rz = sinf(yaw);
+    float u, v, ahead, cyOff;
+    if (type == 2) {
+        const float th = -0.45f + (3.14159f + 0.9f) * t;
+        u = cosf(th); v = sinf(th) * 0.85f; ahead = 0.55f; cyOff = 1.6f;
+    } else {
+        const float th = 0.31f + 2.83f * t, a = cosf(th), b = sinf(th) * 0.8f, ph = 0.5f;   // media vuelta, girada 0.5 rad
+        u = a * cosf(ph) - b * sinf(ph); v = a * sinf(ph) + b * cosf(ph);
+        if (type == 1) u = -u;                                                            // el de vuelta, en espejo
+        ahead = 0.45f; cyOff = 2.2f;
+    }
+    const float cx = px + fx * R * ahead, cz = pz + fz * R * ahead;
+    x = cx + R * rr * u * rx; y = py + cyOff + R * rr * v; z = cz + R * rr * u * rz;
+    if (y < py + 0.15f) y = py + 0.15f;
+}
+
 // PERSONAJE DEL JUEGO: el HUNTER (encapuchado gotico, elegido por Benjamin).
 // Construido con las primitivas organicas (cilindros conicos + elipsoides +
 // abrigo hasta la rodilla con piernas a la vista), NO cubos.
@@ -1227,6 +1252,9 @@ int main(void) {
     for (int k = 0; k < kRangedCount && k < 16; ++k) ammoMag[k] = kRanged[k].magazine;
     int   prevDR = 0, prevDL = 0, prevDU = 0, prevDD = 0, prevCircle = 0, prevCycle = 0;
     int   meleeCD = 0, meleeFx = 0;
+    // SABLE estilo Zero: combo de 3 (0 horizontal, 1 de vuelta, 2 media luna por encima), un golpe por tajo
+    int   meleeT = -1, meleeType = 0, meleeCombo = 0, meleeHit = 0, meleeHitFx = 0;
+    float meleeHX = 0.0f, meleeHY = 0.0f, meleeHZ = 0.0f;
     // ---- DASH (R sin apuntar; con L, R dispara): rafaga corta en la direccion del nub ----
     const float DASH_SPEED = 0.55f;                  // 5x el paso: ~8 unidades contando la salida
     const int   DASH_FRAMES = 10, DASH_CD = 36;      // dura 1/6 s; se recarga en 0.6 s
@@ -1533,6 +1561,8 @@ int main(void) {
             if (muzzle > 0) muzzle--;
             if (meleeCD > 0) meleeCD--;
             if (meleeFx > 0) meleeFx--;
+            if (meleeCombo > 0) meleeCombo--;
+            if (meleeHitFx > 0) meleeHitFx--;
             // --- disparo a distancia (usa stats + FX del arma actual) ---
             if (aiming && (pad.Buttons & PSP_CTRL_RTRIGGER) && fireCD == 0 && reloadCD == 0) {
                 WeaponFX wf = weaponFX(curRanged);
@@ -1583,15 +1613,44 @@ int main(void) {
                     reloadCD = kRanged[curRanged].reloadMs / 16;
                 }
             }
-            // --- melee (Circulo): golpe en arco al frente ---
+            // --- SABLE (Circulo): tajos con el alcance de Zero (Mega Man X) ---
+            // Benjamin (2026-10-16): "quiero que la espada haga dano, que tenga un rango de movimiento como
+            // zero de megaman x". COMBO de 3 si se aprieta seguido: tajo horizontal, tajo de vuelta y la
+            // MEDIA LUNA por encima de la cabeza (mas grande, dano doble). Cada tajo da un paso adelante y
+            // pega UNA vez a lo que este en su arco (jefes, ojos, el serafin: lvShotHit, como una bala).
+            // Los robots del cielo NO son blancos: son habitantes.
             if ((pad.Buttons & PSP_CTRL_CIRCLE) && !prevCircle && meleeCD == 0) {
-                meleeCD = kMelee[curMelee].speedMs / 16; meleeFx = 8;
-                // El barrido de sable ya no hiere a nadie: no quedan enemigos en el
-                // sector. El golpe se sigue lanzando (cadencia, destello y sonido) para
-                // que el arma no se sienta muerta y para tener donde enganchar el dano
-                // cuando vuelva un enemigo. Los robots NO son blancos: son habitantes.
+                meleeType = (meleeCombo > 0) ? (meleeType + 1) % 3 : 0;
+#if NOCTIS_SKYWORLD
+                {   // con un blanco cerca (a tiro de sable), el tajo se vuelve hacia el
+                    float t[3];
+                    if (lvAimTarget(t)) {
+                        const float dx = t[0] - playerX, dz = t[2] - playerZ;
+                        if (dx * dx + dz * dz < (slashReach(curMelee, 2) + 4.0f) * (slashReach(curMelee, 2) + 4.0f)) heroYaw = atan2f(dx, -dz);
+                    }
+                }
+#endif
+                meleeT = 0; meleeHit = 0; meleeFx = 14;
+                meleeCD = (meleeType == 2) ? 24 : 13;
+                meleeCombo = meleeCD + 26;                     // ventana para encadenar el siguiente
+                velX += sinf(heroYaw) * 0.14f; velZ += -cosf(heroYaw) * 0.14f;
+                audioSlash(meleeType == 2 ? 1.0f : 0.7f);
             }
             prevCircle = (pad.Buttons & PSP_CTRL_CIRCLE) ? 1 : 0;   // flanco: un golpe por pulsacion, no uno por frame
+            if (meleeT >= 0) {
+#if NOCTIS_SKYWORLD
+                if (!meleeHit && meleeT >= 1 && meleeT <= 4) {   // el filo corta mientras el arco se abre
+                    const float R = slashReach(curMelee, meleeType);
+                    const int dmg = (kMelee[curMelee].damage / 4) * (meleeType == 2 ? 2 : 1);
+                    for (int q = 0; q < 14 && !meleeHit; ++q) {
+                        const float t = 0.12f + 0.76f * (q % 7) / 6.0f, rr = (q < 7) ? 0.9f : 0.55f;
+                        float x, y, z; slashPoint(meleeType, heroYaw, playerX, playerY, playerZ, R, t, rr, x, y, z);
+                        if (lvShotHit(x, y, z, dmg)) { meleeHit = 1; meleeHitFx = 10; meleeHX = x; meleeHY = y; meleeHZ = z; audioFootstep(1.0f); }
+                    }
+                }
+#endif
+                if (++meleeT >= 16) meleeT = -1;
+            }
             if (gravG == 0) {
             // ===== salto: coyote time + buffer + salto variable =====
             if (grounded) coyote = COYOTE_MAX; else if (coyote > 0) coyote--;
@@ -1988,8 +2047,9 @@ int main(void) {
                     if (gy > -1000.0f) drawBlobShadow(playerX, gy, playerZ, playerY - gy);
                 }
                 // hunterRig ajusta tambien pose.bobY/lean (aterrizaje), por eso va ANTES del cuerpo
+                g_hunterSlashType = meleeType;   // la pose del brazo depende del tajo del combo
                 const HunterRig rig = hunterRig(pose, walkPhase, idleT, speed01, grounded, floatingNow,
-                                                aiming, meleeFx > 0 ? meleeFx / 8.0f : 0.0f, landK);
+                                                aiming, meleeFx > 0 ? meleeFx / 14.0f : 0.0f, landK);
                 pose.roll += turnLean;                                  // se inclina hacia la curva
                 const float HIP = 1.70f;
                 sceGumLoadIdentity();
@@ -2117,51 +2177,54 @@ int main(void) {
                 sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
             }
 
-            // ---- TAJO de la espada (Circulo) ----
-            // Era literalmente un addSolidBox: por eso "se sigue viendo como un cuadrado en
-            // la pantalla". No era un arco mal hecho, es que nunca fue un arco.
-            // Ahora es una cinta curva que BARRE delante del personaje durante los 8 frames
-            // que dura el golpe: la cabeza va por delante, ancha y clara, y la cola la sigue
-            // afilandose. El filo ademas CAE al avanzar, asi que es un tajo diagonal y no un
-            // disco plano, que es lo que lo hace leerse como un sablazo y no como un aro.
-            if (meleeFx > 0) {
-                const float reach = kMelee[curMelee].reach * 0.20f;
-                const float p     = 1.0f - (float)meleeFx / 8.0f;   // 0 al golpear -> 1 al final
-                const float TAIL  = 0.45f;                          // largo de la estela
-                float h1 = 0.10f + p * 1.05f; if (h1 > 1.0f) h1 = 1.0f;   // cabeza del tajo
-                float h0 = h1 - TAIL;         if (h0 < 0.0f) h0 = 0.0f;   // cola
-                const int NS = 8;
-                LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * (NS * 6));
+            // ---- TAJO de la espada (Circulo): la MEDIA LUNA de Zero ----
+            // Benjamin (2026-10-16): "que la espada haga dano, que tenga un rango de movimiento como
+            // zero de megaman x". Antes era una cinta fina de 2.4 de alcance que no tocaba a nadie. Ahora
+            // cada tajo es una media luna de luz de ~5 de radio (la 3ra del combo, por encima de la
+            // cabeza, ~6): gruesa en el medio y en punta en los extremos, aparece en 4 frames y se
+            // apaga en 11. Borde blanco y cuerpo verde que se desvanece hacia adentro (mezcla normal:
+            // con luz sumada no se veria sobre el piso blanco del Serafin).
+            if (meleeT >= 0 && meleeT < 16) {
+                const float R = slashReach(curMelee, meleeType);
+                const float head = (meleeT + 1) / 4.0f > 1.0f ? 1.0f : (meleeT + 1) / 4.0f;
+                float fade = 1.0f - (meleeT - 4) / 11.0f; if (fade > 1.0f) fade = 1.0f; if (fade < 0.0f) fade = 0.0f;
+                const int NS = 16;
+                LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * NS * 12);
                 int vi = 0;
-                const float SWEEP = 2.35f;                          // radianes que abarca
-                const float aBase = heroYaw - SWEEP * 0.5f;
-                const float span  = (h1 - h0) > 0.001f ? (h1 - h0) : 0.001f;
                 for (int k = 0; k < NS; ++k) {
-                    const float f0 = h0 + span * ((float)k        / (float)NS);
-                    const float f1 = h0 + span * ((float)(k + 1)  / (float)NS);
-                    const float A0 = aBase + SWEEP * f0, A1 = aBase + SWEEP * f1;
-                    const float y0 = playerY + 1.55f - 0.95f * f0 * f0;
-                    const float y1 = playerY + 1.55f - 0.95f * f1 * f1;
-                    const float w0 = 0.26f + 0.64f * f0, w1 = 0.26f + 0.64f * f1;
-                    const float ri0 = reach * (1.02f - w0 * 0.5f), ro0 = reach * (1.02f + w0 * 0.5f);
-                    const float ri1 = reach * (1.02f - w1 * 0.5f), ro1 = reach * (1.02f + w1 * 0.5f);
-                    const float s0 = sinf(A0), c0 = -cosf(A0), s1 = sinf(A1), c1 = -cosf(A1);
-                    const float g0 = 0.30f + 0.70f * ((f0 - h0) / span);   // apagado en la cola
-                    const float g1 = 0.30f + 0.70f * ((f1 - h0) / span);
-                    const unsigned int cA = RGBA(40 + (int)(150.0f * g0), 45 + (int)(190.0f * g0),
-                                                 25 + (int)(225.0f * g0), 255);
-                    const unsigned int cB = RGBA(40 + (int)(150.0f * g1), 45 + (int)(190.0f * g1),
-                                                 25 + (int)(225.0f * g1), 255);
-                    v[vi++] = { cA, playerX + s0 * ri0, y0, playerZ + c0 * ri0 };
-                    v[vi++] = { cA, playerX + s0 * ro0, y0, playerZ + c0 * ro0 };
-                    v[vi++] = { cB, playerX + s1 * ro1, y1, playerZ + c1 * ro1 };
-                    v[vi++] = { cA, playerX + s0 * ri0, y0, playerZ + c0 * ri0 };
-                    v[vi++] = { cB, playerX + s1 * ro1, y1, playerZ + c1 * ro1 };
-                    v[vi++] = { cB, playerX + s1 * ri1, y1, playerZ + c1 * ri1 };
+                    const float u0 = head * k / NS, u1 = head * (k + 1) / NS;
+                    // tres franjas: filo blanco afuera, cuerpo verde en el medio, y se desvanece hacia adentro
+                    const float th0 = 0.62f * sinf(3.14159f * u0), th1 = 0.62f * sinf(3.14159f * u1);   // media luna: gruesa al medio
+                    const float rr[3][2] = { { 1.0f, 1.0f }, { 1.0f - 0.35f * th0, 1.0f - 0.35f * th1 }, { 1.0f - th0, 1.0f - th1 } };
+                    float P[3][2][3];
+                    for (int q = 0; q < 3; ++q) {
+                        slashPoint(meleeType, heroYaw, playerX, playerY, playerZ, R, u0, rr[q][0], P[q][0][0], P[q][0][1], P[q][0][2]);
+                        slashPoint(meleeType, heroYaw, playerX, playerY, playerZ, R, u1, rr[q][1], P[q][1][0], P[q][1][1], P[q][1][2]);
+                    }
+                    // la punta que avanza va mas clara; la cola se apaga
+                    const float g0 = 0.55f + 0.45f * (head > 0.0f ? u0 / head : 0.0f), g1 = 0.55f + 0.45f * (head > 0.0f ? u1 / head : 0.0f);
+                    const unsigned int cE0 = RGBA(240, 255, 244, (int)(245.0f * fade * g0)), cE1 = RGBA(240, 255, 244, (int)(245.0f * fade * g1));
+                    const unsigned int cM0 = RGBA(70, 240, 140, (int)(170.0f * fade * g0)), cM1 = RGBA(70, 240, 140, (int)(170.0f * fade * g1));
+                    const unsigned int cI = RGBA(40, 200, 110, 0);
+                    v[vi++] = { cE0, P[0][0][0], P[0][0][1], P[0][0][2] }; v[vi++] = { cE1, P[0][1][0], P[0][1][1], P[0][1][2] }; v[vi++] = { cM1, P[1][1][0], P[1][1][1], P[1][1][2] };
+                    v[vi++] = { cE0, P[0][0][0], P[0][0][1], P[0][0][2] }; v[vi++] = { cM1, P[1][1][0], P[1][1][1], P[1][1][2] }; v[vi++] = { cM0, P[1][0][0], P[1][0][1], P[1][0][2] };
+                    v[vi++] = { cM0, P[1][0][0], P[1][0][1], P[1][0][2] }; v[vi++] = { cM1, P[1][1][0], P[1][1][1], P[1][1][2] }; v[vi++] = { cI, P[2][1][0], P[2][1][1], P[2][1][2] };
+                    v[vi++] = { cM0, P[1][0][0], P[1][0][1], P[1][0][2] }; v[vi++] = { cI, P[2][1][0], P[2][1][1], P[2][1][2] }; v[vi++] = { cI, P[2][0][0], P[2][0][1], P[2][0][2] };
                 }
+                sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDepthMask(GU_TRUE);
                 sceGumLoadIdentity();
                 sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, vi, 0, v);
+                sceGuDepthMask(GU_FALSE); sceGuDisable(GU_BLEND);
             }
+#if NOCTIS_SKYWORLD
+            if (meleeHitFx > 0) {   // el impacto: estrella de luz donde corto
+                sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xFFFFFFFF); sceGuDepthMask(GU_TRUE);
+                const float k = meleeHitFx / 10.0f;
+                bcGlow(meleeHX, meleeHY, meleeHZ, 1.6f + 1.8f * (1.0f - k), RGBA(255, 255, 240, (int)(230 * k)), RGBA(120, 255, 180, 0));
+                bcGlow(meleeHX, meleeHY, meleeHZ, 0.6f, RGBA(255, 255, 255, (int)(255 * k)), RGBA(255, 255, 255, 0));
+                sceGuDepthMask(GU_FALSE); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
+            }
+#endif
 
             // ---- viewmodel: APAGADO en 3ra persona ----
             // Costaba un borrado del buffer de profundidad a pantalla completa + 3 matrices
