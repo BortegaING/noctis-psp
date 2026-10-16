@@ -219,8 +219,11 @@ static int build_hunter(LineVertex *buf)
         for (int s = 0; s < 4; ++s)
             hn_limb(buf,i, bX[s],bY[s],bZ[s], bX[s+1],bY[s+1],bZ[s+1], bR[s],bR[s+1], 8,
                     cp_lerp(spine, edge, s * 0.25f), cp_lerp(spine, edge, (s + 1) * 0.25f));
-        hn_limb(buf,i, 0.285f,0.791f,-0.269f, 0.302f,0.453f,-0.392f, 0.012f,0.010f, 4, cp_lerp(spine,edge,0.5f), edge);
-        hn_limb(buf,i, 0.302f,0.453f,-0.392f, 0.308f,0.150f,-0.590f, 0.010f,0.002f, 6, edge, edge);
+        // nervio del FILO: sigue la MISMA curva de la hoja, pegado a su canto de adelante (recto, se
+        // separaba de la hoja y en la punta se veia una horquilla)
+        for (int s = 0; s < 4; ++s)
+            hn_limb(buf,i, bX[s],bY[s]-0.004f,bZ[s]-bR[s]*0.75f, bX[s+1],bY[s+1]-0.004f,bZ[s+1]-bR[s+1]*0.75f,
+                    0.011f*(1.0f-0.2f*s),0.011f*(1.0f-0.2f*(s+1))+0.001f, 4, cp_lerp(spine,edge,0.5f+0.12f*s), edge);
     }
     g_hnMark[13] = i;
 

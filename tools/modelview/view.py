@@ -126,6 +126,12 @@ def main():
         views = [(180, 8, "frente"), (90, 8, "lado der"), (0, 12, "espalda"), (215, 14, "3/4 frente"), (0, 26, "camara de juego")]
         imgs = [render(v, orbit(T, 6.5 if az != 0 or el < 20 else 9.0, az, el), T) for az, el, _ in views]
         sheet(imgs, 5, os.path.join(OUT, "hero.png"), [x[2] for x in views])
+    elif what == "saber":   # primer plano del sable en la mano (empunadura, guarda y hoja curva)
+        v = dump(["hero", 0, 0, 0, 1, 0, 0], "hero")
+        T = (0.56, 1.05, -0.75)
+        views = [(90, 8, 2.6, "de lado"), (150, 20, 2.4, "3/4 de frente"), (40, 35, 2.6, "desde atras y arriba")]
+        imgs = [render(v, orbit(T, d, az, el), T, W=420, H=420, fov=45) for az, el, d, _ in views]
+        sheet(imgs, 3, os.path.join(OUT, "saber.png"), [x[3] for x in views])
     elif what in ("run", "walk"):
         run = what == "run"
         imgs, labels = [], []
