@@ -1,30 +1,43 @@
 // ============================================================================
 // boss_baphomet.h -- PISO 3 "LA CUEVA": jefe BAPHOMET (prefijo bp_ / bp / g_bp / BP_). Contrato: boss_api.h
 //
-// Cueva cerrada con fogata al centro. Baphomet (traje de gala negro, camisa blanca, cabeza de cabra)
-// dialoga; se le pide ayuda o se le elogia el perfume (3 preguntas). Pelea: solo recibe dano mientras
-// CARGA su fuego (parpadea). Ataques: bolas y ondas de fuego, sombras, atrapar la mente.
-// Vencido: cae inconsciente -> minijuego del Padre Nuestro -> luz del cielo -> maldicion -> se esfuma.
+// Cueva cerrada con fogata al centro. Baphomet (traje de gala negro, camisa blanca, cabeza de cabra).
+// Habla POCO (Benjamin, 2026-10-16): le elogias el perfume, de pronto piensas en Dios como una luz en
+// el cielo, el siente que lo traicionaste y empieza la pelea. Solo recibe dano mientras CARGA su fuego.
+// 150 de vida en 3 FASES: 1) bolas y ondas de fuego, sombras, atrapar la mente; 2) (<100) empuna el
+// TRIDENTE: pentagrama invertido en el piso, columnas de fuego en estrella y VISIONES DE MUERTE (carne
+// podrida, calaveras, sigilos que te tapan la vista); 3) (<50) la cueva sangra: todo mas rapido y
+// destellos subliminales. Vencido: Padre Nuestro -> luz del cielo -> maldicion -> se esfuma y deja
+// DETENER EL TIEMPO (antes lo daba un cuestionario de perfume, que se quito).
 // Personaje: partes en pose de reposo (coordenadas absolutas) dibujadas con matrices articuladas.
 // ============================================================================
 #pragma once
 
-static const int   BP_HP     = 60;
+static const int   BP_HP     = 150;      // era 60 (Benjamin: "mas vida a los jefes")
+static const int   BP_PH2 = 100, BP_PH3 = 50;   // vida a la que entra en la fase 2 y en la 3
+#ifndef NOCTIS_TEST_BPFASE
+#define NOCTIS_TEST_BPFASE 0   // PRUEBA: 2 o 3 = la pelea arranca en esa fase (ver el terror sin pelear). 0 al commitear
+#endif
 static const float BP_HOME_R = 9.0f;       // radio al que rodea la fogata
 static const float BP_FIREY  = 1.5f;       // altura del corazon del fuego
 static const float BP_TAU    = 6.2831853f;
 static const float BP_PIE    = 3.14159265f;
 
-enum { BPS_IDLE, BPS_SAY, BPS_CHOICE, BPS_Q, BPS_MINDIN, BPS_FIGHT, BPS_KOFALL, BPS_PRAY, BPS_LIGHT, BPS_VANISH, BPS_DONE };
-enum { BPN_CHOICE, BPN_Q, BPN_REWARD, BPN_NARR, BPN_MINDIN, BPN_PRAY, BPN_CURSE2, BPN_VANISH };
-enum { BPA_NONE, BPA_ORBS, BPA_CHARGE, BPA_SHADOWS, BPA_WAVES, BPA_MIND };
+enum { BPS_IDLE, BPS_SAY, BPS_MINDIN, BPS_FIGHT, BPS_KOFALL, BPS_PRAY, BPS_LIGHT, BPS_VANISH, BPS_DONE };
+enum { BPN_TU, BPN_GOD, BPN_BETRAY, BPN_MINDIN, BPN_PRAY, BPN_CURSE2, BPN_VANISH };
+enum { BPA_NONE, BPA_ORBS, BPA_CHARGE, BPA_SHADOWS, BPA_WAVES, BPA_MIND, BPA_PILLARS, BPA_VISION };
 
 // ---------------------------------------------------------------- estado
 static int   g_bpSt = BPS_IDLE, g_bpStT = 0, g_bpT = 0, g_bpAnim = 0;
 static float g_bpX = 0.0f, g_bpY = 0.0f, g_bpZ = -9.0f, g_bpYaw = 3.14159265f, g_bpScale = 1.0f;
 static int   g_bpHp = BP_HP;
 static const char *g_bpWho = "BAPHOMET", *g_bpLnA = "", *g_bpLnB = "";
-static int   g_bpNext = 0, g_bpSel = 0, g_bpQ = 0, g_bpQok = 0, g_bpCurse = 0;
+static int   g_bpNext = 0, g_bpCurse = 0;
+// fases y terror
+static int   g_bpPhase = 1, g_bpPhaseT = 0;          // fase 1..3; frames desde el ultimo cambio (destello)
+static float g_bpVision = 0.0f;                       // 0..1: cuanto tapan la vista las visiones de muerte
+static int   g_bpSubT = 0, g_bpSubK = 0, g_bpSubCd = 0; // destello subliminal (fase 3): frames, tipo, espera
+static float g_bpPilX[5], g_bpPilZ[5]; static int g_bpPilT = 0;   // columnas de fuego en estrella
 static int   g_bpAtk = BPA_NONE, g_bpAtkT = 0, g_bpPause = 0, g_bpSeq = 1, g_bpStun = 0;
 static int   g_bpCharge = 0, g_bpHurt = 0, g_bpBounce = 0, g_bpOrbN = 0, g_bpOrbTot = 0;
 static int   g_bpWaveT = 0, g_bpWaveHit = 0, g_bpWaveN = 0; static float g_bpWaveX = 0.0f, g_bpWaveZ = 0.0f;
@@ -43,25 +56,20 @@ static char g_bpPLn[24][100]; static int g_bpPLnN = 0;
 static CityBldg *g_bpBx = 0; static int g_bpNbx = 0, g_bpBxCap = 0;
 
 // ---------------------------------------------------------------- textos (UTF-8)
-struct BpQ { const char *a; const char *opt[3]; int ok; const char *good; const char *bad; };
-static const BpQ kBpQ[3] = {
-    { "Dígame, ¿qué nota distingue bajo el azufre?",
-      { "Huele a cabra mojada", "Rosas negras. Muy refinado.", "Lavanda y jabón de pino" }, 1,
-      "Rosas negras... Pocos lo notan antes de morir.", "Qué decepción. Mi perfumista llorará esta noche." },
-    { "Lo uso hace milenios. ¿Cuánto dura el aroma?",
-      { "Hasta el amanecer, como todos", "Dos horas, tres si no suda", "Eterno. Como su elegancia" }, 2,
-      "Eterno... qué amable. Me sonrojaría, si pudiera.", "Qué pena. Esperaba más de un alma tan fresca." },
-    { "Un caballero sabe elogiar. ¿Qué opina de mi traje?",
-      { "Negro como la medianoche. Impecable", "Algo abrigado para una cueva, ¿no?", "¿Es de alquiler?" }, 0,
-      "Por fin alguien con ojo. Le deberé un favor.", "Qué descortés. Lo anotaré en su expediente." },
-};
+// palabras que asoman en las visiones de muerte
+static const char *kBpWhisper[6] = { "TRAIDOR", "NADIE TE ESCUCHA", "ARRODÍLLATE", "TU CARNE ES MÍA", "ÉL NO VENDRÁ", "PÚDRETE" };
 static const char *kBpPray[12] = {
     "Padre nuestro", "que estás en el cielo,", "santificado sea tu nombre;", "venga a nosotros tu reino;",
     "hágase tu voluntad", "en la tierra como en el cielo.", "Danos hoy nuestro pan de cada día;",
     "perdona nuestras ofensas,", "como también nosotros perdonamos a los que nos ofenden;",
     "no nos dejes caer en la tentación,", "y líbranos del mal.", "Amén."
 };
-static const int kBpSeq[8] = { BPA_ORBS, BPA_CHARGE, BPA_SHADOWS, BPA_CHARGE, BPA_WAVES, BPA_CHARGE, BPA_MIND, BPA_CHARGE };
+// orden de ataques por fase (CHARGE = la unica ventana para herirlo)
+static const int kBpSeq[3][8] = {
+    { BPA_ORBS, BPA_CHARGE, BPA_SHADOWS, BPA_CHARGE, BPA_WAVES, BPA_CHARGE, BPA_MIND, BPA_CHARGE },
+    { BPA_PILLARS, BPA_CHARGE, BPA_VISION, BPA_CHARGE, BPA_SHADOWS, BPA_CHARGE, BPA_WAVES, BPA_CHARGE },
+    { BPA_VISION, BPA_CHARGE, BPA_PILLARS, BPA_CHARGE, BPA_MIND, BPA_CHARGE, BPA_PILLARS, BPA_CHARGE },
+};
 
 // ---------------------------------------------------------------- utilidades
 static float bpClampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
@@ -447,12 +455,13 @@ static void bpBuildChar() {
 
 // ---------------------------------------------------------------- estado: reinicio y helpers de logica
 static void bpClearAttacks() {
-    g_bpAtk = BPA_NONE; g_bpAtkT = 0; g_bpCharge = 0; g_bpTrap = 0; g_bpMash.frames = 0; g_bpOrbN = 0; g_bpWaveT = 0;
+    g_bpAtk = BPA_NONE; g_bpAtkT = 0; g_bpCharge = 0; g_bpTrap = 0; g_bpMash.frames = 0; g_bpOrbN = 0; g_bpWaveT = 0; g_bpPilT = 0;
     for (int i = 0; i < 4; ++i) g_bpSh[i].life = 0;
 }
 static void bpResetAll() {
     g_bpSt = BPS_IDLE; g_bpStT = 0; g_bpT = 0; g_bpAnim = 0; g_bpX = 0.0f; g_bpY = 0.0f; g_bpZ = -BP_HOME_R;
-    g_bpYaw = BP_PIE; g_bpScale = 1.0f; g_bpHp = BP_HP; g_bpCurse = 0; g_bpQ = 0; g_bpQok = 0; g_bpSel = 0;
+    g_bpYaw = BP_PIE; g_bpScale = 1.0f; g_bpHp = BP_HP; g_bpCurse = 0;
+    g_bpPhase = 1; g_bpPhaseT = 999; g_bpVision = 0.0f; g_bpSubT = 0; g_bpSubCd = 300; g_bpPilT = 0;
     g_bpPause = 100; g_bpSeq = 1; g_bpStun = 0; g_bpHurt = 0; g_bpBounce = 0; g_bpTint = 0.0f; g_bpLight = 0.0f; g_bpHaveLast = 0;
     g_bpPStep = 0; g_bpPErr = 0; g_bpPWrong = 0; g_bpPShake = 0; g_bpPLnN = 0;
     for (int k = 0; k < 3; ++k) { g_bpArm[0][k] = (k == 0) ? 0.2f : (k == 1 ? 0.22f : 0.55f); g_bpArm[1][k] = g_bpArm[0][k]; }
@@ -514,20 +523,14 @@ static void bpEnterKO() {
 }
 static void bpAdvance(int code) {
     switch (code) {
-    case BPN_CHOICE: g_bpSt = BPS_CHOICE; g_bpStT = 0; g_bpSel = 0; break;
-    case BPN_Q: g_bpSt = BPS_Q; g_bpStT = 0; g_bpSel = 0; break;
-    case BPN_REWARD:
-        if (g_bpQok >= 2) {
-            g_lvGiveTimePower = 1;
-            lvMessage("BAPHOMET TE CONCEDE: DETENER EL TIEMPO (CUADRADO)", 280);
-            bpSay("BAPHOMET", "Ha sido encantador. Acepte este obsequio:", "el tiempo, a su antojo.", BPN_NARR);
-        } else bpSay("BAPHOMET", "Qué aburrimiento. No merece nada de mí.", "", BPN_NARR);
-        break;
-    case BPN_NARR: bpSay("", "Sientes que está controlando tu mente...", "", BPN_MINDIN); break;
+    // Habla POCO: un cumplido, un pensamiento que se te escapa, y la traicion.
+    case BPN_TU:     bpSay("TÚ", "Qué buen perfume tiene...", "", BPN_GOD); break;
+    case BPN_GOD:    bpSay("", "De pronto piensas en Dios:", "una luz en el cielo.", BPN_BETRAY); break;
+    case BPN_BETRAY: bpSay("BAPHOMET", "¿Piensas en Él... en mi casa?", "Me has traicionado.", BPN_MINDIN); break;
     case BPN_MINDIN: g_bpSt = BPS_MINDIN; g_bpStT = 0; break;
     case BPN_PRAY: g_bpSt = BPS_PRAY; g_bpStT = 0; g_bpPStep = 0; g_bpPErr = 0; bpPrayRebuild(); bpPrayOptions(); break;
     case BPN_CURSE2: bpSay("BAPHOMET", "Jamás dormirás tranquilo. Nos veremos... abajo.", "", BPN_VANISH); break;
-    case BPN_VANISH: g_bpSt = BPS_VANISH; g_bpStT = 0; lvMessage("BAPHOMET SE ESFUMA", 150); g_lvFlash = 12; break;
+    case BPN_VANISH: g_bpSt = BPS_VANISH; g_bpStT = 0; lvMessage("BAPHOMET SE ESFUMA", 150); g_lvFlash = 12; break;   // deja el tiempo: ver BPS_VANISH
     default: break;
     }
 }
@@ -535,7 +538,7 @@ static void bpAdvance(int code) {
 // ---------------------------------------------------------------- ataques
 static void bpWaveStart(float x, float z, int n) { g_bpWaveT = 1; g_bpWaveHit = 0; g_bpWaveN = n; g_bpWaveX = x; g_bpWaveZ = z; }
 static float bpWaveR(int w) { const int el = g_bpWaveT - w * 42; return el > 0 ? el * 0.34f : -1.0f; }
-static void bpEndAtk(int pause) { g_bpAtk = BPA_NONE; g_bpAtkT = 0; g_bpPause = (g_bpHp < BP_HP / 2) ? pause * 7 / 10 : pause; }
+static void bpEndAtk(int pause) { g_bpAtk = BPA_NONE; g_bpAtkT = 0; g_bpPause = (g_bpPhase == 1) ? pause : (g_bpPhase == 2 ? pause * 8 / 10 : pause * 55 / 100); }
 static int bpShadesAlive() { int n = 0; for (int i = 0; i < 4; ++i) if (g_bpSh[i].life > 0) ++n; return n; }
 static void bpStartAtk(BossIO &io, int a) {
     g_bpAtk = a; g_bpAtkT = 0;
@@ -553,6 +556,13 @@ static void bpStartAtk(BossIO &io, int a) {
     case BPA_MIND:
         g_bpTrap = 1; g_bpTrapT = 0; bxMashStart(g_bpMash, 330);
         lvMessage("ATRAPA TU MENTE: MUEVE EL ANÁLOGO", 150); break;
+    case BPA_PILLARS: {   // una estrella de 5 puntas centrada en ti: las marcas arden y estallan en fuego
+        const float a0 = bpRnd(g_bpT, 3, 91) * BP_TAU, R = 4.2f;
+        for (int k = 0; k < 5; ++k) { g_bpPilX[k] = io.px + cosf(a0 + k * BP_TAU / 5.0f) * R; g_bpPilZ[k] = io.pz + sinf(a0 + k * BP_TAU / 5.0f) * R; }
+        g_bpPilX[0] = io.px; g_bpPilZ[0] = io.pz;   // y una justo debajo: no se puede quedar quieto
+        g_bpPilT = 1; lvMessage("¡EL PENTAGRAMA ARDE!", 90);
+    } break;
+    case BPA_VISION: lvMessage("VISIONES DE MUERTE", 110); break;
     default: break;
     }
     (void)io;
@@ -575,6 +585,18 @@ static void bpRunAtk(BossIO &io) {
         break;
     case BPA_SHADOWS: if (g_bpAtkT > 70) bpEndAtk(150); break;
     case BPA_WAVES: if (g_bpAtkT > 60 && g_bpWaveT == 0) bpEndAtk(110); break;
+    case BPA_PILLARS: if (g_bpPilT == 0) bpEndAtk(90); break;
+    case BPA_VISION:   // la vista se llena de muerte y, mientras, te sigue atacando a ciegas
+        if (g_bpAtkT == 30 || g_bpAtkT == 90) {
+            for (int i = 0; i < 4; ++i) if (g_bpSh[i].life <= 0) {
+                const float ang = BP_TAU * bpRnd(g_bpT, i, 83);
+                g_bpSh[i].x = g_bpX + cosf(ang) * 3.0f; g_bpSh[i].z = g_bpZ + sinf(ang) * 3.0f;
+                g_bpSh[i].vx = g_bpSh[i].vz = 0.0f; g_bpSh[i].life = 420; g_bpSh[i].age = 0; break;
+            }
+        }
+        if (g_bpAtkT % 40 == 20 && g_bpAtkT < 160) bpFireOrb(io);
+        if (g_bpAtkT >= 190) bpEndAtk(100);
+        break;
     default: break;
     }
 }
@@ -600,7 +622,7 @@ static void bpFightUpdate(BossIO &io) {
     if (g_bpAtk == BPA_NONE) {
         if (g_bpStun > 0) --g_bpStun;
         else if (--g_bpPause <= 0) {
-            const int a = kBpSeq[g_bpSeq & 7];
+            const int a = kBpSeq[g_bpPhase - 1][g_bpSeq & 7];
             if (a == BPA_MIND && (bpShadesAlive() > 0 || g_bpWaveT > 0)) g_bpPause = 40;
             else { ++g_bpSeq; bpStartAtk(io, a); }
         }
@@ -615,13 +637,25 @@ static void bpFightUpdate(BossIO &io) {
         ++g_bpWaveT;
         if (g_bpWaveT > (g_bpWaveN - 1) * 42 + 76) g_bpWaveT = 0;
     }
+    // columnas de fuego en estrella: 70 frames de aviso (las marcas arden), 30 de fuego
+    if (g_bpPilT > 0) {
+        if (g_bpPilT == 70) { g_lvFlash = 6; for (int k = 0; k < 5; ++k) {
+            const float dx = io.px - g_bpPilX[k], dz = io.pz - g_bpPilZ[k];
+            if (!g_lvDashInv && dx * dx + dz * dz < 1.9f * 1.9f && io.py < 6.0f) { io.hp -= 16.0f; g_lvFlash = 14; break; } } }   // dash: la atraviesas
+        if (++g_bpPilT > 100) g_bpPilT = 0;
+    }
+    // fase 3: destellos subliminales (5 frames de calavera, carne o sigilo, sin aviso)
+    if (g_bpPhase >= 3) {
+        if (g_bpSubT > 0) --g_bpSubT;
+        else if (--g_bpSubCd <= 0) { g_bpSubT = 6; g_bpSubK = (int)(bpRnd(g_bpT, 5, 97) * 3.0f) % 3; g_bpSubCd = 200 + (int)(bpRnd(g_bpT, 6, 98) * 220.0f); }
+    }
     // sombras: se deslizan hacia el jugador
     for (int i = 0; i < 4; ++i) {
         BpShade &s = g_bpSh[i]; if (s.life <= 0) continue;
         ++s.age; --s.life;
         if (s.age > 45) {
             float dx = io.px - s.x, dz = io.pz - s.z; const float l = sqrtf(dx * dx + dz * dz) + 0.001f;
-            const float sp = (g_bpHp < BP_HP / 2 ? 0.14f : 0.11f) + 0.01f * (i & 1);
+            const float sp = (g_bpPhase >= 3 ? 0.16f : g_bpPhase == 2 ? 0.13f : 0.11f) + 0.01f * (i & 1);
             s.vx += (dx / l * sp - s.vx) * 0.05f; s.vz += (dz / l * sp - s.vz) * 0.05f;
             s.x += s.vx; s.z += s.vz;
             if (!g_lvDashInv && l < 1.3f && io.py < 3.8f) { io.hp -= 9.0f; g_lvFlash = 8; s.life = 0; }   // dash: la sombra te atraviesa
@@ -635,7 +669,7 @@ static void bpUpdatePose() {
     float R[3] = { 0.20f, 0.22f, 0.55f }, L[3] = { 0.14f, 0.22f, 0.45f };
     float bow = 0.04f + 0.02f * sinf(t * 1.7f), hy = 0.0f, lean = 0.0f, kneel = 0.0f, eyes = 1.0f;
     const int fight = (g_bpSt == BPS_FIGHT);
-    if (g_bpSt == BPS_IDLE || g_bpSt == BPS_SAY || g_bpSt == BPS_CHOICE || g_bpSt == BPS_Q) {
+    if (g_bpSt == BPS_IDLE || g_bpSt == BPS_SAY) {
         R[0] = 0.55f + 0.18f * sinf(t * 1.1f); R[1] = 0.30f; R[2] = 1.0f + 0.3f * sinf(t * 1.1f + 0.6f);
         L[0] = 0.18f; L[1] = 0.18f; L[2] = 0.55f; hy = 0.12f * sinf(t * 0.7f);
         if (g_bpCurse) { R[0] = 1.5f; R[1] = 0.1f; R[2] = 0.1f; L[0] = 0.7f; L[2] = 1.7f; eyes = 1.6f; }
@@ -648,6 +682,8 @@ static void bpUpdatePose() {
         else if (g_bpAtk == BPA_ORBS) { R[0] = 0.4f + 1.1f * ((g_bpAtkT % 46) < 16 ? 1.0f : 0.0f); R[1] = 0.15f; R[2] = 0.3f; }
         else if (g_bpAtk == BPA_WAVES) { const float up = (g_bpAtkT < 40) ? 2.6f : 0.4f; R[0] = L[0] = up; R[1] = L[1] = 0.3f; lean = (g_bpAtkT < 40) ? 0.0f : 0.35f; }
         else if (g_bpAtk == BPA_SHADOWS) { R[0] = L[0] = 0.3f; R[1] = L[1] = 1.1f; R[2] = L[2] = 0.25f; }
+        else if (g_bpAtk == BPA_PILLARS) { R[0] = L[0] = (g_bpPilT < 70) ? 2.4f : 0.2f; R[1] = L[1] = 0.5f; bow = (g_bpPilT < 70) ? -0.3f : 0.4f; eyes = 2.0f; }
+        else if (g_bpAtk == BPA_VISION) { R[0] = L[0] = 1.2f; R[1] = L[1] = 1.3f; R[2] = L[2] = 0.1f; bow = -0.35f; eyes = 2.4f; }
         if (g_bpTrap) { R[0] = 1.45f; R[1] = 0.12f; R[2] = 0.15f; L[0] = 0.6f; L[2] = 1.8f; eyes = 2.0f; }
     } else if (g_bpSt == BPS_KOFALL || g_bpSt == BPS_PRAY) {
         R[0] = 0.12f; R[1] = 0.14f; R[2] = 0.35f; L[0] = 0.10f; L[1] = 0.14f; L[2] = 0.40f; bow = 0.65f; lean = 0.25f; kneel = 1.0f; eyes = 0.0f;
@@ -896,16 +932,86 @@ static void bpDrawSmoke() {
     }
 }
 
+// ---------------------------------------------------------------- fases: tridente, pentagrama, columnas
+// TRIDENTE (fase 2+): flota junto a su mano derecha, hierro negro con las puntas al rojo
+static void bpDrawTrident() {
+    if (g_bpPhase < 2 || g_bpSt != BPS_FIGHT || g_bpScale < 0.1f) return;
+    const float rx = cosf(g_bpYaw), rz = -sinf(g_bpYaw);            // derecha del modelo en el mundo
+    const float bob = 0.15f * sinf(g_bpAnim * 0.05f);
+    const float x = g_bpX + rx * 1.45f, z = g_bpZ + rz * 1.45f, y0 = 0.6f + bob, y1 = 6.4f + bob;
+    LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 380);
+    BpBuf b = { v, 0, 380 };
+    const unsigned int IR = bpC(34, 28, 36, 255), IR2 = bpC(78, 58, 56, 255);
+    bpLimb(b, x, y0, z, x, y1, z, 0.09f, 0.08f, 5, IR, IR2);                                   // asta
+    bpLimb(b, x - rx * 0.75f, y1, z - rz * 0.75f, x + rx * 0.75f, y1, z + rz * 0.75f, 0.08f, 0.08f, 5, IR2, IR2);   // travesano
+    bpLimb(b, x, y1, z, x, y1 + 1.5f, z, 0.08f, 0.02f, 5, IR2, bpC(255, 70, 30, 255));          // punta central
+    for (int s = -1; s <= 1; s += 2)
+        bpLimb(b, x + rx * 0.75f * s, y1, z + rz * 0.75f * s, x + rx * 0.85f * s, y1 + 1.1f, z + rz * 0.85f * s, 0.07f, 0.02f, 5, IR2, bpC(255, 70, 30, 255));
+    sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, b.n, 0, v);
+    bpBlendAdd();
+    const int hot = 120 + (int)(80.0f * sinf(g_bpAnim * 0.2f));
+    bpGlow3D(x, y1 + 1.5f, z, 0.6f, bpC(255, 80, 30, hot), bpC(255, 30, 10, 0));
+    for (int s = -1; s <= 1; s += 2) bpGlow3D(x + rx * 0.85f * s, y1 + 1.1f, z + rz * 0.85f * s, 0.45f, bpC(255, 80, 30, hot), bpC(255, 30, 10, 0));
+    bpBlendOff();
+}
+// linea plana en el piso (para estrellas y sigilos)
+static void bpFloorLine(BpBuf &b, float x0, float z0, float x1, float z1, float w, float y, unsigned int c) {
+    float dx = x1 - x0, dz = z1 - z0; const float l = sqrtf(dx * dx + dz * dz) + 1e-4f;
+    const float nx = -dz / l * w * 0.5f, nz = dx / l * w * 0.5f;
+    bpQuad(b, x0 - nx, y, z0 - nz, c, x1 - nx, y, z1 - nz, c, x1 + nx, y, z1 + nz, c, x0 + nx, y, z0 + nz, c);
+}
+// PENTAGRAMA INVERTIDO grabado en el piso alrededor del fuego (fase 2+): late en rojo
+static void bpDrawPentagram() {
+    if (g_bpPhase < 2 || g_bpSt != BPS_FIGHT) return;
+    const float R = 7.6f, p = 0.5f + 0.5f * sinf(g_bpAnim * (g_bpPhase >= 3 ? 0.12f : 0.06f));
+    const unsigned int c = bpC(255, 30, 20, 90 + (int)(110.0f * p));
+    LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 30);
+    BpBuf b = { v, 0, 30 };
+    float px[5], pz[5];
+    for (int k = 0; k < 5; ++k) { const float a = BP_PIE * 0.5f + k * BP_TAU / 5.0f; px[k] = cosf(a) * R; pz[k] = sinf(a) * R; }   // una punta hacia la entrada (+Z): invertido visto desde ahi
+    for (int k = 0; k < 5; ++k) bpFloorLine(b, px[k], pz[k], px[(k + 2) % 5], pz[(k + 2) % 5], 0.30f, 0.05f, c);
+    sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, b.n, 0, v);
+    lvRing3D(0.0f, 0.05f, 0.0f, R, 0.32f, c);
+    lvRing3D(0.0f, 0.05f, 0.0f, R + 0.9f, 0.18f, bpC(255, 30, 20, 60 + (int)(80.0f * p)));
+}
+// COLUMNAS de fuego en estrella: marcas que arden (aviso) y despues el fuego
+static void bpDrawPillars() {
+    if (g_bpPilT <= 0) return;
+    for (int k = 0; k < 5; ++k) {
+        const float x = g_bpPilX[k], z = g_bpPilZ[k];
+        if (g_bpPilT < 70) {                       // aviso: anillo que se cierra y el suelo enrojece
+            const float p = g_bpPilT / 70.0f;
+            lvRing3D(x, 0.07f, z, 1.9f * (1.2f - 0.2f * p), 0.22f, bpC(255, 60, 20, 80 + (int)(150.0f * p)));
+            bpGroundFan(x, 0.06f, z, 1.9f, bpC(255, 40, 10, (int)(120.0f * p)), bpC(120, 10, 5, 0), 14);
+        } else {                                   // fuego: columna alta que se apaga
+            const float f = 1.0f - (g_bpPilT - 70) / 30.0f;
+            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 24);
+            int n = 0; const float r = 1.0f + 0.4f * f, h = 11.0f * (0.6f + 0.4f * f);
+            const unsigned int c0 = bpC(255, 220, 120, (int)(230.0f * f)), c1 = bpC(255, 70, 20, (int)(160.0f * f)), c2 = bpC(160, 10, 5, 0);
+            for (int q = 0; q < 2; ++q) {
+                const float ax = q ? r : 0.0f, az = q ? 0.0f : r;
+                swQuadC(v, n, x - ax, 0.0f, z - az, c0, x + ax, 0.0f, z + az, c0, x + ax, h * 0.5f, z + az, c1, x - ax, h * 0.5f, z - az, c1);
+                swQuadC(v, n, x - ax, h * 0.5f, z - az, c1, x + ax, h * 0.5f, z + az, c1, x + ax * 0.3f, h, z + az * 0.3f, c2, x - ax * 0.3f, h, z - az * 0.3f, c2);
+            }
+            sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, LINE_FLAGS, n, 0, v);
+            bpGlow3D(x, 1.5f, z, 2.6f, bpC(255, 120, 40, (int)(150.0f * f)), bpC(255, 40, 10, 0));
+        }
+    }
+}
+
 static void bp_Draw(float px, float py, float pz) {
     (void)py;
     sceGuDisable(GU_TEXTURE_2D);
     bpDrawBoss();
+    bpDrawTrident();
     bpDrawShades(px, pz);
     bpBlendAdd();
     bpDrawFire();
     bpDrawShadeAuras();
     bpDrawWaves();
     bpDrawCharge();
+    bpDrawPentagram();
+    bpDrawPillars();
     bpDrawEyes();
     bpDrawLight();
     bpBlendAlpha();
@@ -934,38 +1040,32 @@ static void bp_Update(BossIO &io) {
     else g_bpLight = 0.0f;
     const int facing = (g_bpSt != BPS_FIGHT && g_bpSt != BPS_DONE);
     if (facing) { const float t = atan2f(-(io.px - g_bpX), -(io.pz - g_bpZ)); g_bpYaw += bpWrapPi(t - g_bpYaw) * 0.05f; }
-    const int lookCam = (g_bpSt == BPS_SAY || g_bpSt == BPS_CHOICE || g_bpSt == BPS_Q || g_bpSt == BPS_MINDIN || g_bpSt == BPS_KOFALL || g_bpSt == BPS_PRAY || g_bpSt == BPS_LIGHT);
+    const int lookCam = (g_bpSt == BPS_SAY || g_bpSt == BPS_MINDIN || g_bpSt == BPS_KOFALL || g_bpSt == BPS_PRAY || g_bpSt == BPS_LIGHT);
+    // visiones: tapan la vista al entrar en su mente y durante el ataque VISIONES DE MUERTE
+    {
+        const float want = (g_bpSt == BPS_MINDIN) ? 0.75f : (g_bpSt == BPS_FIGHT && g_bpAtk == BPA_VISION && g_bpAtkT < 170) ? 0.88f : 0.0f;
+        g_bpVision += (want - g_bpVision) * (want > g_bpVision ? 0.04f : 0.08f);
+        if (g_bpVision < 0.004f) g_bpVision = 0.0f;
+        if (g_bpPhaseT < 999) ++g_bpPhaseT;
+    }
+    // la luz del cielo en la que piensas (BPN_GOD): breve, antes de la traicion
+    if (g_bpSt == BPS_SAY && g_bpNext == BPN_BETRAY) g_bpLight = bpClampf(g_bpStT / 50.0f, 0.0f, 0.55f);
     if (lookCam) { const float d = bpWrapPi(atan2f(g_bpX - io.px, -(g_bpZ - io.pz)) - io.camYaw); io.camYaw += d * 0.05f; }
     switch (g_bpSt) {
     case BPS_IDLE: {
         const float dx = io.px - g_bpX, dz = io.pz - g_bpZ;
-        if (dx * dx + dz * dz < 17.5f * 17.5f) bpSay("BAPHOMET", "¿Por qué estás aquí? Conversemos.", "", BPN_CHOICE);
+        if (dx * dx + dz * dz < 17.5f * 17.5f) bpSay("BAPHOMET", "¿Por qué estás aquí? Conversemos.", "", BPN_TU);
     } break;
     case BPS_SAY:
         if (io.edge & PSP_CTRL_CROSS) bpAdvance(g_bpNext);
         break;
-    case BPS_CHOICE:
-        if (io.edge & (PSP_CTRL_UP | PSP_CTRL_DOWN)) g_bpSel ^= 1;
-        if (io.edge & PSP_CTRL_CROSS) {
-            if (g_bpSel == 0) bpSay("BAPHOMET", "¿Ayuda? Qué conmovedor...", "Mi mente siempre tiene un lugar para ti.", BPN_MINDIN);
-            else { g_bpQ = 0; g_bpQok = 0; bpSay("BAPHOMET", "Oh, mi Éter de Azufre. Cosecha del año 666.", "Veamos si sabe apreciarlo.", BPN_Q); }
-        }
-        break;
-    case BPS_Q:
-        if (io.edge & PSP_CTRL_UP) { if (--g_bpSel < 0) g_bpSel = 2; }
-        if (io.edge & PSP_CTRL_DOWN) { if (++g_bpSel > 2) g_bpSel = 0; }
-        if (io.edge & PSP_CTRL_CROSS) {
-            const BpQ &q = kBpQ[g_bpQ];
-            const int ok = (g_bpSel == q.ok);
-            if (ok) ++g_bpQok;
-            ++g_bpQ;
-            bpSay("BAPHOMET", ok ? q.good : q.bad, "", g_bpQ >= 3 ? BPN_REWARD : BPN_Q);
-        }
-        break;
     case BPS_MINDIN:
         g_bpTint = bpClampf(g_bpTint + 0.02f, 0.0f, 1.0f);
         if (g_bpStT == 2) lvMessage("TE ATRAPA EN SU MENTE", 140);
-        if (g_bpStT >= 140) { g_bpSt = BPS_FIGHT; g_bpStT = 0; g_bpPause = 90; g_bpSeq = 1; g_bpHp = BP_HP; bpClearAttacks(); }
+        if (g_bpStT >= 140) {
+            g_bpSt = BPS_FIGHT; g_bpStT = 0; g_bpPause = 90; g_bpSeq = 1; g_bpHp = BP_HP; g_bpPhase = 1; bpClearAttacks();
+            if (NOCTIS_TEST_BPFASE >= 2) { g_bpPhase = NOCTIS_TEST_BPFASE; g_bpHp = (g_bpPhase == 2) ? BP_PH2 : BP_PH3; g_bpPhaseT = 0; g_bpSeq = 0; }
+        }
         break;
     case BPS_FIGHT: bpFightUpdate(io); break;
     case BPS_KOFALL:
@@ -992,11 +1092,120 @@ static void bp_Update(BossIO &io) {
     case BPS_VANISH: {
         const float vt = bpClampf((g_bpStT - 20) / 150.0f, 0.0f, 1.0f);
         g_bpScale = 1.0f - vt * vt * (3.0f - 2.0f * vt);
+        // su recompensa (antes la daba el cuestionario del perfume): el tiempo se queda contigo
+        if (g_bpStT == 110 && !g_lvPowerTime) { g_lvGiveTimePower = 1; lvMessage("SU TIEMPO AHORA ES TUYO: DETENER EL TIEMPO (CUADRADO)", 260); }
         if (g_bpStT >= 200) { g_bpSt = BPS_DONE; g_bpScale = 0.0f; g_bpLight = 0.0f; }
     } break;
     default: break;
     }
     if (g_lvTimeStop <= 0) bpUpdatePose();
+}
+
+// ---------------------------------------------------------------- terror en 2D (visiones de muerte)
+// Todo procedural, sin texturas: carne podrida que late, venas, gusanos, un ojo que se abre en la
+// carne, calaveras, sigilos (pentagrama invertido, cruz invertida) y palabras que asoman.
+static const int BP_2D = GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D;
+static void bpHTri(float ax, float ay, float bx, float by, float cx, float cy, unsigned int c) {
+    LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 3);
+    v[0] = { c, ax, ay, 0.0f }; v[1] = { c, bx, by, 0.0f }; v[2] = { c, cx, cy, 0.0f };
+    sceGumDrawArray(GU_TRIANGLES, BP_2D, 3, 0, v);
+}
+static void bpHLine(float x0, float y0, float x1, float y1, float w, unsigned int c) {
+    float dx = x1 - x0, dy = y1 - y0; const float l = sqrtf(dx * dx + dy * dy) + 1e-4f;
+    const float nx = -dy / l * w * 0.5f, ny = dx / l * w * 0.5f;
+    LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 6);
+    v[0] = { c, x0 - nx, y0 - ny, 0.0f }; v[1] = { c, x1 - nx, y1 - ny, 0.0f }; v[2] = { c, x1 + nx, y1 + ny, 0.0f };
+    v[3] = { c, x0 - nx, y0 - ny, 0.0f }; v[4] = { c, x1 + nx, y1 + ny, 0.0f }; v[5] = { c, x0 + nx, y0 + ny, 0.0f };
+    sceGumDrawArray(GU_TRIANGLES, BP_2D, 6, 0, v);
+}
+static void bpHRing(float cx, float cy, float r, float w, unsigned int c, int seg) {
+    for (int s = 0; s < seg; ++s) {
+        const float a0 = BP_TAU * s / seg, a1 = BP_TAU * (s + 1) / seg;
+        bpHLine(cx + cosf(a0) * r, cy + sinf(a0) * r, cx + cosf(a1) * r, cy + sinf(a1) * r, w, c);
+    }
+}
+static void bpHFlesh(float a, int t) {
+    if (a <= 0.01f) return;
+    drawRect(0, 0, SCR_WIDTH, SCR_HEIGHT, bpC(38, 5, 7, (int)(215.0f * a)));
+    for (int k = 0; k < 15; ++k) {                                  // masas de carne (y manchas verdes de podredumbre)
+        const int cx = (k * 127 + 31) % 520 - 20, cy = (k * 71 + 17) % 300 - 14;
+        const int r = 46 + (k * 37) % 50 + (int)(8.0f * sinf(t * 0.07f + k));
+        const int rot = (k % 4 == 0);
+        lvFan2D(cx, cy, r, rot ? bpC(74, 84, 26, (int)(200.0f * a)) : bpC(152, 46, 50, (int)(222.0f * a)), bpC(40, 6, 10, 0), 14);
+    }
+    for (int k = 0; k < 10; ++k) {                                  // venas
+        float x = (float)((k * 53 + 11) % 480), y = (float)((k * 97 + 23) % 272), ang = k * 1.3f + 0.4f * sinf(t * 0.03f + k);
+        for (int j = 0; j < 5; ++j) {
+            const float nx = x + cosf(ang) * 30.0f, ny = y + sinf(ang) * 30.0f;
+            bpHLine(x, y, nx, ny, 2.6f, bpC(84, 12, 52, (int)(205.0f * a)));
+            x = nx; y = ny; ang += 0.55f * sinf(k * 1.7f + j);
+        }
+    }
+    for (int k = 0; k < 22; ++k) {                                  // gusanos que se arrastran
+        const int x = (int)(k * 41 + t * (0.3f + (k % 3) * 0.2f)) % 480;
+        const int y = (int)(k * 67 + 10.0f * sinf(t * 0.05f + k)) % 272;
+        lvFan2D(x, y, 3, bpC(228, 216, 182, (int)(235.0f * a)), bpC(190, 170, 130, (int)(200.0f * a)), 6);
+        lvFan2D(x + 4, y + 1, 3, bpC(214, 200, 166, (int)(225.0f * a)), bpC(170, 150, 110, (int)(190.0f * a)), 6);
+    }
+    {   // un OJO que se abre en la carne
+        const float open = 0.5f + 0.5f * sinf(t * 0.025f);
+        const int ex = 240 + (int)(70.0f * sinf(t * 0.011f)), ey = 150 + (int)(30.0f * sinf(t * 0.017f));
+        lvFan2D(ex, ey, 36, bpC(232, 222, 210, (int)(240.0f * a)), bpC(200, 150, 140, (int)(240.0f * a)), 18);
+        lvFan2D(ex + (int)(6.0f * sinf(t * 0.05f)), ey, 17, bpC(170, 20, 24, (int)(250.0f * a)), bpC(90, 6, 10, (int)(250.0f * a)), 14);
+        lvFan2D(ex + (int)(6.0f * sinf(t * 0.05f)), ey, 7, bpC(4, 2, 2, (int)(255.0f * a)), bpC(4, 2, 2, (int)(255.0f * a)), 10);
+        const int lid = (int)(38.0f * (1.0f - open));
+        drawRect(ex - 40, ey - 40, 80, 4 + lid, bpC(110, 30, 34, (int)(250.0f * a)));
+        drawRect(ex - 40, ey + 36 - lid, 80, 4 + lid, bpC(110, 30, 34, (int)(250.0f * a)));
+    }
+}
+static void bpHSkull(int cx, int cy, int s, float a) {
+    const unsigned int bone = bpC(226, 214, 186, (int)(238.0f * a)), dark = bpC(10, 6, 6, (int)(248.0f * a));
+    lvFan2D(cx, cy, s, bone, bpC(168, 150, 118, (int)(238.0f * a)), 18);                       // craneo
+    drawRect(cx - (int)(s * 0.55f), cy + (int)(s * 0.55f), (int)(s * 1.1f), (int)(s * 0.55f), bone);   // mandibula
+    lvFan2D(cx - (int)(s * 0.38f), cy + (int)(s * 0.08f), (int)(s * 0.28f), dark, dark, 12);   // cuencas
+    lvFan2D(cx + (int)(s * 0.38f), cy + (int)(s * 0.08f), (int)(s * 0.28f), dark, dark, 12);
+    bpHTri((float)cx, cy + s * 0.32f, cx - s * 0.13f, cy + s * 0.55f, cx + s * 0.13f, cy + s * 0.55f, dark);   // nariz
+    for (int i = 0; i < 6; ++i) drawRect(cx - (int)(s * 0.46f) + (int)(i * s * 0.18f), cy + (int)(s * 0.66f), 2, (int)(s * 0.40f), dark);   // dientes
+    bpHLine(cx - s * 0.1f, cy - s * 0.92f, cx + s * 0.22f, cy - s * 0.38f, 2.0f, dark);       // grieta
+}
+static void bpHSigil(float cx, float cy, float r, float a, float rot) {
+    const unsigned int glow = bpC(200, 10, 20, (int)(110.0f * a)), core = bpC(255, 40, 40, (int)(240.0f * a));
+    bpHRing(cx, cy, r, 7.0f, glow, 36); bpHRing(cx, cy, r, 2.0f, core, 36); bpHRing(cx, cy, r * 0.84f, 2.0f, core, 36);
+    float px[5], py[5];
+    for (int k = 0; k < 5; ++k) { const float an = rot + BP_PIE * 0.5f + k * BP_TAU / 5.0f; px[k] = cx + cosf(an) * r * 0.84f; py[k] = cy + sinf(an) * r * 0.84f; }   // punta ABAJO
+    for (int k = 0; k < 5; ++k) { bpHLine(px[k], py[k], px[(k + 2) % 5], py[(k + 2) % 5], 7.0f, glow); bpHLine(px[k], py[k], px[(k + 2) % 5], py[(k + 2) % 5], 2.0f, core); }
+    bpHLine(cx, cy - r * 0.32f, cx, cy + r * 0.30f, 3.0f, core);                                 // cruz invertida
+    bpHLine(cx - r * 0.14f, cy + r * 0.14f, cx + r * 0.14f, cy + r * 0.14f, 3.0f, core);
+}
+// todo junto: lo llama bp_Hud
+static void bpHudHorror() {
+    const int t = g_bpAnim;
+    if (g_bpSt == BPS_FIGHT && g_bpPhase >= 3)                       // la cueva sangra
+        bxTint(bpC(120, 0, 0, 26 + (int)(22.0f * sinf(t * 0.08f))));
+    sceGuDisable(GU_TEXTURE_2D);
+    if (g_bpVision > 0.01f) {
+        const float a = g_bpVision;
+        bpHFlesh(a, t);
+        bpHSigil(240.0f, 136.0f, 92.0f + 6.0f * sinf(t * 0.05f), a * 0.9f, t * 0.012f);
+        if ((t / 9) % 3 == 0) bpHSkull(60 + (t * 37) % 360, 50 + (t * 53) % 170, 30 + (t % 3) * 8, a);
+        if ((t / 14) % 2 == 0) {
+            const char *w = kBpWhisper[(t / 28) % 6];
+            fontTexOn(); drawText(40 + (t * 29) % 300, 40 + (t * 47) % 190, ((t / 28) & 1) ? 2.0f : 1.0f, bpC(255, 40, 30, (int)(240.0f * a)), w);
+            sceGuDisable(GU_TEXTURE_2D);
+        }
+    }
+    if (g_bpPhaseT < 50 && g_bpSt == BPS_FIGHT) {                   // cambio de fase: golpe de terror
+        const float a = 1.0f - g_bpPhaseT / 50.0f;
+        bpHFlesh(a * 0.8f, t);
+        bpHSkull(240, 130, 70, a);
+        bpHSigil(240.0f, 136.0f, 120.0f, a, -t * 0.02f);
+    }
+    if (g_bpSubT > 0 && g_bpSt == BPS_FIGHT) {                      // subliminal (fase 3): 6 frames sin aviso
+        drawRect(0, 0, SCR_WIDTH, SCR_HEIGHT, bpC(0, 0, 0, 200));
+        if (g_bpSubK == 0) bpHFlesh(0.9f, t);
+        else if (g_bpSubK == 1) bpHSkull(240, 120, 92, 1.0f);
+        else bpHSigil(240.0f, 136.0f, 118.0f, 1.0f, 0.0f);
+    }
 }
 
 // ---------------------------------------------------------------- HUD
@@ -1038,6 +1247,7 @@ static void bp_Hud(BossIO &io) {
         sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
     }
     if (g_bpTint > 0.0f) { bxTint(RGBA(60, 8, 90, (int)(120.0f * g_bpTint))); bxTint(RGBA(0, 0, 0, (int)(70.0f * g_bpTint))); }
+    bpHudHorror();                                           // visiones de muerte, fases, subliminales
     if (g_bpSt == BPS_FIGHT && g_bpTrap) {                   // pantalla distorsionada
         bxTint(RGBA(70, 10, 110, 90 + (int)(40.0f * sinf(g_bpAnim * 0.2f))));
         for (int k = 0; k < 7; ++k) drawRect((int)(8.0f * sinf(g_bpAnim * 0.3f + k)), (g_bpAnim * 3 + k * 41) % 272, SCR_WIDTH, 4 + (k * 7) % 10, RGBA(150, 90, 220, 60));
@@ -1061,17 +1271,6 @@ static void bp_Hud(BossIO &io) {
             sceGuDisable(GU_TEXTURE_2D);
         } else bxDialog(g_bpWho, g_bpLnA, 1);
         break;
-    case BPS_CHOICE: {
-        const char *o[2] = { "Pedir ayuda", "¡Qué agradable perfume tiene!" };
-        bxDialog("BAPHOMET", "¿Por qué estás aquí? Conversemos.", 0);
-        bxChoices("¿Qué le dices?", o, 2, g_bpSel);
-    } break;
-    case BPS_Q: {
-        const BpQ &q = kBpQ[g_bpQ < 3 ? g_bpQ : 2];
-        const char *o[3] = { q.opt[0], q.opt[1], q.opt[2] };
-        bxDialog("BAPHOMET", q.a, 0);
-        bxChoices("Responda:", o, 3, g_bpSel);
-    } break;
     case BPS_PRAY: bpHudPray(); break;
     default: break;
     }
@@ -1099,6 +1298,13 @@ static bool bp_ShotHit(float x, float y, float z, int dmg) {
         if (g_bpCharge > 0) {                                // solo cuenta mientras carga su fuego
             g_bpHp -= (dmg < 1 ? 1 : dmg); g_bpHurt = 6;
             if (g_bpHp <= 0) { g_bpHp = 0; bpEnterKO(); }
+            else {   // CAMBIO DE FASE: corta lo que estaba haciendo, destello de terror y el nuevo arsenal
+                const int ph = (g_bpHp > BP_PH2) ? 1 : (g_bpHp > BP_PH3 ? 2 : 3);
+                if (ph > g_bpPhase) {
+                    g_bpPhase = ph; g_bpPhaseT = 0; bpClearAttacks(); g_bpPause = 110; g_bpSeq = 0; g_lvFlash = 20;
+                    lvMessage(ph == 2 ? "BAPHOMET EMPUÑA SU TRIDENTE" : "LA CUEVA SANGRA. BAPHOMET ENLOQUECE", 170);
+                }
+            }
         } else g_bpBounce = 8;                               // rebota
         return true;
     }
@@ -1106,7 +1312,7 @@ static bool bp_ShotHit(float x, float y, float z, int dmg) {
 }
 static int bp_Blocks() {
     switch (g_bpSt) {
-    case BPS_SAY: case BPS_CHOICE: case BPS_Q: case BPS_MINDIN: case BPS_KOFALL: case BPS_PRAY: case BPS_LIGHT: case BPS_VANISH: return 1;
+    case BPS_SAY: case BPS_MINDIN: case BPS_KOFALL: case BPS_PRAY: case BPS_LIGHT: case BPS_VANISH: return 1;
     case BPS_FIGHT: return g_bpTrap ? 1 : 0;
     default: return 0;
     }

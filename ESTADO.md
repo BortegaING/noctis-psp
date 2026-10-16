@@ -251,6 +251,17 @@ losa del elevador del cielo (TRIANGULO): 10 armas a distancia por ecos + objeto.
 en los pisos (`kMcDmg`, antes todas 2). L + ABAJO = siguiente arma. Guardado: money, questDone
 (objetos), ownedRanged, curRanged (solo en los pilares). Prueba sin pelear: `NOCTIS_TEST_BOTIN 1`.
 
+**BAPHOMET REHECHO (2026-10-16, Benjamin: "no quiero que hable tanto", "imagenes de muerte, carne
+putrefacta, simbolos demoniacos, algo que de terror"):** dialogo de 4 lineas (perfume -> piensas en
+Dios como una luz en el cielo -> "Me has traicionado") y pelea; se quito el cuestionario del perfume
+y DETENER EL TIEMPO lo deja al esfumarse. 150 de vida en 3 fases (100/50): tridente, pentagrama
+invertido en el piso, columnas de fuego en estrella, VISIONES DE MUERTE (carne con gusanos y venas,
+ojo que se abre, calaveras, sigilos, palabras: todo procedural en 2D, bpHudHorror) y en la fase 3
+la cueva sangra + destellos subliminales. Prueba: `NOCTIS_TEST_BPFASE 2/3` (0 al commitear).
+PENDIENTE pedido por Benjamin: Gabriel (piso 4 nuevo, jinetes a 5-8) con su lanza de regalo
+(arma: dano + dano de luz, se recarga con FE = 3 rosarios), fases para los jinetes, serafin que
+controla el cuerpo y pregunta "Pensar en Dios o Rendirse" en cada fase.
+
 ## Como se trabaja
 - Compilar (**solo en el PC**, WSL): `bash tools/build.sh` dentro de
   `wsl -d Ubuntu-24.04 -u root` (desde Git Bash anteponer `MSYS_NO_PATHCONV=1`).
