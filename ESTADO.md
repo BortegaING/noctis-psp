@@ -289,29 +289,53 @@ saca del borde y caen en picada (g_lvNoFallDeath) -> fundido blanco -> piso 5. T
 (arma 10, MC_SPEAR): 40 + 25 de LUZ aparte (estallido), un tiro por carga, se recarga con FE = 3
 rosarios que curen (mcOnRosary). Pruebas: `NOCTIS_TEST_GBFASE 2` (voluntad+lanzas) / `3` (caida).
 
-**EL CEMENTERIO, PISO 2 NUEVO (2026-10-16, src/boss_cementerio.h, prefijo bc_). LOS PISOS CORRIERON:
-Serafin 3, Baphomet 4, Gabriel 5, jinetes 6-9.** Los numeros viven en un enum de levels.h (`LVF_SKY`
-.. `LVF_PALE`, `LVF_LAST = 9`); todo lo que indexaba por piso (LV_BOSS, cinematicas, kTitle, kZone,
-kMcItem/kMcBossEcos/kMcNeed, mascara de objetos 0x3FE) ya usa esos nombres. Arena: pasto, muro de
-+-44, 20 lapidas (4x5), cripta en (0,-30), 4 ANGELES que senalan las tumbas kBcTarget {4,3,17,14},
-12 arboles afuera, llegada en z=26, elevador en (-13,28) (en sx-8,sz-8 caia entre las tumbas y la
-camara se metia en la cabina). ACERTIJO: Triangulo frente a una tumba enciende su vela; una que no
-senalan apaga todas (tinte de frio). Las 4 -> BCS_RISE + lvCineBoss "EL REY ESQUELETO". Rey: 120
-de vida, escala 2.3, levanta oleadas de 4/5/7 siervos (vida 6); con siervos en pie es invulnerable
-("ROMPE A SUS SIERVOS PRIMERO"), sin ellos queda EXPUESTO 400 frames (300 en furia). 66% puas de
-hueso, 33% furia. Muere -> g_lvGiveNecro. Se repite al reentrar. Botin: CORONA DE HUESO, 150 ecos.
+**EL CEMENTERIO, PISO 2 (2026-10-16). LOS PISOS CORRIERON: Serafin 3, Baphomet 4, Gabriel 5,
+jinetes 6-9.** Los numeros viven en un enum de levels.h (`LVF_SKY` .. `LVF_PALE`, `LVF_LAST = 9`);
+todo lo que indexaba por piso (LV_BOSS, cinematicas, kTitle, kZone, kMcItem/kMcBossEcos/kMcNeed,
+mascara de objetos 0x3FE) ya usa esos nombres.
+**v2 esa misma noche (Benjamin: "borra el mini jefe y necromancia, dejemos que el cementerio sea un
+lugar como de ambiente... tipo silent hill").** Se fueron el Rey Esqueleto, el acertijo de las velas,
+la NECROMANCIA, Coraje, R + ARRIBA y el dash al soltar (el dash vuelve a salir AL APRETAR R). Quedan
+en git (7f75c9e). Ahora: `src/cementerio.h` (logica, prefijo bc_, sigue en el contrato de boss_api.h:
+Done = la sirena ya sono) + `src/cementerio_models.h` (modelos y planta, sin motor: compila en la PC).
+Planta: porton en z=30.5, llegada z=26, camino x=-2..2 hasta la capilla (fachada z=-43), cruce en
+z=-12, 4 bloques de tumbas (filas cada 6, columnas cada 4.6, ~16% de huecos), mausoleos en (+-23.5,
+-29), angeles en (+-5.6,-8.2) y (+-4.6,-38), cipreses contra el muro (+-29.5), faroles alternados,
+muro de +-32 x -62..31. Los modelos se arman UNA vez en g_bcPool[24000] (alto + LEJOS: a mas de ~22
+se dibuja la version liviana) y se dibujan por instancia (lvDrawAt) descartando lo que la niebla
+tapa (44 + radio) o queda detras de la camara. NIEBLA 5..44 gris (176,178,180), ceniza (56 copos
+proyectados), grano de pelicula (sprites), zumbido (audioDrone). CINEMATICA (g_cineMode = 1, 900
+frames, X salta): negro + frase, dolly a ras del camino, angel que llora con estatica, grua por
+detras del jugador + "EL CEMENTERIO / PISO 2"; las frases en kBcCine (son los suenos de Benjamin:
+las puede cambiar). LA FIGURA (BC_GHOST): la estatica sube de 34 a 13 de distancia y a 13 se
+desvanece (mezcla GU_FIX); si la pasas sin mirarla, desaparece. EL ANGEL QUE GIRA (BC_TURN): cuando
+no lo miras (dot < 0.55) se orienta hacia ti. LA SIRENA: atrio |x|<7.5, -45<z<-35: campana +
+audioSiren + oscuridad oxidada (g_bcDark) ~7 s; al terminar bc_Done = 1 y sube el elevador en
+(11,-38.5). Audio nuevo en audio.h: audioStatic / audioSiren / audioDrone (lvEnter los apaga).
+Prueba: `NOCTIS_TEST_BCCINE 1` (cementerio como la primera vez aunque goto_floor abra los pisos).
 **EL CUERVO (src/cuervo.h):** en cada piso, en un tocon junto a la llegada, del lado CONTRARIO al
-pilar de guardado. Triangulo = 3 consejos del piso (kCvLines; en el cementerio cambian cuando el
-rey despierta). Guardar/elevador tienen prioridad sobre el cuervo.
-**NECROMANCIA (src/necro.h):** Cuadrado con el poder elegido (g_lvPowerSel; R + ARRIBA cambia, por
-eso el DASH ahora sale al SOLTAR R, y no si R se uso con ARRIBA). 3 esqueletos (g_bcSkelV, ojos
-verdes) te siguen y tiran huesos que PERSIGUEN al blanco (nkTarget = autoapuntado del jefe, ojo
-mas cercano o serafin); 20 s, espera 35 s. 1 de 6: CORAJE con ametralladora (trazadoras, su
-frase va en subtitulo propio nkHud porque los avisos del jefe la tapaban). Al obtenerla sale una
-TARJETA de 3 lineas (lvPowerCard; el lvMessage de una linea se salia de la pantalla). Guardado:
-eventFlags bit 13 (necro) y 14 (poder elegido). HUD: "NECROMANCIA"/"TIEMPO" + barra de espera.
-Pruebas: `NOCTIS_TEST_BCREY 1/2` (rey al entrar / con 15 de vida) y `NOCTIS_TEST_NECRO 1/2` (los dos
-poderes / siempre Coraje), en boss_cementerio.h.
+pilar de guardado. Triangulo = 3 consejos del piso (kCvLines; en el cementerio, bcCuervoLine:
+cambian despues de la sirena). Guardar/elevador tienen prioridad sobre el cuervo.
+**DETALLE GRAFICO (2026-10-16, Benjamin: "usa los bordes o resolucion del serafin... se sigue
+viendo todo muy cuadrado").** `src/gfx_prims.h`: gpBevelBox (aristas biseladas, 90 v), gpArchSlab
+(losa de tope redondo u ojival), gpDome, gpTube, gpPrism, gpRingY/XY, gpWing (el ala del Serafin,
+orientable, con fold/fl/step), gpLoftE (anillos elipticos), gpTatters (jirones), gpTuft (pasto).
+Con eso: HUNTER v2 (cand/hunter.h: 7.6k v, miembros de 8-10 lados, cara con bufanda-mascara,
+capucha con borde, esclavina con jirones, abrigo en 4 PANELES con forro rojo; g_hero[HN_CAP=12000];
+rig.h dibuja colas que flamean y paneles que siguen al muslo), CARRERA PROPIA (anim.h
+hunterRunPose: fase de vuelo, pierna mas adelante que atras, rodilla de vuelo a ~105 grados, sable
+que arrastra; se mezcla con runK), ELEVADOR jaula gotica (f1BuildElevator, ~2.3k), PUNTO DE GUARDADO
+pedestal + cristal que gira, TOCON del cuervo, ORBES enemigos como esferas de luz (eran cubos).
+Guardado y elevador ahora se dibujan CON niebla (asomaban nitidos a traves de la bruma).
+**ELEVADOR AL CIELO (2026-10-16, Benjamin: "necesito volver al piso 0 para comprar con el
+mercader"):** el menu del elevador va de 0 a 12; 0 = EL CIELO (MERCADER). Llegando en el elevador
+(g_lvViaElev) apareces delante de la puerta del elevador del cielo mirando al mercader, no al
+principio del camino. De paso: el nombre del piso guardado en el menu principal (kFl) seguia con
+los numeros viejos y 8 entradas (los pisos 8 y 9 leian fuera del arreglo).
+**VISOR DE MODELOS EN LA PC (tools/modelview):** `python tools/modelview/view.py hero|run|walk|
+models|model NOMBRE|scene` compila dump.cpp con el g++ de WSL usando EL MISMO codigo del juego y
+dibuja con z-buffer en build/mv/*.png (personaje de frente/lado/espalda, ciclo de carrera en 8
+fases, cada modelo del cementerio, la escena con niebla). Sirve para disenar sin el emulador.
 **Arreglo de paso:** varios HUD de jefe (cementerio, Baphomet, Gabriel, rojo) terminan con
 `sceGuEnable(GU_DEPTH_TEST)` y todo el texto que lvHud dibujaba despues (avisos, GUARDAR, mensajes)
 se recortaba contra el piso: lvHud ahora apaga la profundidad tras el HUD del jefe.

@@ -14,6 +14,9 @@ memstick/
 # Python
 __pycache__/
 
+# Visor de modelos (tools/modelview): el binario de la PC
+tools/modelview/dump
+
 # Editor
 .vscode/
 .idea/

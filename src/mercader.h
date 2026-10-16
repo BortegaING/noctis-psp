@@ -27,13 +27,13 @@
 #define MERCADER_H
 
 // objeto de cada jefe, por piso (LVF_*; Gabriel: su "objeto" es la lanza misma)
-static const char *kMcItem[10] = { "", "LÁGRIMA DEL CIELO", "CORONA DE HUESO", "PLUMA DEL SERAFÍN", "FRASCO DE AZUFRE", "LANZA DE GABRIEL",
+static const char *kMcItem[10] = { "", "LÁGRIMA DEL CIELO", "", "PLUMA DEL SERAFÍN", "FRASCO DE AZUFRE", "LANZA DE GABRIEL",
                                    "CORONA DEL CONQUISTADOR", "FILO DE LA GUERRA", "BALANZA ROTA", "CENIZA VERDE" };
-static const int kMcBossEcos[10] = { 0, 60, 150, 200, 250, 350, 300, 350, 400, 500 };   // por jefe (el piso 1 ademas 3 por ojo)
+static const int kMcBossEcos[10] = { 0, 60, 0, 200, 250, 350, 300, 350, 400, 500 };   // por jefe (el piso 1 ademas 3 por ojo)
 static const int MC_SPEAR = 10;      // la lanza de Gabriel (kRanged[10])
 // tienda (indice = arma de kRanged): precio en ecos y objeto que pide (piso del jefe; 0 = ninguno)
 static const int kMcPrice[11] = { 0, 600, 200, 700, 450, 800, 500, 250, 900, 1500, 0 };
-static const int kMcNeed[11]  = { 0,   7,   0,   4,   1,   6,   3,   2,   8,    9, 0 };   // piso del jefe (LVF_*)
+static const int kMcNeed[11]  = { 0,   7,   0,   4,   1,   6,   3,   0,   8,    9, 0 };   // piso del jefe (LVF_*; el cementerio no tiene)
 // dano por bala en los pisos (los jefes tienen 100..160). La pistola sigue en 2; la lanza 40 + luz.
 static const int kMcDmg[11]   = { 2,   9,   4,  20,   2,  17,   5,   3,  12,   30, 40 };
 static const int MC_LIGHT_DMG = 25;  // el estallido de luz de la lanza, aparte del impacto

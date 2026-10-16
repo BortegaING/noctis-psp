@@ -253,6 +253,11 @@ static int g_muArpE[2] = {0,0};
 static int g_muArpV = 0;
 static int g_muArpT = 4000;
 
+// --- EL CEMENTERIO (2026-10-16, "tipo silent hill"): estatica de radio, sirena y zumbido grave ---
+static int g_stLvl = 0, g_stLvlT = 0, g_stLp = 0, g_stHp = 0;      // estatica: nivel Q15 (actual/objetivo) + filtros
+static int g_sirOn = 0, g_sirE = 0; static unsigned int g_sirPh = 0, g_sirLfo = 0;   // sirena: pedido, envolvente Q15, fases
+static int g_drLvl = 0, g_drLvlT = 0; static unsigned int g_drPh[3] = { 0, 0, 0 };  // zumbido: nivel Q15 + 3 osciladores
+
 // --- estado de audioFrame() ---
 static float g_afPrevWalk = 0.0f;
 static int   g_afPrevGrav = 0;
@@ -525,6 +530,48 @@ static inline void auRenderBlock(short *out)
             if (g_gsE <= NOCTIS_ENV_FLOOR) { g_gsE = 0; g_gsEN = 0; }
         }
 
+        // -- estatica de radio: ruido en la banda de la voz (~250 Hz..2.5 kHz) con chasquidos sueltos --
+        g_stLvl += (g_stLvlT - g_stLvl) >> 6;
+        if (g_stLvl > 64) {
+            int lp = g_stLp, hp = g_stHp; const int g = g_stLvl;
+            for (i = 0; i < NOCTIS_AUDIO_CHUNK; ++i) {
+                int n = auNoise();
+                lp += ((n - lp) * 9000) >> 15;
+                hp += ((lp - hp) * 1200) >> 15;
+                int band = lp - hp;
+                const int c = auNoise(); if (c > 32700) band += c;          // ~45 chasquidos por segundo
+                dry[i] += (band * g) >> 16;
+            }
+            g_stLp = lp; g_stHp = hp;
+        }
+        // -- sirena: sube y baja (~320..760 Hz) cada ~4.5 s, con su tercer armonico --
+        if (g_sirOn) g_sirE += (32767 - g_sirE) >> 7; else g_sirE -= (g_sirE >> 8) + 1;
+        if (g_sirE < 0) g_sirE = 0;
+        if (g_sirE > 64) {
+            g_sirLfo += AU_INC(0.22f) * NOCTIS_AUDIO_CHUNK;
+            const float u = 0.5f + 0.5f * (float)g_auSine[g_sirLfo >> 22] / 32767.0f;
+            const unsigned int inc = AU_INC(320.0f + 440.0f * u * u);
+            unsigned int ph = g_sirPh; const int e = g_sirE;
+            for (i = 0; i < NOCTIS_AUDIO_CHUNK; ++i) {
+                const int s = g_auSine[ph >> 22] + (g_auSine[(ph * 3u) >> 22] >> 2);
+                ph += inc;
+                dry[i] += (s * e) >> 17;
+            }
+            g_sirPh = ph;
+        }
+        // -- zumbido grave: dos senoidales de 55 Hz casi iguales (late) y una quinta --
+        g_drLvl += (g_drLvlT - g_drLvl) >> 8;
+        if (g_drLvl > 64) {
+            const unsigned int i0 = AU_INC(55.0f), i1 = AU_INC(55.6f), i2 = AU_INC(82.6f);
+            unsigned int p0 = g_drPh[0], p1 = g_drPh[1], p2 = g_drPh[2]; const int g = g_drLvl;
+            for (i = 0; i < NOCTIS_AUDIO_CHUNK; ++i) {
+                const int s = g_auSine[p0 >> 22] + g_auSine[p1 >> 22] + (g_auSine[p2 >> 22] >> 1);
+                p0 += i0; p1 += i1; p2 += i2;
+                dry[i] += (s * g) >> 19;
+            }
+            g_drPh[0] = p0; g_drPh[1] = p1; g_drPh[2] = p2;
+        }
+
         // -- musica ambient (pad + celesta); no hace nada si esta apagada --
         auMusicChunk(dry);
 
@@ -690,6 +737,12 @@ static inline void audioUpdate(void)
                              g_auBuf[g_auCur]) >= 0) g_auCur ^= 1;
     else g_auPending = 1;
 }
+
+// EL CEMENTERIO. Estatica de radio 0..1 (sube al acercarte a "algo"), sirena (1 = suena, 0 = se
+// apaga sola en ~1 s) y zumbido grave 0..1. Todo se suaviza solo; levels.h los apaga al cambiar de piso.
+static inline void audioStatic(float lvl) { if (lvl < 0.0f) lvl = 0.0f; if (lvl > 1.0f) lvl = 1.0f; g_stLvlT = (int)(lvl * 32767.0f); }
+static inline void audioSiren(int on) { if (on && !g_sirOn) g_sirLfo = 0xC0000000u; g_sirOn = on ? 1 : 0; }   // arranca grave
+static inline void audioDrone(float lvl) { if (lvl < 0.0f) lvl = 0.0f; if (lvl > 1.0f) lvl = 1.0f; g_drLvlT = (int)(lvl * 32767.0f); }
 
 // Musica ambient. 1 = suena (fundido de entrada ~2 s), 0 = fundido de salida ~2 s.
 // Por defecto arranca APAGADA. Apagada no cuesta CPU ni altera la salida.

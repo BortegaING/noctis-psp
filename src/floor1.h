@@ -231,31 +231,57 @@ static int f1BuildWorld(LineVertex *buf, int cap, CityBldg *boxes, int *nBoxes, 
 
 // ---------------------------------------------------------------- elevador
 // Huella 6x6 centrada en origen, alto 8, abierto hacia +Z. y=0 = suelo de la cabina.
+// v2 (2026-10-16, "se sigue viendo todo muy cuadrado"): era una caja de chapa; ahora es una JAULA
+// gotica de hierro: plataforma de piedra biselada con aro de laton, cuatro columnas octogonales,
+// barrotes en tres lados, arco ojival sobre la entrada, techo piramidal con polea y las dos
+// cadenas que suben hasta perderse (de algo cuelga). ~2300 v.
 static int f1BuildElevator(LineVertex *buf, int cap) {
     int i = 0;
-    if (cap < 560) return 0;   // arma 558: con el viejo "< 420" escribia 78 vertices FUERA del arreglo de 480
-    const unsigned int METAL = RGBA(176, 180, 188, 255), DARK = RGBA(96, 100, 110, 255);
-    const unsigned int PANEL = RGBA(150, 156, 166, 255), LIGHT = RGBA(255, 214, 120, 255);
-    swBoxL(buf, i, 0, -0.3f, 0, 6.4f, 6.4f, 0.4f, DARK);                       // plataforma
-    swBoxL(buf, i, 0, 0.1f, 0, 5.6f, 5.6f, 0.12f, RGBA(120, 124, 132, 255));   // piso
-    swBoxL(buf, i, 0, 8.0f, 0, 6.4f, 6.4f, 0.4f, METAL);                       // techo
-    swBoxL(buf, i, 0, 0.1f, -2.85f, 6.0f, 0.3f, 7.9f, PANEL);                  // pared trasera
-    swBoxL(buf, i, -2.85f, 0.1f, 0, 0.3f, 6.0f, 7.9f, PANEL);                  // pared izq
-    swBoxL(buf, i, 2.85f, 0.1f, 0, 0.3f, 6.0f, 7.9f, PANEL);                   // pared der
-    // marco de la puerta (+Z): dos postes + dintel
-    swBoxL(buf, i, -2.8f, 0.1f, 2.9f, 0.45f, 0.45f, 7.9f, METAL);
-    swBoxL(buf, i, 2.8f, 0.1f, 2.9f, 0.45f, 0.45f, 7.9f, METAL);
-    swBoxL(buf, i, 0, 7.2f, 2.9f, 6.0f, 0.45f, 0.8f, METAL);
-    // rieles verticales en la pared trasera, umbral y pasamanos
-    swBoxL(buf, i, -1.4f, 0.1f, -2.6f, 0.2f, 0.2f, 7.1f, DARK);
-    swBoxL(buf, i, 1.4f, 0.1f, -2.6f, 0.2f, 0.2f, 7.1f, DARK);
-    swBoxL(buf, i, 0, 0.1f, 2.9f, 5.2f, 0.4f, 0.12f, DARK);
-    swBoxL(buf, i, 0, 3.2f, -2.55f, 4.6f, 0.2f, 0.2f, METAL);
-    // luz indicadora sobre el dintel + brillo
-    swBoxLit(buf, i, 0, 6.3f, 2.95f, 0.9f, 0.3f, 0.5f, LIGHT, LIGHT);
-    addBall(buf, i, 0, 6.55f, 3.15f, 0.22f, 0.22f, 0.15f, 3, 6, RGBA(255, 240, 190, 255));
-    // luz de techo interior
-    swBoxLit(buf, i, 0, 7.7f, 0, 1.6f, 1.6f, 0.12f, RGBA(255, 246, 220, 255), RGBA(255, 246, 220, 255));
+    if (cap < 2500) return 0;
+    const unsigned int IRON = RGBA(58, 60, 68, 255), IRONL = RGBA(104, 108, 120, 255);
+    const unsigned int STONE = RGBA(118, 116, 112, 255), STONED = RGBA(80, 78, 76, 255);
+    const unsigned int BRASS = RGBA(176, 142, 72, 255), LIGHT = RGBA(255, 214, 120, 255);
+    gpBevelBox(buf, i, 0.0f, -0.4f, 0.0f, 6.6f, 6.6f, 0.5f, 0.12f, STONE, STONED);                // plataforma
+    gpRingY(buf, i, 0.0f, 0.11f, 0.0f, 2.2f, 0.16f, 0.04f, 20, BRASS);                             // aro de laton en el piso
+    gpRingY(buf, i, 0.0f, 0.11f, 0.0f, 0.5f, 0.10f, 0.04f, 12, BRASS);
+    const float cx[4] = { -2.9f, 2.9f, 2.9f, -2.9f }, cz[4] = { -2.9f, -2.9f, 2.9f, 2.9f };
+    for (int k = 0; k < 4; ++k) {                                                                 // columnas
+        gpBevelBox(buf, i, cx[k], 0.1f, cz[k], 0.62f, 0.62f, 0.32f, 0.06f, IRONL, IRON);
+        gpPrism(buf, i, cx[k], 0.42f, cz[k], 0.22f, 0.18f, 7.2f, 8, 0.0f, IRON, IRONL, 0);
+        gpRingY(buf, i, cx[k], 1.0f, cz[k], 0.23f, 0.06f, 0.10f, 8, BRASS);
+        gpRingY(buf, i, cx[k], 7.3f, cz[k], 0.21f, 0.06f, 0.10f, 8, BRASS);
+    }
+    for (int w = 0; w < 3; ++w) {                                                                 // barrotes: atras, izq, der
+        for (int k = 1; k <= 8; ++k) {
+            const float t = -2.9f + 5.8f * k / 9.0f;
+            const float x = (w == 0) ? t : (w == 1 ? -2.9f : 2.9f), z = (w == 0) ? -2.9f : t;
+            gpTube(buf, i, x, 0.1f, z, x, 7.6f, z, 0.035f, 0.035f, 4, IRON, IRONL);
+        }
+        for (int r = 0; r < 3; ++r) {
+            const float y = (r == 0) ? 1.0f : (r == 1 ? 3.2f : 7.3f);
+            const float x0 = (w == 0) ? -2.9f : (w == 1 ? -2.9f : 2.9f), z0 = (w == 0) ? -2.9f : -2.9f;
+            const float x1 = (w == 0) ? 2.9f : x0, z1 = (w == 0) ? -2.9f : 2.9f;
+            gpTube(buf, i, x0, y, z0, x1, y, z1, r == 1 ? 0.07f : 0.05f, r == 1 ? 0.07f : 0.05f, 4, r == 1 ? BRASS : IRON, r == 1 ? BRASS : IRONL);
+        }
+    }
+    {   // arco ojival de hierro sobre la entrada (+Z)
+        const float R = 4.1f, r = 2.9f, ca = (R - r) / R, amax = acosf(ca), apex = R * sinf(amax), hs = 7.6f - apex;
+        float px = 2.9f, py = hs;
+        for (int k = 1; k <= 7; ++k) {
+            const float a = amax * k / 7, x = r - R + R * cosf(a), y = hs + R * sinf(a);
+            gpTube(buf, i, px, py, 2.9f, x, y, 2.9f, 0.09f, 0.09f, 4, IRONL, IRONL);
+            gpTube(buf, i, -px, py, 2.9f, -x, y, 2.9f, 0.09f, 0.09f, 4, IRONL, IRONL);
+            px = x; py = y;
+        }
+    }
+    gpBevelBox(buf, i, 0.0f, 7.6f, 0.0f, 6.8f, 6.8f, 0.42f, 0.10f, IRONL, IRON);                   // techo
+    gpPrism(buf, i, 0.0f, 8.02f, 0.0f, 3.7f, 0.35f, 1.7f, 4, 0.7854f, IRON, IRONL, 0);
+    gpRingXY(buf, i, 0.0f, 10.2f, 0.0f, 0.55f, 0.12f, 0.16f, 12, BRASS);                         // polea
+    gpTube(buf, i, 0.0f, 9.7f, 0.0f, 0.0f, 10.2f, 0.0f, 0.07f, 0.07f, 4, IRONL, IRONL);
+    for (int s = -1; s <= 1; s += 2)                                                              // cadenas
+        gpTube(buf, i, s * 0.55f, 10.2f, 0.0f, s * 0.55f, 46.0f, 0.0f, 0.05f, 0.05f, 4, IRON, IRON);
+    addBall(buf, i, 0.0f, 7.25f, 2.95f, 0.24f, 0.24f, 0.16f, 3, 8, LIGHT);                          // luz sobre la entrada
+    gpPrism(buf, i, 0.0f, 7.2f, 0.0f, 0.8f, 0.8f, 0.1f, 4, 0.7854f, RGBA(255, 246, 220, 255), RGBA(255, 246, 220, 255), 0);
     return i;
 }
 

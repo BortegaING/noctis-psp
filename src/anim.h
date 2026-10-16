@@ -96,11 +96,11 @@ static HunterPose hunterPose(float walkPhase, float idleT, float speed01, int gr
     // ---- amplitudes (calibradas para un personaje de 1.8 de alto) ----
     const float BOB_Y = 0.055f;            // 5.5 cm de sube-baja por paso
     const float BOB_X = 0.030f;            // 3 cm de vaiven lateral
-    const float LEAN  = 0.20f;             // ~11.5 grados de inclinacion a full velocidad
+    const float LEAN  = 0.13f;             // ~7.5 grados a full velocidad caminando (correr tiene su ciclo: hunterRunPose)
     const float ROLL  = 0.055f;            // ~3.2 grados de balanceo
     const float YAWSW = 0.10f;             // ~5.7 grados de contragiro del torso
     const float LEG   = 0.62f;             // ~35 grados de apertura por pierna
-    const float KNEE  = 0.85f;             // ~49 grados de flexion maxima en vuelo
+    const float KNEE  = 0.75f;             // ~43 grados de flexion maxima en vuelo (0.85 levantaba mucho el pie de atras)
     const float ARM   = 0.45f;             // ~26 grados de braceo
     const float NOD   = 0.07f;             // ~4 grados de cabeceo
 
@@ -222,6 +222,62 @@ static HunterPose hunterPose(float walkPhase, float idleT, float speed01, int gr
 // El headNod se suma al pitch con un factor chico: sin esqueleto, la cabeza no
 // se puede mover sola (ver receta), asi que se usa como micro-pitch del cuerpo.
 // ----------------------------------------------------------------------------
+// ============================================================================
+// CORRER (2026-10-16, Benjamin: "mejora el diseno al momento de correr, se ve muy raro").
+// Antes la carrera era la marcha AGRANDADA (piernas x1.45, brazos x1.85, torso +0.2): la pierna
+// de atras se iba casi horizontal, el sable barria hacia adelante, el cuerpo entero se zambullia
+// y ningun pie tocaba el suelo. Una carrera de verdad es otro ciclo:
+//   - hay FASE DE VUELO: el cuerpo esta mas ALTO en el aire y mas BAJO a mitad del apoyo (al
+//     reves que caminando, donde sube al pasar la pierna);
+//   - la pierna va mucho mas ADELANTE que atras (0.70 adelante / 0.46 atras, medido en el mundo);
+//   - la rodilla de la pierna en vuelo se dobla FUERTE (talon a la cola, ~105 grados) y llega
+//     casi estirada al apoyo; la de apoyo cede ~40 grados y empuja;
+//   - brazos con el codo a ~80 grados, cortos y rapidos; el del sable casi quieto, la hoja atras;
+//   - el torso se inclina ~11 grados y la cabeza compensa para seguir mirando al frente.
+// Misma fase que la marcha (apoyo IZQ en PI/2, DER en 3PI/2): se mezclan sin saltos con runK.
+// Los angulos de pierna se dan RELATIVOS AL CUERPO: como el torso pivota en la cadera, para que
+// la pierna quede a w (mundo) hay que pedirle w + lean.
+// ============================================================================
+struct HunterRunPose {
+    float bobY, lean, roll, yawSway;
+    float legL, legR, kneeL, kneeR;
+    float armL, armR, elbowL, elbowR, outL, outR;
+    float head, tailL, tailR, skirtZ, flapL, flapR;
+};
+static HunterRunPose hunterRunPose(float p, float idleT)
+{
+    const float PI_ = 3.14159265f, LEAN = 0.19f;
+    HunterRunPose o;
+    // pierna en el mundo: adelante al llegar (late swing), vertical a mitad del apoyo, atras al despegar
+    const float wL = 0.12f + 0.58f * sinf(p + 0.97f), wR = 0.12f + 0.58f * sinf(p + PI_ + 0.97f);
+    o.legL = wL + LEAN; o.legR = wR + LEAN;
+    // rodilla: base + cesion del apoyo (centrada a mitad del apoyo) + el recogido del vuelo
+    auto knee = [&](float q) {
+        float st = cosf(q - 2.45f); st = st > 0.0f ? st * st * st : 0.0f;
+        float sw = cosf(q - 5.30f); sw = sw > 0.0f ? sw * sqrtf(sw) : 0.0f;
+        return 0.28f + 0.45f * st + 1.55f * sw;
+    };
+    o.kneeL = knee(p); o.kneeR = knee(p + PI_);
+    // centro de masa: abajo a mitad de cada apoyo, arriba en cada vuelo (2 por ciclo). La base
+    // negativa es lo que baja la cadera para que la pierna doblada siga tocando el suelo.
+    o.bobY = -0.055f - 0.045f * cosf(2.0f * (p - 2.45f));
+    o.lean = LEAN + 0.025f * cosf(2.0f * (p - 2.45f));
+    o.roll = -0.030f * sinf(p);
+    o.yawSway = 0.11f * sinf(p);                        // hombros contra la pelvis
+    // brazos: el de la pistola bombea (opuesto a su pierna), el del sable apenas
+    const float a = sinf(p + 0.35f);
+    o.armL = -0.62f * a; o.elbowL = 1.30f - 0.22f * a; o.outL = 0.14f;
+    o.armR = -0.48f + 0.22f * a; o.elbowR = 0.22f; o.outR = 0.30f;   // brazo atras y casi estirado: la hoja ARRASTRA
+    o.head = -0.6f * LEAN + 0.04f * cosf(2.0f * p) + 0.01f * sinf(idleT);
+    // abrigo: las colas atras, flameando a ritmo doble y cada una a su tiempo; los paneles
+    // laterales siguen a su muslo
+    o.tailL = -0.26f - 0.10f * sinf(2.0f * p + 0.6f);
+    o.tailR = -0.26f - 0.10f * sinf(2.0f * p + 2.1f);
+    o.skirtZ = 0.05f * sinf(p);
+    o.flapL = 0.55f * o.legL - 0.16f; o.flapR = 0.55f * o.legR - 0.16f;
+    return o;
+}
+
 static inline float hunterPitchRad(const HunterPose &o) { return -(o.lean + 0.35f * o.headNod); }
 static inline float hunterRollRad (const HunterPose &o) { return -o.roll; }
 

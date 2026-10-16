@@ -2,8 +2,10 @@
 
 Estado: APROBADA por Benjamin (2026-10-16): "la historia me gustó mucho, déjala así".
 Actualizada el mismo día con lo que se construyó y pidió después (Baphomet, Gabriel, el Serafín
-que posee, el mercader, el botín y la lanza) y con el piso nuevo de la tarde: EL CEMENTERIO, el
-cuervo guía y la necromancia (los pisos de después corrieron un número).
+que posee, el mercader, el botín y la lanza) y con el piso nuevo de la tarde: EL CEMENTERIO y el
+cuervo guía (los pisos de después corrieron un número). Esa noche el cementerio dejó de tener jefe:
+ahora es un piso de AMBIENTE, estilo Silent Hill, con su cinemática (el Rey Esqueleto, la
+necromancia y Coraje se quitaron).
 
 **Contexto real:** el juego son los sueños de Benjamin, literalmente lo que sueña. Algunos
 fueron premoniciones. Cada piso de la Torre es uno de esos sueños.
@@ -42,7 +44,8 @@ algunos se cumplen. Arriba, en el piso 12, está tu cuerpo dormido. Abajo, Bapho
 **Piso 0 — El cielo (el hub).** Losas sobre el vacío, nubes de tormenta y engranajes colosales
 que giran a lo lejos. Aquí vive **EL MERCADER** (robot oxidado con un farol, en la losa del
 elevador): "Nadie firmó la orden de parar. Sigo vendiendo." Cambia ecos y objetos de jefe por
-armas. Desde aquí se sube a cada piso en el elevador.
+armas. Desde aquí se sube a cada piso en el elevador, y desde cualquier piso el elevador te trae
+de vuelta (opción 0, EL CIELO): llegas a la losa del elevador, junto al mercader.
 
 **Piso 1 — El campo.** Un campo enorme con un árbol gigante, rodeado de muros pintados de
 cielo. De pronto **el cielo se apaga** y los muros se llenan de **30 ojos** incrustados que te
@@ -51,24 +54,24 @@ Botín: LÁGRIMA DEL CIELO.
 
 **EL CUERVO (en todos los pisos).** Un cuervo negro posado en un tocón, junto a donde llegas.
 No pide nada: aconseja. Con Triángulo te dice tres cosas del piso (cómo se abre, qué mirar,
-qué no hacer). En el cementerio sus consejos cambian cuando despierta el rey.
+qué no hacer). En el cementerio sus consejos cambian cuando suena la sirena.
 
-**Piso 2 — El cementerio. El Rey Esqueleto.** Un día nublado, lápidas en hileras, cuatro
-**ángeles de piedra** en las esquinas, una cripta al fondo y árboles verdes alrededor del muro.
-"Los ángeles de piedra no rezan. Señalan." Cada ángel apunta con el brazo a una tumba: hay que
-encender las velas de esas cuatro (Triángulo frente a la tumba). Una equivocada y **un frío te
-recorre**: se apagan todas. Con las cuatro encendidas la tierra tiembla y sale de su cripta
-**EL REY ESQUELETO, señor de las tumbas**, con su corona.
-El rey levanta a sus **siervos** (4, 5 y 7 por oleada): mientras quede uno en pie, tus balas
-rebotan en él. Rotos todos, queda **EXPUESTO** un rato y vuelve a levantarlos. Al 66% alza su
-cetro y hace brotar **púas de hueso** donde estás; al 33% se enfurece.
-Al desmoronarse te deja su poder: **NECROMANCIA** ("Nuevo poder: Necromancia. Puedes invocar
-esqueletos para pelear contigo"). Cuadrado levanta 3 esqueletos de ojos verdes que te siguen y
-le tiran huesos a lo que estés peleando, 20 s (espera 35 s).
-**Easter egg:** 1 de cada 6 veces, en vez de los esqueletos llega **CORAJE, EL PERRO COBARDE**
-con una ametralladora: "¡LAS COSAS QUE TENGO QUE HACER POR AMOR!". Al terminar, vuelve a casa
-corriendo.
-Botín: CORONA DE HUESO. El acertijo y el rey vuelven cada vez que entras (se juntan ecos).
+**Piso 2 — El cementerio (piso de ambiente, sin jefe).** Niebla espesa, ceniza que cae, un
+zumbido grave y el grano de una película vieja. Al llegar la primera vez, una **cinemática**:
+en negro, "Siempre vuelvo a este lugar."; la cámara avanza a ras del camino entre la niebla
+("La niebla no deja ver dónde termina."), se acerca a un **ángel que llora** con las manos en la
+cara mientras sube un ruido de radio ("Alguien me espera al otro lado.") y se eleva por detrás
+de ti hasta ver el cementerio: **EL CEMENTERIO — PISO 2**.
+Un portón de piedra con arco de hierro, un camino de grava hasta una **capilla** al fondo, cuatro
+bloques de tumbas (lápidas redondas y ojivales, cruces, cruces celtas, obeliscos, tumbas con
+reja), dos mausoleos, cipreses, árboles secos y faroles encendidos.
+- **La figura:** una mujer de negro entre las tumbas del este. Mientras te acercas, la estática
+  sube; cuando llegas cerca, ya no está. Si pasas de largo sin mirarla, tampoco.
+- **El ángel que se da vuelta:** el de la esquina del cruce empieza de espaldas. Cada vez que
+  dejas de mirarlo y vuelves a mirar, te está mirando.
+- **La sirena:** en el atrio de la capilla dobla la campana, suena la sirena y todo se oscurece
+  y se oxida unos segundos. Después vuelve la niebla y sube el elevador junto a la capilla.
+Sin botín: aquí no se pelea.
 
 **Piso 3 — La escalera blanca. El Serafín (Ofanim).** Una escalera de luz hacia un ojo gigante
 con aros llenos de ojos y seis alas. "Has subido muy alto, soñador... Acepta tu muerte, y
@@ -161,25 +164,29 @@ la Torre a 13 pisos (el "Puesto 12" de los robots pasaría a ser el 13).
 ---
 
 ## 4. Controles que la historia usa
-- **R sin L:** dash, sale al SOLTAR R (atraviesa los golpes esquivables). **Stick 3 s:** correr.
+- **R sin L:** dash (atraviesa los golpes esquivables). **Stick 3 s:** correr.
 - **L:** apuntar. **R con L:** disparar. **L + abajo:** cambiar de arma.
-- **Triángulo:** hablar (con el cuervo también), guardar, comerciar, encender velas, rezar el
-  rosario (y cargar la fe de la lanza).
-- **Cuadrado:** el poder elegido: NECROMANCIA (desde el Rey Esqueleto) o DETENER EL TIEMPO
-  (desde Baphomet). **R + arriba:** cambiar de poder (por eso el dash sale al soltar R).
+- **Triángulo:** hablar (con el cuervo también), guardar, comerciar, rezar el rosario (y cargar
+  la fe de la lanza).
+- **Cuadrado:** DETENER EL TIEMPO (desde Baphomet).
 
 ## 5. Notas técnicas
-- Código: Serafín y ojos en `src/levels.h`; jefes en `src/boss_*.h` (cementerio `bc_`, Baphomet
-  `bp_`, Gabriel `gb_`, jinetes `bw_ br_ bk_ bv_`); botín, mercader y lanza en `src/mercader.h`;
-  el cuervo en `src/cuervo.h`; la necromancia y Coraje en `src/necro.h`.
+- Código: Serafín y ojos en `src/levels.h`; jefes en `src/boss_*.h` (Baphomet `bp_`, Gabriel
+  `gb_`, jinetes `bw_ br_ bk_ bv_`); el cementerio en `src/cementerio.h` (`bc_`, la lógica) y
+  `src/cementerio_models.h` (los modelos y dónde va cada cosa); botín, mercader y lanza en
+  `src/mercader.h`; el cuervo en `src/cuervo.h`. El Rey Esqueleto y la necromancia quedaron en
+  la historia de git (commit 7f75c9e).
+- Detalle gráfico (2026-10-16): `src/gfx_prims.h` (cajas biseladas, lápidas, cúpulas, alas de
+  plumas, lofts elípticos, jirones, pasto) para que nada se vea "cuadrado"; el personaje v2 en
+  `src/cand/hunter.h` + `src/rig.h` (abrigo en 4 paneles) y la carrera propia en `src/anim.h`.
+  Los modelos se diseñan en la PC con `tools/modelview/view.py` (sin abrir el emulador).
 - Los pisos tienen nombre en `levels.h` (`LVF_SKY`, `LVF_EYES`, `LVF_CEMETERY`, `LVF_SERAPH`,
   `LVF_CAVE`, `LVF_GABRIEL`, `LVF_WHITE`, `LVF_RED`, `LVF_BLACK`, `LVF_PALE`, `LVF_LAST`): un piso
   nuevo se agrega ahí y no hay que cazar números sueltos.
-- Guardado: `eventFlags` (piso, pisos abiertos, rosario, tiempo, opciones; bit 13 necromancia,
-  bit 14 poder elegido); `money` = ecos;
+- Guardado: `eventFlags` (piso, pisos abiertos, rosario, tiempo, opciones; los bits 13 y 14 eran
+  de la necromancia y quedaron libres); `money` = ecos;
   `questDone` = objetos de jefe; `ownedRanged`/`curRanged` = armas; `upgrades` = fe de la lanza.
   Las premoniciones irán en `invResLo`/`invResHi`.
 - Banderas de prueba (siempre en 0 al commitear): `NOCTIS_TEST_BOTIN`, `NOCTIS_TEST_BPFASE`,
-  `NOCTIS_TEST_GBFASE`, `NOCTIS_TEST_BSFASE`, `NOCTIS_TEST_BCREY` (1 = el rey despierta al entrar;
-  2 = además con 15 de vida) y `NOCTIS_TEST_NECRO` (1 = los dos poderes desde el principio;
-  2 = además siempre sale Coraje).
+  `NOCTIS_TEST_GBFASE`, `NOCTIS_TEST_BSFASE` y `NOCTIS_TEST_BCCINE` (1 = el cementerio se juega
+  como la primera vez aunque el piso esté abierto: cinemática, sirena y elevador).

@@ -50,6 +50,7 @@ static int   g_lvFlash = 0;                // destello blanco (luz del serafin)
 static float g_lvElevX = 0, g_lvElevY = 0, g_lvElevZ = 0; static int g_lvElevOn = 0; static float g_lvElevRise = 1.0f;
 static float g_lvSaveX = 0, g_lvSaveY = 0, g_lvSaveZ = 0;
 static float g_lvSpawnX = 0, g_lvSpawnY = 0, g_lvSpawnZ = 0;
+static int   g_lvViaElev = 0;              // 1 = se llego en el elevador (al cielo: aparecer junto al elevador y el mercader)
 static int   g_lvNear = 0;                 // 0 nada, 1 guardado, 2 elevador
 // camara (main la carga despues de sceGumLookAt): proyeccion, autoapuntado y "lo miras?"
 static float g_lvEye[3], g_lvFwd[3], g_lvRight[3], g_lvUp[3];
@@ -58,7 +59,10 @@ static float g_lvEye[3], g_lvFwd[3], g_lvRight[3], g_lvUp[3];
 static LineVertex __attribute__((aligned(16))) g_lvGeo[12000];   // el piso 1 grande usa ~9.2k (+ suelo aparte); los jefes siguen pidiendo 9000
 static LineVertex __attribute__((aligned(16))) g_lvFloorV[2600];  // suelo del piso 1: una tira de triangulos
 static int g_lvFloorN = 0;
-static LineVertex __attribute__((aligned(16))) g_lvElevV[600];
+static LineVertex __attribute__((aligned(16))) g_lvElevV[2600];   // v2: jaula gotica (~2.3k)
+static LineVertex __attribute__((aligned(16))) g_lvSaveV[1100];   // punto de guardado: pedestal con su cuenco
+static LineVertex __attribute__((aligned(16))) g_lvCrysV[120];    // y el cristal que flota encima
+static int g_lvSaveN = 0, g_lvCrysN = 0;
 static LineVertex __attribute__((aligned(16))) g_lvEyeV[560];
 static LineVertex __attribute__((aligned(16))) g_lvEyeFarV[200];   // el mismo ojo, liviano, para lejos
 static LineVertex __attribute__((aligned(16))) g_lvSerBody[900];
@@ -156,11 +160,7 @@ static float lvDist2(float ax, float ay, float az, float bx, float by, float bz)
     static int P##_Blocks() { return 0; } \
     static int P##_Done() { return 1; } \
     static float P##_Shake() { return 0.0f; }
-#if __has_include("boss_cementerio.h")
-#include "boss_cementerio.h" // 2 EL CEMENTERIO: lapidas, angeles de piedra, el acertijo y el Rey Esqueleto
-#else
-LV_STUB(bc)
-#endif
+#include "cementerio.h"      // 2 EL CEMENTERIO: niebla, angeles que lloran, la capilla (piso de AMBIENTE, sin jefe)
 #if __has_include("boss_baphomet.h")
 #include "boss_baphomet.h"   // 4 LA CUEVA: Baphomet, fogata, conversacion, Padre Nuestro
 #else
@@ -237,17 +237,32 @@ static void mcTrackBoss(float x, float z); static void mcBossCheck(int done, int
 static void mcEnterFloor(int floor); static int mcUpdate(float px, float py, float pz, int edge);
 static int mcNear(); static void mcOpen(); static int mcBlocks(); static void mcOnRosary();
 static void mcDraw(float px, float py, float pz); static void mcHud();
-// ---- EL CUERVO (guia de cada piso, src/cuervo.h) y la NECROMANCIA (src/necro.h): incluidos al final ----
+// ---- EL CUERVO (guia de cada piso, src/cuervo.h): incluido al final ----
 static void cvInit(); static void cvEnterFloor(float sx, float sy, float sz); static int cvUpdate(float px, float py, float pz, int edge);
 static int cvNear(); static void cvOpen(); static int cvBlocks(); static void cvDraw(float px, float py, float pz); static void cvHud();
-static void nkBuildDog(); static void nkSummon(float px, float py, float pz); static void nkUpdate(float px, float py, float pz);
-static void nkDraw(); static void nkClear(); static int nkReady(); static float nkCdFrac(); static void nkHud();
 
 static void lvInit(uint32_t flags) {
-    g_lvElevN = f1BuildElevator(g_lvElevV, 600);
+    g_lvElevN = f1BuildElevator(g_lvElevV, 2600);
+    {   // PUNTO DE GUARDADO (v2): era una caja oscura con un cubo encima. Ahora un pedestal gotico de dos
+        // escalones, fuste octogonal, capitel y un cuenco de bronce; el cristal flota y gira encima.
+        int i = 0; LineVertex *b = g_lvSaveV;
+        const unsigned int ST = RGBA(112, 116, 126, 255), STD = RGBA(70, 72, 80, 255), BR = RGBA(150, 118, 64, 255);
+        gpBevelBox(b, i, 0.0f, 0.0f, 0.0f, 1.9f, 1.9f, 0.28f, 0.07f, ST, STD);
+        gpBevelBox(b, i, 0.0f, 0.28f, 0.0f, 1.4f, 1.4f, 0.24f, 0.06f, ST, STD);
+        gpPrism(b, i, 0.0f, 0.52f, 0.0f, 0.40f, 0.33f, 1.9f, 8, 0.3927f, STD, ST, 0);
+        gpRingY(b, i, 0.0f, 0.70f, 0.0f, 0.41f, 0.07f, 0.10f, 8, ST);
+        gpBevelBox(b, i, 0.0f, 2.42f, 0.0f, 1.05f, 1.05f, 0.22f, 0.05f, ST, ST);
+        gpTube(b, i, 0.0f, 2.64f, 0.0f, 0.0f, 2.96f, 0.0f, 0.22f, 0.56f, 12, BR, cp_scale(BR, 1.25f));   // cuenco
+        gpRingY(b, i, 0.0f, 2.96f, 0.0f, 0.56f, 0.06f, 0.06f, 12, cp_scale(BR, 1.3f));
+        g_lvSaveN = i;
+        i = 0; LineVertex *c = g_lvCrysV;   // cristal: dos piramides hexagonales (la de arriba mas alta)
+        gpPrism(c, i, 0.0f, -0.42f, 0.0f, 0.0f, 0.30f, 0.42f, 6, 0.0f, RGBA(90, 150, 220, 255), RGBA(170, 220, 255, 255), 0);
+        gpPrism(c, i, 0.0f, 0.0f, 0.0f, 0.30f, 0.0f, 0.62f, 6, 0.0f, RGBA(170, 220, 255, 255), RGBA(236, 248, 255, 255), 0);
+        g_lvCrysN = i;
+    }
     g_lvEyeN = f1BuildEye(g_lvEyeV, 560);
     g_lvEyeFarN = f1BuildEyeFar(g_lvEyeFarV, 200);
-    mcInit(); cvInit(); nkBuildDog();
+    mcInit(); cvInit();
     g_lvSerBodyN = f2BuildSeraphBody(g_lvSerBody, 900);
     g_lvSerWingN = f2BuildSeraphWing(g_lvSerWing, 420);
     const float rr[3] = { 5.5f, 6.5f, 7.5f };
@@ -255,7 +270,7 @@ static void lvInit(uint32_t flags) {
     sceKernelDcacheWritebackAll();
     // La partida guardada se RECUERDA pero no se aplica: el lobby arranca siempre en el cielo, y
     // CARGAR PARTIDA la aplica (JUGAR empieza de cero). Las opciones si se aplican ya.
-    g_lvFloor = 0; g_lvUnlocked = 1; g_rosary = 0; g_lvPowerTime = 0; g_lvPowerNecro = 0; g_lvPowerSel = 0;
+    g_lvFloor = 0; g_lvUnlocked = 1; g_rosary = 0; g_lvPowerTime = 0;
     if (flags & 0x80000000u) {                 // partida del mundo nuevo: piso + desbloqueados + mejoras
         g_svHas = 1; g_svFlags = flags;
         g_optMusic = !((flags >> 10) & 1u); g_optShake = !((flags >> 11) & 1u); g_optFps = !((flags >> 12) & 1u);
@@ -267,20 +282,19 @@ static void lvApplySave() {
     const uint32_t f = g_svFlags;
     g_lvUnlocked = (int)((f >> 4) & 15u); if (g_lvUnlocked < 1) g_lvUnlocked = 1;
     g_rosary = (f >> 8) & 1u;
-    g_lvPowerTime = (f >> 9) & 1u;
-    g_lvPowerNecro = (f >> 13) & 1u; g_lvPowerSel = (int)((f >> 14) & 1u);
+    g_lvPowerTime = (f >> 9) & 1u;   // (los bits 13 y 14 fueron de la necromancia, que se quito: quedan libres)
 }
 static int lvSavedFloor() { int fl = (int)(g_svFlags & 15u); return (fl > LVF_LAST) ? 0 : fl; }
 static uint32_t lvFlags() {
     return 0x80000000u | (uint32_t)g_lvFloor | ((uint32_t)g_lvUnlocked << 4)
          | ((uint32_t)(g_rosary ? 1 : 0) << 8) | ((uint32_t)(g_lvPowerTime ? 1 : 0) << 9)
-         | ((uint32_t)(g_optMusic ? 0 : 1) << 10) | ((uint32_t)(g_optShake ? 0 : 1) << 11) | ((uint32_t)(g_optFps ? 0 : 1) << 12)
-         | ((uint32_t)(g_lvPowerNecro ? 1 : 0) << 13) | ((uint32_t)(g_lvPowerSel & 1) << 14);
+         | ((uint32_t)(g_optMusic ? 0 : 1) << 10) | ((uint32_t)(g_optShake ? 0 : 1) << 11) | ((uint32_t)(g_optFps ? 0 : 1) << 12);
 }
 
 // entra a un piso: geometria, colision, spawn, estado de enemigos
 static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, float &camYaw) {
     g_lvFloor = floor; g_lvT = 0; g_lvMenu = 0; g_prison = 0; g_bsCharge = 0; g_lvNoFallDeath = 0;
+    audioStatic(0.0f); audioDrone(0.0f); audioSiren(0);                  // el sonido del cementerio no te sigue
     mcEnterFloor(floor);                                                // botin pendiente fuera; mercader solo en el cielo
     audioTrackStop(); audioMusic(g_optMusic);                           // cada piso arranca con la musica tranquila
     for (int k = 0; k < 16; ++k) g_orbs[k].life = 0;
@@ -291,8 +305,13 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
         SwLayout S; swLayout(0, 0, S);
         g_lvSaveX = 8.0f; g_lvSaveY = S.top; g_lvSaveZ = 7.0f;
         g_lvSpawnX = 0.0f; g_lvSpawnY = S.top; g_lvSpawnZ = 0.0f;
+        if (g_lvViaElev) {   // VOLVER AL CIELO (Benjamin: "necesito volver al piso 0 para comprar con el mercader"):
+            g_lvSpawnX = g_lvElevX; g_lvSpawnY = g_lvElevY; g_lvSpawnZ = g_lvElevZ + 13.0f;  // delante de la puerta (a 7 la camara quedaba dentro de la jaula)
+            heroYaw = 3.14159f; camYaw = 3.14159f;                                           // mirando al mercader
+        }
         g_swPcx = 0x7FFFFFF;                                  // fuerza a rehacer colision del cielo
         swUpdate(g_lvSpawnX, g_lvSpawnZ, 99);
+        g_lvViaElev = 0;
     } else if (floor == 1) {
         int nb = 0;
         g_lvGeoN = f1BuildWorld(g_lvGeo, 12000, g_city, &nb, 255);
@@ -330,8 +349,8 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
         // aparece al vencer al jefe. ADELANTE-izquierda del spawn: pegado al jugador (sx+6) la camara
         // quedaba casi dentro de la cabina y sus triangulos salian como poligonos negros gigantes
         g_lvElevX = sx - 8.0f; g_lvElevY = sy; g_lvElevZ = sz - 8.0f;
-        // el cementerio: ahi caia entre las tumbas y la camara se metia en la cabina al buscar las velas
-        if (floor == LVF_CEMETERY) { g_lvElevX = sx - 13.0f; g_lvElevZ = sz + 2.0f; }
+        // el cementerio: sube junto a la capilla, despues de la sirena
+        if (floor == LVF_CEMETERY) { g_lvElevX = BC_ELEV_X; g_lvElevZ = BC_ELEV_Z; }
         g_lvElevOn = (g_lvUnlocked > floor); g_lvElevRise = g_lvElevOn ? 1.0f : 0.0f;
     } else {
         int nb = 0;
@@ -350,17 +369,17 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
     // del piso (hasta 16 KB) puede llegar viejo al dibujarse en la PSP real (el emulador no lo nota)
     sceKernelDcacheWritebackAll();
     px = g_lvSpawnX; py = g_lvSpawnY + 0.2f; pz = g_lvSpawnZ;
-    cvEnterFloor(g_lvSpawnX, g_lvSpawnY, g_lvSpawnZ); nkClear();
-    if (NOCTIS_TEST_NECRO) { g_lvPowerNecro = 1; g_lvPowerTime = 1; }   // PRUEBA: los dos poderes desde el principio
+    cvEnterFloor(g_lvSpawnX, g_lvSpawnY, g_lvSpawnZ);
     g_swSafeX = px; g_swSafeY = py; g_swSafeZ = pz;
     // CINEMATICA de presentacion del jefe (si todavia no lo venciste)
     g_cine = 0;
+    if (floor == LVF_CEMETERY && bcFirstTime()) { bcCineStart(); g_lvElevOn = 0; }   // la primera vez: la de Silent Hill
     if (floor == LVF_SERAPH && g_lvUnlocked <= LVF_SERAPH) lvCineStart(g_bsX, g_bsY, g_bsZ, px, pz, "EL SERAFÍN", "OFANIM");
     if (floor == LVF_GABRIEL) {   // GABRIEL: la camara abajo, mirandolo bajar del cielo con lanza y escudo
         lvCineStart(0.0f, 40.0f, -125.0f, px, pz, "EL ARCÁNGEL GABRIEL", "LA IRA DEL CIELO");
         g_cineRk = 1.7f; g_cineZm = 0.4f; g_cineH0 = -30.0f;
     } else if (floor >= LVF_CAVE) {   // estos jefes pelean cada vez que entras: la presentacion va siempre (X la salta)
-        // (el cementerio no: su rey se presenta solo cuando despierta, desde su modulo)
+        // (el cementerio no: su cinematica es otra, la arma su modulo en bc_Enter)
         static const char *kT[6] = { "BAPHOMET", "", "EL JINETE BLANCO", "EL JINETE ROJO", "EL JINETE NEGRO", "EL JINETE PÁLIDO" };
         static const char *kS[6] = { "EL QUE ESPERA JUNTO AL FUEGO", "", "CONQUISTA", "GUERRA", "HAMBRE", "MUERTE. HADES LO SIGUE" };
         float t[3] = { 0.0f, 6.0f, 0.0f };
@@ -476,7 +495,7 @@ static void lvCineBoss(float fx, float fy, float fz, float rk, float zm, float h
     g_cineRk = rk; g_cineZm = zm; g_cineH0 = h0;
 }
 static void lvCineStart(float fx, float fy, float fz, float px, float pz, const char *title, const char *sub) {
-    g_cine = LV_CINE; g_cineFx = fx; g_cineFy = fy; g_cineFz = fz;
+    g_cine = LV_CINE; g_cineMode = 0; g_cineFx = fx; g_cineFy = fy; g_cineFz = fz;
     g_cineA0 = atan2f(px - fx, pz - fz);                     // arranca del lado del jugador
     g_cineTitle = title; g_cineSub = sub;
     g_cineRk = 1.0f; g_cineZm = 1.0f; g_cineH0 = 0.0f;        // quien necesite otro encuadre lo pone despues
@@ -492,6 +511,7 @@ static int lvCineCam(ScePspFVector3 &eye, ScePspFVector3 &ctr) {
         return 1;
     }
     if (g_cine <= 0) return 0;
+    if (g_cineMode == 1) return bc_CineCam(eye, ctr);         // la del cementerio (otra coreografia)
     const float t = 1.0f - (float)g_cine / LV_CINE;          // 0 -> 1
     const float s = t * t * (3.0f - 2.0f * t);               // suave al empezar y al terminar
     const float a = g_cineA0 + 1.3f * s, R = (36.0f - 18.0f * s * g_cineZm) * g_cineRk, h = 12.0f - 7.0f * s + g_cineH0;
@@ -577,8 +597,9 @@ static void lvMenuDraw() {
             drawText(42, y0 + k * 32, 1.75f, c, kMain[k]);
         }
         if (g_svHas) {                                                // de que piso es la partida guardada
-            static const char *kFl[8] = { "EL CIELO", "PISO 1: EL CAMPO", "PISO 2: LA ESCALERA", "PISO 3: LA CUEVA",
-                                          "PISO 4: JINETE BLANCO", "PISO 5: JINETE ROJO", "PISO 6: JINETE NEGRO", "PISO 7: JINETE PÁLIDO" };
+            static const char *kFl[LVF_LAST + 1] = { "EL CIELO", "PISO 1: EL CAMPO", "PISO 2: EL CEMENTERIO", "PISO 3: LA ESCALERA",
+                                          "PISO 4: LA CUEVA", "PISO 5: EL ARCÁNGEL", "PISO 6: JINETE BLANCO", "PISO 7: JINETE ROJO",
+                                          "PISO 8: JINETE NEGRO", "PISO 9: JINETE PÁLIDO" };
             drawText(44, y0 + 32 + 17, 1.0f, RGBA(150, 140, 110, 255), kFl[lvSavedFloor()]);
         }
         drawText(36, 248, 1.0f, RGBA(120, 126, 140, 255), "X ACEPTAR");
@@ -627,16 +648,9 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
     if (g_timeCd > 0) --g_timeCd;
     if (g_lvGiveTimePower) { g_lvGiveTimePower = 0; g_lvPowerTime = 1; }
     if (g_menu) { g_menuPx = px; g_menuPy = py; g_menuPz = pz; lvMenuUpdate(edge, camYaw); return; }          // lobby: nada mas se mueve
-    if (g_lvGiveNecro) {
-        g_lvGiveNecro = 0; g_lvPowerNecro = 1; g_lvPowerSel = 1;
-        lvPowerCard("NUEVO PODER: NECROMANCIA", "PUEDES INVOCAR ESQUELETOS PARA PELEAR CONTIGO", "CUADRADO: INVOCAR     R + ARRIBA: CAMBIAR DE PODER", 420);
-    }
-    if ((edge & PSP_CTRL_SQUARE) && g_lvFade == 0 && !g_cine) {   // CUADRADO: el poder elegido
-        if (g_lvPowerNecro && (g_lvPowerSel == 1 || !g_lvPowerTime)) nkSummon(px, py, pz);
-        else if (g_lvPowerTime) {
-            if (g_timeCd == 0) { g_lvTimeStop = 120; g_timeCd = 900; lvMessage("TIEMPO DETENIDO", 90); }
-            else lvMessage("EL TIEMPO AÚN NO RESPONDE", 50);
-        }
+    if ((edge & PSP_CTRL_SQUARE) && g_lvPowerTime && g_lvFade == 0 && !g_cine) {   // CUADRADO: detener el tiempo
+        if (g_timeCd == 0) { g_lvTimeStop = 120; g_timeCd = 900; lvMessage("TIEMPO DETENIDO", 90); }
+        else lvMessage("EL TIEMPO AÚN NO RESPONDE", 50);
     }
     if (g_lvMsgT > 0) --g_lvMsgT;
     if (g_lvCardT > 0) --g_lvCardT;
@@ -656,24 +670,24 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
     if (g_cine > 0) {
         if (edge & PSP_CTRL_CROSS) g_cine = 1;
         --g_cine;
+        if (g_cineMode == 1) bcCineTick();                                // su sonido (estatica, zumbido)
         if (g_lvFloor == 1) for (int k = 0; k < 30; ++k) { LvEye &e = g_eyes[k]; if (e.delay > 0) --e.delay; lvEyePos(e, (float)g_lvT, e.x, e.y, e.z); }
         return;
     }
     // ---- menu del elevador ----
     if (g_lvMenu) {
-        if (edge & PSP_CTRL_UP)   { if (--g_lvMenuSel < 1) g_lvMenuSel = 12; }
-        if (edge & PSP_CTRL_DOWN) { if (++g_lvMenuSel > 12) g_lvMenuSel = 1; }
+        if (edge & PSP_CTRL_UP)   { if (--g_lvMenuSel < 0) g_lvMenuSel = 12; }   // 0 = EL CIELO (el mercader)
+        if (edge & PSP_CTRL_DOWN) { if (++g_lvMenuSel > 12) g_lvMenuSel = 0; }
         if (edge & PSP_CTRL_CIRCLE) g_lvMenu = 0;
         if ((edge & PSP_CTRL_SELECT) && g_lvUnlocked < LVF_LAST) { g_lvUnlocked = LVF_LAST; lvMessage("PRUEBAS: PISOS 1-9 ABIERTOS", 90); }   // atajo de desarrollo
         if (edge & PSP_CTRL_CROSS) {
             if (g_lvMenuSel > g_lvUnlocked) lvMessage("ESE PISO SIGUE CERRADO", 90);
             else if (g_lvMenuSel > LVF_LAST) lvMessage("PISO EN CONSTRUCCIÓN", 90);
             else if (g_lvMenuSel == g_lvFloor) g_lvMenu = 0;
-            else { g_lvMenu = 0; g_lvFade = LV_FADE; g_lvFadeTo = g_lvMenuSel; g_lvFadeWhite = 0; }
+            else { g_lvMenu = 0; g_lvFade = LV_FADE; g_lvFadeTo = g_lvMenuSel; g_lvFadeWhite = 0; g_lvViaElev = 1; }
         }
         return;
     }
-    nkUpdate(px, py, pz);                                        // los muertos (o Coraje) pelean contigo
     if (mcUpdate(px, py, pz, edge)) return;                      // botin a recoger; tienda abierta = consume los botones
     if (cvUpdate(px, py, pz, edge)) return;                      // hablando con el cuervo
 
@@ -898,7 +912,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
         {   // botin: se sigue al jefe mientras vive y se suelta donde cae (cada vez que cae)
             float bt[3]; const int done = LV_BOSS(Done);
             if (!done && LV_BOSS(AimTarget, bt)) mcTrackBoss(bt[0], bt[2]);
-            mcBossCheck(done, g_lvFloor, g_lvSpawnY);
+            if (g_lvFloor != LVF_CEMETERY) mcBossCheck(done, g_lvFloor, g_lvSpawnY);   // el cementerio no tiene jefe ni botin
         }
         if (g_lvFloor == LVF_GABRIEL && LV_BOSS(Done) && g_lvFade == 0) {   // GABRIEL: caes con el a la tierra
             if (g_lvUnlocked <= LVF_GABRIEL) g_lvUnlocked = LVF_GABRIEL + 1;
@@ -999,14 +1013,18 @@ static void lvDraw(float px, float py, float pz) {
             sceGuDisable(GU_BLEND); sceGuEnable(GU_DEPTH_TEST);
         }
     }
+    // guardado y elevador CON niebla: sin ella asomaban nitidos a traves de la bruma (el cementerio
+    // la tiene espesa y el elevador se veia desde la entrada)
+    if (g_lvFloor >= 1) sceGuEnable(GU_FOG);
     // punto de guardado: pilar oscuro con un cristal frio que gira y respira (no en el lobby)
     if (!g_menu) {
         const float b = 0.5f + 0.5f * sinf(g_lvT * 0.06f);
-        lvBox(g_lvSaveX, g_lvSaveY, g_lvSaveZ, 1.2f, 2.6f, RGBA(52, 58, 70, 255));
-        lvBox(g_lvSaveX, g_lvSaveY + 3.2f + 0.3f * b, g_lvSaveZ, 0.8f, 0.8f, RGBA(150 + (int)(80 * b), 230, 250, 255));
+        lvDrawAt(g_lvSaveV, g_lvSaveN, g_lvSaveX, g_lvSaveY, g_lvSaveZ, 0.0f, 0.0f, 1.0f);
+        lvDrawAt(g_lvCrysV, g_lvCrysN, g_lvSaveX, g_lvSaveY + 3.55f + 0.22f * b, g_lvSaveZ, g_lvT * 0.025f, 0.0f, 1.0f);
     }
     // elevador (sube del suelo al aparecer)
     if (g_lvElevOn) lvDrawAt(g_lvElevV, g_lvElevN, g_lvElevX, g_lvElevY - 9.0f * (1.0f - g_lvElevRise), g_lvElevZ, 0.0f, 0.0f, 1.0f);
+    sceGuDisable(GU_FOG);
     // ojos
     if (g_lvFloor == 1 && g_eyesOn) {
         for (int k = 0; k < 30; ++k) {
@@ -1077,10 +1095,24 @@ static void lvDraw(float px, float py, float pz) {
         sceGuDepthMask(GU_FALSE); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
     }
     if (lvBossFloor()) lvBossVoidDraw(px, py, pz);   // jefe, enemigos y efectos del piso
-    // orbes
-    for (int k = 0; k < 16; ++k) if (g_orbs[k].life > 0) lvBox(g_orbs[k].x, g_orbs[k].y - 0.35f, g_orbs[k].z, 0.7f, 0.7f, g_orbs[k].col);
+    // orbes: esferas de luz (eran cubos): halo translucido + nucleo blanco, con mezcla normal para que
+    // se vean tambien sobre el piso blanco del Serafin (la luz sumada ahi desaparece)
+    {
+        int any = 0; for (int k = 0; k < 16; ++k) if (g_orbs[k].life > 0) { any = 1; break; }
+        if (any) {
+            sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDepthMask(GU_TRUE);
+            for (int k = 0; k < 16; ++k) {
+                const LvOrb &o = g_orbs[k]; if (o.life <= 0) continue;
+                const unsigned int c = o.col & 0x00FFFFFFu;
+                bcGlow(o.x, o.y, o.z, 1.05f, c | 0x90000000u, c);
+                bcGlow(o.x, o.y, o.z, 0.55f, c | 0xFF000000u, c | 0x60000000u);
+                bcGlow(o.x, o.y, o.z, 0.26f, RGBA(255, 252, 240, 255), RGBA(255, 250, 230, 120));
+            }
+            sceGuDepthMask(GU_FALSE); sceGuDisable(GU_BLEND);
+        }
+    }
     mcDraw(px, py, pz);                                      // botin en el suelo + el mercader (cielo)
-    cvDraw(px, py, pz); nkDraw();                            // el cuervo; los muertos invocados
+    cvDraw(px, py, pz);                                      // el cuervo
     sceGumLoadIdentity();
 }
 
@@ -1192,7 +1224,7 @@ static void lvSetCamera(const ScePspFVector3 &eye, const ScePspFVector3 &ctr, co
 
 static void lvHud(int aiming, float hp, float hpMax) {
     if (g_menu) { lvMenuDraw(); return; }                         // lobby: solo el menu
-    if (g_cine > 0 && g_lvFade == 0) { lvCineHud(); return; }     // cinematica: franjas + tarjeta
+    if (g_cine > 0 && g_lvFade == 0) { if (g_cineMode == 1) bc_CineHud(); else lvCineHud(); return; }   // cinematica
     (void)hp; (void)hpMax;
     sceGuDisable(GU_DEPTH_TEST); sceGuDisable(GU_TEXTURE_2D);
     sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
@@ -1240,10 +1272,9 @@ static void lvHud(int aiming, float hp, float hpMax) {
         sceGuDisable(GU_TEXTURE_2D); sceGuDisable(GU_DEPTH_TEST);
     }
     if (g_lvTimeStop > 0) drawRect(0, 0, SCR_WIDTH, SCR_HEIGHT, RGBA(70, 90, 140, 70));   // tiempo detenido: velo frio
-    if (g_lvPowerTime || g_lvPowerNecro) {   // el poder de CUADRADO y su espera
-        const int necro = g_lvPowerNecro && (g_lvPowerSel == 1 || !g_lvPowerTime);
-        drawRect(8, 72, 96, 12, RGBA(10, 12, 18, 190));
-        drawRect(10, 80, (int)(92.0f * (1.0f - (necro ? nkCdFrac() : g_timeCd / 900.0f))), 2, necro ? RGBA(130, 230, 150, 255) : RGBA(150, 190, 255, 255));
+    if (g_lvPowerTime) {   // el poder de CUADRADO y su espera
+        drawRect(8, 72, 84, 12, RGBA(10, 12, 18, 190));
+        drawRect(10, 80, (int)(80.0f * (1.0f - g_timeCd / 900.0f)), 2, RGBA(150, 190, 255, 255));
     }
     if (g_rosary) {
         drawRect(8, 58, 84, 12, RGBA(10, 12, 18, 190));
@@ -1273,11 +1304,7 @@ static void lvHud(int aiming, float hp, float hpMax) {
     // textos
     fontTexOn();
     if (g_rosary) drawText(12, 59, 1.0f, g_lvNoHeal ? RGBA(120, 110, 100, 255) : RGBA(236, 216, 160, 255), "ROSARIO");
-    if (g_lvPowerTime || g_lvPowerNecro) {   // el poder de CUADRADO (R + ARRIBA lo cambia)
-        const int necro = g_lvPowerNecro && (g_lvPowerSel == 1 || !g_lvPowerTime);
-        const unsigned int c = necro ? (nkReady() ? RGBA(150, 240, 160, 255) : RGBA(90, 120, 96, 255)) : RGBA(170, 200, 255, 255);
-        drawText(12, 73, 1.0f, c, necro ? "NECROMANCIA" : "TIEMPO");
-    }
+    if (g_lvPowerTime) drawText(12, 73, 1.0f, RGBA(170, 200, 255, 255), "TIEMPO");
     if (dialog) {
         drawText(40, 198, 1.0f, RGBA(236, 206, 120, 255), "SERAFÍN");
         if (g_bs == BS_TALK) { drawText(40, 214, 1.0f, RGBA(240, 240, 246, 255), g_bsAsk ? kBsPhase[(g_bsPhase >= 3) ? 1 : 0][g_bsLine & 1] : kBsLines[g_bsLine]);
@@ -1289,8 +1316,8 @@ static void lvHud(int aiming, float hp, float hpMax) {
     }
     if (g_lvMenu) {
         drawText(198, 40, 1.0f, RGBA(236, 206, 120, 255), "ELEVADOR");
-        static const char *kNames[13] = { "", "EL CAMPO", "EL CEMENTERIO", "LA ESCALERA", "LA CUEVA", "EL ARCÁNGEL", "JINETE BLANCO", "JINETE ROJO", "JINETE NEGRO", "JINETE PÁLIDO", "???", "???", "???" };
-        for (int f = 1; f <= 12; ++f) {
+        static const char *kNames[13] = { "EL CIELO (MERCADER)", "EL CAMPO", "EL CEMENTERIO", "LA ESCALERA", "LA CUEVA", "EL ARCÁNGEL", "JINETE BLANCO", "JINETE ROJO", "JINETE NEGRO", "JINETE PÁLIDO", "???", "???", "???" };
+        for (int f = 0; f <= 12; ++f) {
             char b[32]; int n = 0;
             b[n++] = (f == g_lvMenuSel) ? '>' : ' '; b[n++] = ' ';
             if (f >= 10) b[n++] = '1'; b[n++] = (char)('0' + f % 10); b[n++] = ' '; b[n++] = ' ';
@@ -1298,13 +1325,12 @@ static void lvHud(int aiming, float hp, float hpMax) {
             while (*nm && n < 30) b[n++] = *nm++;
             b[n] = 0;
             const unsigned int c = (f <= g_lvUnlocked) ? (f == g_lvMenuSel ? RGBA(255, 255, 255, 255) : RGBA(200, 206, 220, 255)) : RGBA(110, 114, 126, 255);
-            drawText(166, 46 + f * 14, 1.0f, c, b);
+            drawText(166, 56 + f * 13, 1.0f, c, b);
         }
         drawText(160, 226, 1.0f, RGBA(150, 158, 176, 255), "X SUBIR   O SALIR");
     }
     mcHud();                                                  // ecos, aviso del mercader y la tienda
     cvHud();                                                  // el cuervo
-    nkHud();                                                  // la frase de Coraje
     fontTexOn();                                              // mcHud la deja apagada
     if (g_lvNear && !g_lvMenu && !dialog && g_lvFade == 0 && !mcBlocks() && !cvBlocks())
         drawText(150, 172, 1.0f, RGBA(230, 236, 246, 255), g_lvNear == 1 ? "TRIÁNGULO: GUARDAR" : "TRIÁNGULO: ELEVADOR");
@@ -1338,12 +1364,3 @@ static void lvHud(int aiming, float hp, float hpMax) {
 
 #include "mercader.h"   // botin de los jefes + EL MERCADER (usa lo de arriba)
 #include "cuervo.h"     // el cuervo: guia de cada piso
-#include "necro.h"      // la necromancia (y Coraje)
-static int nkReady() { return g_nkCd <= 0; }
-static float nkCdFrac() { return g_nkCd > 0 ? g_nkCd / (float)NK_CD : 0.0f; }
-// R + ARRIBA: el siguiente poder que tengas
-static void lvCyclePower() {
-    if (!(g_lvPowerTime && g_lvPowerNecro)) { if (g_lvPowerTime || g_lvPowerNecro) lvMessage("POR AHORA TIENES UN SOLO PODER", 60); return; }
-    g_lvPowerSel ^= 1;
-    lvMessage(g_lvPowerSel ? "PODER: NECROMANCIA" : "PODER: DETENER EL TIEMPO", 80);
-}

@@ -250,6 +250,7 @@ static void addPyramid(LineVertex *buf, int &i, float cx, float baseY, float cz,
 
 // ===== VISOR DE CANDIDATOS DE PERSONAJE (comparar 4 disenos, off-screen) =====
 #include "char_prims.h"
+#include "gfx_prims.h"     // primitivas de DETALLE (biseles, losas, cupulas, alas, lofts elipticos): el nivel del Serafin
 #include "cand/aya.h"
 #include "cand/hunter.h"
 #include "cand/ff.h"
@@ -671,7 +672,7 @@ static int g_chUpperV = 0, g_chHeadV = 0, g_chLegV = 0, g_chArmV = 0, g_chSwordV
 // PERSONAJE DEL JUEGO: el HUNTER (encapuchado gotico, elegido por Benjamin).
 // Construido con las primitivas organicas (cilindros conicos + elipsoides +
 // abrigo hasta la rodilla con piernas a la vista), NO cubos.
-static LineVertex __attribute__((aligned(16))) g_hero[6000];
+static LineVertex __attribute__((aligned(16))) g_hero[HN_CAP];   // hunter v2: ~7.6k (12000 de margen)
 static LineVertex __attribute__((aligned(16))) g_vm[640];   // viewmodel del arma (1ra persona)
 static int g_heroV = 0;
 static void buildHero() {
@@ -1229,7 +1230,7 @@ int main(void) {
     // ---- DASH (R sin apuntar; con L, R dispara): rafaga corta en la direccion del nub ----
     const float DASH_SPEED = 0.55f;                  // 5x el paso: ~8 unidades contando la salida
     const int   DASH_FRAMES = 10, DASH_CD = 36;      // dura 1/6 s; se recarga en 0.6 s
-    int   dashT = 0, dashCD = 0, dashFx = 0, prevR = 0, rMod = 0, prevUpR = 0;   // rMod: R se uso con ARRIBA (cambiar de poder): no hay dash
+    int   dashT = 0, dashCD = 0, dashFx = 0, prevR = 0;
     float dashX = 0.0f, dashZ = 0.0f;                // direccion del dash (unitaria, en XZ)
     float dashSX = 0.0f, dashSY = 0.0f, dashSZ = 0.0f, dashEX = 0.0f, dashEY = 0.0f, dashEZ = 0.0f;   // estela
     // ---- CORRER: el nub sostenido 3 s hacia un mismo lado (Benjamin) ----
@@ -1400,21 +1401,14 @@ int main(void) {
             velZ += (mvZ * spdTarget - velZ) * FP_ACCEL;
             if (mvLen < 0.001f && grounded) { velX -= velX * FP_STOP; velZ -= velZ * FP_STOP; }
             const float strafeIn = 0.0f;   // ya no hay strafe: el personaje encara lo que camina
-            // -- DASH: R sin L, AL SOLTARLO (desde 2026-10-16: R + ARRIBA cambia de poder, y si el dash
-            // saliera al apretar, cambiar de poder te haria dashear). Hacia donde apunta el nub, o al
-            // frente si esta suelto. Pisa la velocidad DASH_FRAMES frames y sale al paso.
+            // -- DASH: R sin L, al APRETARLO. Hacia donde apunta el nub, o al frente si esta suelto. Pisa la
+            // velocidad DASH_FRAMES frames y sale al paso (sin frenazo ni deslizamiento largo).
             // Mientras dura, los golpes esquivables (orbes, ondas, embestidas, flechas, guadana...)
             // te atraviesan: g_lvDashInv, contrato en boss_api.h. Sirve en el aire.
             const int dashing = (dashT > 0) ? 1 : 0;
             {
-                const int rNow = (pad.Buttons & PSP_CTRL_RTRIGGER) ? 1 : 0, upNow = (pad.Buttons & PSP_CTRL_UP) ? 1 : 0;
-                const int lNow = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
-                if (rNow && !prevR) rMod = 0;
-#if NOCTIS_SKYWORLD
-                if (rNow && !lNow && upNow && (!prevUpR || !prevR)) { rMod = 1; lvCyclePower(); }   // R + ARRIBA: cambiar de poder
-#endif
-                prevUpR = upNow;
-                if (!rNow && prevR && !rMod && !lNow && dashCD == 0 && dashT == 0) {
+                const int rNow = (pad.Buttons & PSP_CTRL_RTRIGGER) ? 1 : 0;
+                if (rNow && !prevR && !(pad.Buttons & PSP_CTRL_LTRIGGER) && dashCD == 0 && dashT == 0) {
                     float dx = mvX, dz = mvZ, l = mvLen;
                     if (l < 0.2f) { dx = sinf(heroYaw); dz = -cosf(heroYaw); l = 1.0f; }
                     dashX = dx / l; dashZ = dz / l; dashT = DASH_FRAMES; dashCD = DASH_CD; dashFx = 24;
