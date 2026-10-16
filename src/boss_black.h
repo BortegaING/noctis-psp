@@ -20,7 +20,7 @@
 static const float BK_PI = 3.14159265f, BK_TAU = 6.2831853f;
 static const float BK_CX0 = 0.0f, BK_CZ0 = -4.0f, BK_RADIUS = 22.0f;  // circulo por donde trota (centro inicial)
 static const float BK_SPEED = 0.20f, BK_WAVE_V = 0.5f, BK_WAVE_MAX = 60.0f;
-static const int   BK_HPMAX = 100;
+static const int   BK_HPMAX = 170;     // era 100. Fases: 66% monedas en abanico, 33% voraz (furia)
 
 static const unsigned int BK_GOLD   = RGBA(222, 178,  78, 255);
 static const unsigned int BK_GOLDD  = RGBA(138, 100,  36, 255);
@@ -38,7 +38,7 @@ enum { BK_INTRO, BK_FIGHT, BK_CALL, BK_WAIT, BK_ROLL, BK_RESULT, BK_DYING, BK_DE
 
 // ---------------------------------------------------------------- estado
 static int   bk_st = BK_INTRO, bk_stT = 0, bk_t = 0, bk_anim = 0;
-static int   bk_hp = BK_HPMAX, bk_done = 0, bk_built = 0, bk_ph2Said = 0;
+static int   bk_hp = BK_HPMAX, bk_done = 0, bk_built = 0, bk_ph2Said = 0, bk_fase = 1;
 static float bk_bx = 0, bk_by = 0, bk_bz = -26, bk_yaw = 0, bk_ang = 3.14159f, bk_rad = 72.0f;
 static float bk_cx = 0, bk_cz = -4;                          // centro del circulo (sigue al jugador, despacio)
 static float bk_spd = 0, bk_ph = 0, bk_dir = 1.0f, bk_amp = 0, bk_bob = 0, bk_alpha = 0;
@@ -323,7 +323,7 @@ static void bk_Enter(BossIO &io, LineVertex *geo, int geoCap, int *geoN,
     sceKernelDcacheWritebackAll();
 
     bk_st = BK_INTRO; bk_stT = 0; bk_t = 0; bk_anim = 0;
-    bk_hp = BK_HPMAX; bk_done = 0; bk_ph2Said = 0;
+    bk_hp = BK_HPMAX; bk_done = 0; bk_ph2Said = 0; bk_fase = 1;
     bk_cx = BK_CX0; bk_cz = BK_CZ0;
     bk_ang = BK_PI; bk_rad = 72.0f; bk_dir = 1.0f; bk_spd = 0.0f; bk_ph = 0.0f; bk_amp = 0.0f; bk_bob = 0.0f;
     bk_bx = bk_cx + sinf(bk_ang) * bk_rad; bk_bz = bk_cz + cosf(bk_ang) * bk_rad; bk_by = 0.0f;
@@ -422,8 +422,12 @@ static void bk_Update(BossIO &io) {
     }
     // -------------------------------------------------------------- pelea
     case BK_FIGHT: {
-        const int ph2 = (bk_hp <= 50);
-        if (ph2 && !bk_ph2Said) { bk_ph2Said = 1; lvMessage("EL HAMBRE SE VUELVE VORAZ", 120); }
+        {   // FASES (tambien cuenta el dano de los dados): 66% monedas en abanico, 33% voraz
+            const int ph = (bk_hp * 3 > BK_HPMAX * 2) ? 1 : (bk_hp * 3 > BK_HPMAX ? 2 : 3);
+            if (ph > bk_fase) { bk_fase = ph; g_lvFlash = 14; if (ph == 2) lvMessage("EL JINETE NEGRO ARROJA SUS MONEDAS", 170); }
+        }
+        const int ph2 = (bk_fase >= 3);
+        if (ph2 && !bk_ph2Said) { bk_ph2Said = 1; lvMessage("EL HAMBRE SE VUELVE VORAZ", 150); }
         const int busy = (bk_windT > 0 || bk_waveT > 0 || bk_orbs > 0);
         // el circulo de trote sigue al jugador despacio: no hay rincon donde quedarse quieto
         {
@@ -467,6 +471,12 @@ static void bk_Update(BossIO &io) {
         // monedas y plumas oscuras
         if (bk_orbs > 0 && --bk_orbT <= 0) {
             float wx, wy, wz; bk_Loc2World(0.9f, 6.6f, -0.8f, wx, wy, wz);
+            if (bk_fase >= 2) {   // MONEDAS EN ABANICO (desde el 66%)
+                g_lvOrbFree = 1;
+                for (int k = -1; k <= 1; ++k)
+                    lvFireOrb(wx, wy, wz, io.px + k * 3.5f, io.py + 1.7f, io.pz + k * 1.5f, 0.32f, (bk_orbs & 1) ? RGBA(210, 160, 40, 255) : RGBA(92, 52, 150, 255));
+                g_lvOrbFree = 0;
+            } else
             lvFireOrb(wx, wy, wz, io.px, io.py + 1.7f, io.pz, 0.30f, (bk_orbs & 1) ? RGBA(210, 160, 40, 255) : RGBA(92, 52, 150, 255));
             --bk_orbs; bk_orbT = 48;
         }
@@ -543,7 +553,7 @@ static void bk_Update(BossIO &io) {
             bk_beamTT = 0.0f;
             if (bk_hp <= 0) { bk_StartDeath(); break; }
             bk_st = BK_FIGHT; bk_stT = 0; bk_raiseT = 0.0f;
-            bk_diceT = (bk_hp <= 50 ? 640 : 900) + (int)(bk_Rand() * 240.0f);
+            bk_diceT = (bk_fase >= 3 ? 640 : 900) + (int)(bk_Rand() * 240.0f);
             bk_atkT = 110;
             if (bk_Rand() < 0.5f) bk_dir = -bk_dir;
         }
@@ -1006,6 +1016,7 @@ static void bk_Hud(BossIO &io) {
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
     bk_HudGlows();
     bk_HudDice();
+    if (bk_fase >= 3 && bk_st == BK_FIGHT) bxRage(bk_t);
     if (bk_st != BK_INTRO || bk_t > 30) bxBossBar("JINETE NEGRO", bk_hp, BK_HPMAX);
     sceGuDisable(GU_TEXTURE_2D);
 }

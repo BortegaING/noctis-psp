@@ -25,12 +25,12 @@ static const float BW_TAU = 6.2831853f;
 static const float BW_R   = 40.0f;        // radio de la plataforma (arena grande: hay que correr y esquivar)
 static const float BW_S   = 2.0f;         // escala del caballo
 static const float BW_BY  = 3.4f;         // altura del centro del torso en el modelo (origen de giro)
-static const int   BW_HP  = 100;
+static const int   BW_HP  = 170;     // era 100. Fases: 66% arco de tres flechas, 33% furia
 static const float BW_MASH_NEED = 6.0f;   // recorrido del analogo para despejarse
 static const float BW_ZR   = 3.6f;        // radio de cada zona de la lluvia de flechas
 static const float BW_HITR = 4.6f * BW_S; // radio (generoso) del blanco: caballo + jinete
 static const float BW_CENY = 1.1f * BW_S; // el centro del blanco, sobre el torso del caballo
-#define BW_NARR  16
+#define BW_NARR  24
 #define BW_NZONE 16
 
 // paleta
@@ -75,7 +75,8 @@ static float bwRnd(int a, int b) {
     h = (h ^ (h >> 13)) * 1274126177u; h ^= (h >> 16);
     return (float)(h & 0xFFFF) / 65535.0f;
 }
-static int bwPhase() { return bwHp > 66 ? 0 : (bwHp > 33 ? 1 : 2); }
+static int bwPhase() { return bwHp * 3 > BW_HP * 2 ? 0 : (bwHp * 3 > BW_HP ? 1 : 2); }
+static int bwPhSaid = 0;   // ultima fase anunciada
 
 // ---------------------------------------------------------------- transformacion del caballo
 // modelo local (mira a -Z, centro del torso en y = BW_BY) -> mundo. Igual que bwDrawModel.
@@ -411,7 +412,7 @@ static void bwShoot(BossIO &io, float lateral) {
 static void bwEndAttack() {
     const int ph = bwPhase();
     bwAtk = 0; bwAtkT = 0;
-    bwAtkCd = (ph == 0 ? 170 : (ph == 1 ? 130 : 95)) + (int)(bwRand() * 50.0f);
+    bwAtkCd = (ph == 0 ? 170 : (ph == 1 ? 130 : 75)) + (int)(bwRand() * 50.0f);   // furioso: casi sin respiro
 }
 static void bwStartAttack(BossIO &io) {
     const int ph = bwPhase();
@@ -458,7 +459,7 @@ static void bwAttackStep(BossIO &io) {
             bwPull = (float)(e % iv) / (float)iv;
             if (e % iv == 0 && e / iv < N) {
                 bwShoot(io, 0.0f);
-                if (ph >= 2) bwShoot(io, (e / iv & 1) ? 6.0f : -6.0f);
+                if (ph >= 1) { bwShoot(io, 5.0f); bwShoot(io, -5.0f); }   // ARCO DE TRES FLECHAS (desde el 66%)
                 bwPull = 0.0f;
             }
             if (e > N * iv + 10) bwEndAttack();
@@ -517,7 +518,7 @@ static void bwPlace(float spdMul, int init) {
     bwRoll = bwDir * 0.17f * (0.4f + 0.6f * k) + 0.04f * sinf(bwGal);
 }
 static void bwReset() {
-    bwT = 0; bwAnim = 0; bwHp = BW_HP; bwState = 0; bwDeadT = 0; bwHurt = 0; bwIFr = 0;
+    bwT = 0; bwAnim = 0; bwHp = BW_HP; bwState = 0; bwDeadT = 0; bwHurt = 0; bwIFr = 0; bwPhSaid = 0;
     bwAtk = 0; bwAtkT = 0; bwAtkCd = 270; bwLastAtk = 0; bwStun = 0; bwConfCool = 0;
     bwConf = 0; bwBlast = 0; bwTrumpDmg = 0; bwMash.frames = 0; bwMash.acc = 0.0f; bwMash.lx = bwMash.ly = 0.0f;
     bwPull = 0.0f; bwFallV = 0.0f; bwShakeAmp = 0.0f; bwScale = BW_S; bwGal = 0.0f;
@@ -795,6 +796,7 @@ static void bw_Hud(BossIO &io) {
         drawText(edge > 0 ? SCR_WIDTH - 20 : 10, 126, 2.0f, RGBA(255, 214, 110, 230), edge > 0 ? ">" : "<");
         sceGuDisable(GU_TEXTURE_2D);
     }
+    if (bwState == 0 && bwPhase() >= 2) bxRage(bwT);
     if (bwState < 2 && bwT > 30) bxBossBar("JINETE BLANCO", bwHp, BW_HP);
     sceGuDisable(GU_TEXTURE_2D);
 }
@@ -861,6 +863,10 @@ static bool bw_ShotHit(float x, float y, float z, int dmg) {
     if (bwIFr > 0) return true;                                // la bala se gasta, sin dano doble
     if (dmg < 1) dmg = 1;
     bwHp -= dmg; bwHurt = 6; bwIFr = 2;
+    {   // CAMBIO DE FASE: arma nueva y despues la furia
+        const int ph = bwPhase();
+        if (ph > bwPhSaid && bwHp > 0) { bwPhSaid = ph; g_lvFlash = 16; lvMessage(ph == 1 ? "CONQUISTA TENSA UN ARCO DE TRES FLECHAS" : "LA CONQUISTA SE ENFURECE", 170); }
+    }
     if (bwAtk == 3 && bwAtkT < 70) {                           // disparar durante el aviso interrumpe la trompeta
         bwTrumpDmg += dmg;
         if (bwTrumpDmg >= 12) { bwEndAttack(); bwAtkCd += 60; bwStun = 60; lvMessage("¡LE INTERRUMPISTE!", 70); }

@@ -423,7 +423,7 @@ static void lvFireOrb(float x, float y, float z, float tx, float ty, float tz, f
     // como mucho 3 en el aire y 0.75 s entre uno y otro; los ojos de los muros, 6 y 0.4 s
     // (Benjamin: "tienen que disparar mas rapido"; para eso esta el dash)
     const int maxAlive = (g_lvFloor == 1) ? 6 : 3;
-    if (g_orbCd > 0 || alive >= maxAlive) return;
+    if (!g_lvOrbFree && (g_orbCd > 0 || alive >= maxAlive)) return;   // g_lvOrbFree: abanicos de los jefes
     g_orbCd = (g_lvFloor == 1) ? 24 : 45;
     for (int k = 0; k < 16; ++k) if (g_orbs[k].life <= 0) {
         float dx = tx - x, dy = ty - y, dz = tz - z, d = sqrtf(dx * dx + dy * dy + dz * dz); if (d < 0.01f) d = 0.01f;

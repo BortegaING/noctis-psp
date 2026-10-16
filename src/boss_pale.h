@@ -14,7 +14,7 @@
 #pragma once
 
 static const float BV_PI    = 3.14159265f;
-static const int   BV_HPMAX = 120;
+static const int   BV_HPMAX = 200;     // era 120. Fases: 66% guadana partida (un tajo mas), 33% furia
 static const int   BV_NFLY  = 7;
 static const float BV_ARENA = 41.0f;     // limite de la arena para el jefe y las moscas (radio jugable ~42)
 static const float BV_WALL  = 46.0f;     // centro de los muros perimetrales
@@ -36,7 +36,7 @@ static const unsigned int BV_STEEL  = RGBA(150, 170, 150, 255);
 // ---------------------------------------------------------------- estado
 enum { BV_INTRO, BV_STALK, BV_CWIND, BV_CRUN, BV_CREC, BV_SAPP, BV_SWING, BV_SUMMON, BV_DEAD };
 static int   bv_t = 0, bv_state = BV_INTRO, bv_st = 0, bv_hp = BV_HPMAX, bv_hurt = 0, bv_cd = 0;
-static int   bv_done = 0, bv_grace = 0, bv_hitCd = 0, bv_swingN = 0, bv_swingT = 0, bv_swingHit = 0, bv_horde = 0;
+static int   bv_done = 0, bv_grace = 0, bv_hitCd = 0, bv_swingN = 0, bv_swingT = 0, bv_swingHit = 0, bv_horde = 0, bv_ph = 1;
 static float bv_x = 0.0f, bv_z = -26.0f, bv_yaw = 3.14159265f, bv_spd = 0.0f, bv_gp = 0.0f, bv_orb = 0.0f, bv_orbDir = 1.0f;
 static float bv_dx = 0.0f, bv_dz = 1.0f;                 // direccion bloqueada de la carga
 static float bv_pitch = 0.0f, bv_pitchT = 0.0f, bv_arm = 0.15f, bv_armT = 0.15f, bv_armK = 0.2f, bv_roll = 0.0f, bv_rollT = 0.0f;
@@ -60,7 +60,7 @@ static LineVertex __attribute__((aligned(16))) bv_mFly[820];
 static LineVertex __attribute__((aligned(16))) bv_mAura[900];
 static int bv_nHorse = 0, bv_nLeg = 0, bv_nRider = 0, bv_nArm = 0, bv_nHades = 0, bv_nFly = 0, bv_nAura = 0;
 
-static const int kBvHordeHp[4] = { 120, 88, 58, 28 };   // la horda llega al empezar y al bajar de estos HP
+static const int kBvHordeHp[4] = { 200, 147, 97, 47 };  // la horda llega al empezar y al bajar de estos HP (proporcional a 200)
 
 // ---------------------------------------------------------------- utilidades
 static float bvClamp(float v, float a, float b) { return v < a ? a : (v > b ? b : v); }
@@ -435,7 +435,7 @@ static void bv_Enter(BossIO &io, LineVertex *geo, int geoCap, int *geoN,
     bv_t = 0; bv_state = BV_INTRO; bv_st = 0; bv_hp = BV_HPMAX; bv_hurt = 0; bv_cd = 0; bv_done = 0; bv_grace = 0; bv_hitCd = 0;
     bv_x = 0.0f; bv_z = -26.0f; bv_yaw = BV_PI; bv_spd = 0.0f; bv_gp = 0.0f; bv_orb = 3.14159f; bv_orbDir = 1.0f;
     bv_dx = 0.0f; bv_dz = 1.0f; bv_pitch = bv_pitchT = 0.0f; bv_arm = bv_armT = 0.15f; bv_armK = 0.2f; bv_roll = bv_rollT = 0.0f;
-    bv_swingN = bv_swingT = bv_swingHit = 0; bv_horde = 0; bv_shake = 0.0f; bv_dis = 0.0f;
+    bv_swingN = bv_swingT = bv_swingHit = 0; bv_horde = 0; bv_shake = 0.0f; bv_dis = 0.0f; bv_ph = 1;
     bv_hx = -6.0f; bv_hy = 3.0f; bv_hz = -30.0f; bv_hYaw = 0.0f; bv_hFlare = 0.0f; bv_hOrbCd = 300; bv_blockMsg = 0; bv_lpOk = 0;
     for (int k = 0; k < BV_NFLY; ++k) { bv_fly[k].alive = 0; bv_fly[k].die = 0; bv_fly[k].delay = 0; }
     for (int k = 0; k < 72; ++k) bv_part[k].life = 0;
@@ -618,7 +618,7 @@ static void bv_Update(BossIO &io) {
         bv_spd *= 0.88f; bv_x += bv_dx * bv_spd; bv_z += bv_dz * bv_spd;
         bv_x = bvClamp(bv_x, -BV_ARENA, BV_ARENA); bv_z = bvClamp(bv_z, -BV_ARENA, BV_ARENA);
         bv_pitchT = 0.0f;
-        if (bv_st >= 55) { bv_state = BV_STALK; bv_st = 0; bv_cd = 70 + (int)(bv_hp * 0.5f); }
+        if (bv_st >= 55) { bv_state = BV_STALK; bv_st = 0; bv_cd = (bv_ph >= 3 ? 40 : 70) + (int)(bv_hp * 0.3f); }   // furioso: casi no espera
         break;
     }
     case BV_SAPP: {                                            // se acerca a tajar
@@ -628,7 +628,7 @@ static void bv_Update(BossIO &io) {
         bv_x += fx * bv_spd; bv_z += fz * bv_spd;
         bv_x = bvClamp(bv_x, -BV_ARENA, BV_ARENA); bv_z = bvClamp(bv_z, -BV_ARENA, BV_ARENA);
         bv_armT = 0.5f;
-        if (pd < 6.8f) { bv_state = BV_SWING; bv_st = 0; bv_swingN = (bv_hp > 60) ? 2 : 3; bv_swingT = 0; bv_swingHit = 0; lvMessage("¡ALÉJATE!", 70); }
+        if (pd < 6.8f) { bv_state = BV_SWING; bv_st = 0; bv_swingN = (bv_ph >= 2) ? 3 : 2; bv_swingT = 0; bv_swingHit = 0; lvMessage("¡ALÉJATE!", 70); }
         else if (bv_st > 240) { bv_state = BV_STALK; bv_st = 0; bv_cd = 40; }
         break;
     }
@@ -687,7 +687,7 @@ static void bv_Update(BossIO &io) {
         if (bv_state != BV_INTRO) {
             if (--bv_hOrbCd <= 0) {
                 lvFireOrb(bv_hx, bv_hy + 3.4f, bv_hz, io.px, io.py + 1.7f, io.pz, 0.24f, RGBA(110, 255, 70, 255));
-                bv_hOrbCd = (bv_hp > 60 ? 120 : 85) + (int)(bvR(bv_t, 6) * 70.0f);
+                bv_hOrbCd = (bv_ph >= 3 ? 70 : bv_ph == 2 ? 95 : 120) + (int)(bvR(bv_t, 6) * 70.0f);
             }
             if (bv_hOrbCd < 24) { const float f = (24 - bv_hOrbCd) / 24.0f; if (f > bv_hFlare) bv_hFlare = f; }
         }
@@ -902,6 +902,7 @@ static void bv_Hud(BossIO &io) {
     }
     const int nf = bvFlyAlive();
     if (bv_state != BV_DEAD || bv_dis < 1.0f) {
+        if (bv_ph >= 3 && bv_state != BV_DEAD) bxRage(bv_t);
         bxBossBar("JINETE PÁLIDO", bv_hp, BV_HPMAX);
         if (nf > 0) drawRect(120, 10, 240, 16, RGBA(110, 255, 70, 34 + (int)(26.0f * (0.5f + 0.5f * sinf(bv_t * 0.2f)))));   // escudo verde sobre la barra
     }
@@ -1053,6 +1054,10 @@ static bool bv_ShotHit(float x, float y, float z, int dmg) {
                 return true;
             }
             bv_hp -= dmg; bv_hurt = 8;
+            {   // CAMBIO DE FASE
+                const int ph = (bv_hp * 3 > BV_HPMAX * 2) ? 1 : (bv_hp * 3 > BV_HPMAX ? 2 : 3);
+                if (ph > bv_ph && bv_hp > 0) { bv_ph = ph; g_lvFlash = 16; lvMessage(ph == 2 ? "LA GUADAÑA SE PARTE EN DOS" : "LA MUERTE SE IMPACIENTA", 170); }
+            }
             bvEmit(x, y, z, 0.8f, 0.1f, -0.002f, 14, RGBA(255, 230, 150, 255), 0.22f);
             if (bv_hp <= 0) { bv_hp = 0; bvKillBoss(); }
             return true;

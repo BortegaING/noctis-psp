@@ -28,7 +28,7 @@ static const float RJ_TAU  = 6.2831853f;
 static const float RJ_R    = 42.0f;        // radio nominal de la arena (x1.9: espacio para correr y escapar)
 static const float RJ_K    = 42.0f / 22.0f; // factor de escala de la arena respecto al diseno base
 static const float RJ_VMAX = 1.7f, RJ_VMAXE = 2.0f, RJ_DECEL = 0.13f;   // embestida: velocidad, enfurecido, frenado
-static const int   RJ_HPMAX = 110;
+static const int   RJ_HPMAX = 180;     // era 110. Fases: 66% espadas arrojadizas, 33% furia
 static const float RJ_S    = 1.4f;         // escala del modelo (unidades del modelo -> mundo)
 static const float RJ_PIV  = 1.8f;         // pivote del encabritado (z de los cascos traseros)
 static const float RJ_MASHNEED = 8.0f;     // recorrido del analogo para soltarse del grito
@@ -266,7 +266,7 @@ static float rj_travel = 0.0f, rj_tBrake = 20.0f;
 static float rj_ix = 0.0f, rj_iz = 0.0f;                 // punto de impacto del tajo
 static float rj_sw = 0.35f, rj_swT = 0.35f;              // angulo del brazo de la espada (rotX)
 static int   rj_hp = RJ_HPMAX, rj_hurt = 0, rj_done = 0, rj_dieT = 0;
-static int   rj_paceT = 0, rj_slashCd = 0, rj_hitDone = 0, rj_enr = 0;
+static int   rj_paceT = 0, rj_slashCd = 0, rj_hitDone = 0, rj_enr = 0, rj_ph = 1;
 static float rj_orb = 1.0f;                              // sentido de la orbita
 static float rj_pd = 30.0f;                              // distancia al jugador
 static int   rj_stun = 0, rj_tick = 0, rj_tickFx = 0;
@@ -345,7 +345,7 @@ static void br_Enter(BossIO &io, LineVertex *geo, int geoCap, int *geoN, CityBld
     rj_x = 0.0f; rj_z = -32.0f; rj_a = 0.0f; rj_spd = 0.0f; rj_gait = 0.0f; rj_rear = 0.0f;
     rj_dirX = 0.0f; rj_dirZ = 1.0f; rj_travel = 0.0f; rj_tBrake = 20.0f;
     rj_sw = rj_swT = 0.35f;
-    rj_hp = RJ_HPMAX; rj_hurt = 0; rj_done = 0; rj_dieT = 0;
+    rj_hp = RJ_HPMAX; rj_hurt = 0; rj_done = 0; rj_dieT = 0; rj_ph = 1;
     rj_paceT = 150; rj_slashCd = 90; rj_hitDone = 0; rj_enr = 0; rj_orb = 1.0f; rj_pd = 30.0f;
     rj_stun = 0; rj_tick = 0; rj_tickFx = 0; bxMashStart(rj_mash, 0); rj_mash.frames = 0;
     rj_shake = 0.0f; rj_tint = 0; rj_tintMax = 1; rj_lastHp = io.hp;
@@ -532,7 +532,7 @@ static void br_Update(BossIO &io) {
         const int r = bxMashUpdate(rj_mash, io.stickX, io.stickY, RJ_MASHNEED);
         if (r != 0) { rj_stun = 0; lvMessage(r > 0 ? "TE LIBERASTE" : "EL GRITO CEDE", 70); }
     }
-    rj_enr = (rj_hp * 100 < RJ_HPMAX * 40) ? 1 : 0;      // bajo el 40%: mas rapido
+    rj_enr = (rj_ph >= 3) ? 1 : 0;                       // furia (bajo el 33%): mas rapido
 
     // ---- particulas (ceniza y polvo) ----
     for (int k = 0; k < 64; ++k) {
@@ -576,6 +576,12 @@ static void br_Update(BossIO &io) {
         rj_turn(atan2f(mx, mz), 0.07f);
         rj_spd += ((md > 1.0f ? 0.62f : 0.0f) - rj_spd) * 0.08f;
         rj_Step(sinf(rj_a), cosf(rj_a), rj_spd);
+        if (rj_ph >= 2 && rj_st % (rj_enr ? 55 : 75) == 40) {   // ESPADAS ARROJADIZAS (desde el 66%): abanico de 3
+            g_lvOrbFree = 1;
+            for (int k = -1; k <= 1; ++k)
+                lvFireOrb(rj_x, 4.5f, rj_z, io.px + k * 4.0f * cosf(rj_a), io.py + 1.7f, io.pz - k * 4.0f * sinf(rj_a), 0.45f, RGBA(230, 40, 30, 255));
+            g_lvOrbFree = 0;
+        }
         { const float rr = sqrtf(rj_x * rj_x + rj_z * rj_z); if (rr > 34.0f) { rj_x *= 34.0f / rr; rj_z *= 34.0f / rr; } }
         if (--rj_paceT <= 0) { rj_s = RJS_ALIGN; rj_st = 0; }
         else if (rj_slashCd > 0) --rj_slashCd;
@@ -735,6 +741,10 @@ static bool br_ShotHit(float x, float y, float z, int dmg) {
     if (fabsf(side) > 3.4f || along < -6.5f || along > 7.5f) return false;
     rj_hp -= (dmg < 1 ? 1 : dmg);
     rj_hurt = 6;
+    {   // CAMBIO DE FASE
+        const int ph = (rj_hp * 3 > RJ_HPMAX * 2) ? 1 : (rj_hp * 3 > RJ_HPMAX ? 2 : 3);
+        if (ph > rj_ph && rj_hp > 0) { rj_ph = ph; g_lvFlash = 16; rj_shake = 0.5f; lvMessage(ph == 2 ? "LA GUERRA LANZA SUS ESPADAS" : "LA GUERRA SE ENFURECE", 170); }
+    }
     if (rj_hp <= 0) { rj_hp = 0; rj_BeginDeath(); }
     return true;
 }
@@ -1066,6 +1076,7 @@ static void br_Hud(BossIO &io) {
     if (rj_tint > 0) bxTint(RGBA(200, 8, 8, rj_tint * 150 / (rj_tintMax > 0 ? rj_tintMax : 1)));
     if (rj_tickFx > 0) bxTint(RGBA(255, 20, 20, rj_tickFx * 7));
     if (rj_stun) bxTint(RGBA(130, 0, 0, 34 + (int)(14.0f * sinf(rj_t * 0.3f))));
+    if (rj_ph >= 3 && rj_s != RJS_DEAD) bxRage(rj_t);
     if (rj_s != RJS_DEAD) bxBossBar("JINETE ROJO", rj_hp, RJ_HPMAX);
     // avisos
     if (rj_s == RJS_ROAR && rj_st > 6) {

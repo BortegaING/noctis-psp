@@ -258,7 +258,12 @@ y DETENER EL TIEMPO lo deja al esfumarse. 150 de vida en 3 fases (100/50): tride
 invertido en el piso, columnas de fuego en estrella, VISIONES DE MUERTE (carne con gusanos y venas,
 ojo que se abre, calaveras, sigilos, palabras: todo procedural en 2D, bpHudHorror) y en la fase 3
 la cueva sangra + destellos subliminales. Prueba: `NOCTIS_TEST_BPFASE 2/3` (0 al commitear).
-PENDIENTE pedido por Benjamin: fases + mas vida para los jinetes.
+**JINETES CON FASES (2026-10-16):** mas vida (blanco 170, rojo 180, negro 170, palido 200) y el
+mismo esquema: al 66% ARMA NUEVA (blanco: arco de tres flechas; rojo: espadas arrojadizas en
+abanico; negro: monedas en abanico; palido: la guadana se parte, un tajo mas) y al 33% FURIA (mas
+rapido, menos espera, velo rojo `bxRage`). Las hordas del palido, a vidas proporcionales. Los
+abanicos usan `g_lvOrbFree` (lvFireOrb sin espera ni tope). Ojo: bk_ph ya existia (galope) -> la
+fase del negro es `bk_fase`.
 
 **SERAFIN CON FASES (2026-10-16):** 180 de vida (era 90), fases en 120 y 60. En cada cambio de
 fase te habla (kBsPhase) y vuelve la eleccion: RENDIRSE (despiertas al pie) / PENSAR EN DIOS (7 s

@@ -51,6 +51,7 @@ static int g_lvGiveTimePower = 0;    // un modulo pone 1 para otorgarlo (levels.
 static int g_lvNoHeal = 0;           // 1 = el rosario no cura en este piso (jinete palido)
 static int g_lvDashInv = 0;          // frames de DASH que le quedan al jugador (main lo pone)
 static int g_lvNoFallDeath = 0;      // 1 = el jugador puede caer bajo el piso sin "morir" (caidas guionadas)
+static int g_lvOrbFree = 0;          // 1 = lvFireOrb sin espera ni tope (para abanicos de 3: ponerlo y quitarlo)
 
 // ---------------------------------------------------------------- helpers de levels.h
 // (definidos mas abajo en levels.h; aqui solo declarados para que los modulos los usen)
@@ -131,3 +132,10 @@ static void bxMashHud(const BxMash &m, float need, const char *label) {
 }
 // velo de color a pantalla completa (tintes, destellos)
 static void bxTint(unsigned int col) { sceGuDisable(GU_TEXTURE_2D); drawRect(0, 0, SCR_WIDTH, SCR_HEIGHT, col); }
+// FURIA (la ultima fase de un jefe): velo rojo que late y bordes encendidos
+static void bxRage(int t) {
+    sceGuDisable(GU_TEXTURE_2D);
+    const int a = 20 + (int)(16.0f * sinf(t * 0.12f));
+    drawRect(0, 0, SCR_WIDTH, SCR_HEIGHT, RGBA(150, 0, 0, a));
+    drawRect(0, 0, SCR_WIDTH, 5, RGBA(255, 40, 20, 120 + a)); drawRect(0, SCR_HEIGHT - 5, SCR_WIDTH, 5, RGBA(255, 40, 20, 120 + a));
+}
