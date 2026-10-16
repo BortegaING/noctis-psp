@@ -7,6 +7,9 @@ cualquier angulo (pintor: triangulos ordenados por profundidad, color promedio d
   python tools/modelview/view.py hero              -> build/mv/hero.png  (frente, lado, espalda, 3/4)
   python tools/modelview/view.py run               -> build/mv/run.png   (8 fases corriendo, de lado y de atras)
   python tools/modelview/view.py walk              -> build/mv/walk.png
+  python tools/modelview/view.py anim run [n]      -> build/mv/anim_run.png + .gif (n frames SEGUIDOS, con el
+                                                      suavizado del rig: arrancar, correr, frenar; escenas:
+                                                      walk run slash aim jump)
   python tools/modelview/view.py model angel       -> build/mv/model_angel.png
   python tools/modelview/view.py scene             -> build/mv/scene.png (vista aerea + a ras del suelo, con niebla)
 """
@@ -145,6 +148,26 @@ def main():
             T = (0, 1.9, -1.0)
             imgs.append(render(v, (0, 4.5, 9.0), T, W=220, H=300, fov=34)); labels.append("atras %.2f" % p)
         sheet(imgs, 8, os.path.join(OUT, what + ".png"), labels)
+    elif what == "anim":
+        scene = sys.argv[2] if len(sys.argv) > 2 else "walk"
+        n = int(sys.argv[3]) if len(sys.argv) > 3 else 120
+        pre = os.path.join(OUT, "seq")
+        r = subprocess.run(["wsl", "-d", "Ubuntu-24.04", "--", wsl_path(EXE), "seq", wsl_path(pre), scene, str(n)], capture_output=True, text=True)
+        if r.returncode != 0: print(r.stdout, r.stderr); sys.exit("fallo seq")
+        gnd = ground()
+        T = (0, 1.7, 0)
+        frames, imgs, labels = [], [], []
+        for f in range(n):
+            data = open("%s_%03d.bin" % (pre, f), "rb").read(); m = len(data) // 16
+            vv = struct.unpack("<" + "Ifff" * m, data)
+            v = [(vv[k * 4], vv[k * 4 + 1], vv[k * 4 + 2], vv[k * 4 + 3]) for k in range(m)] + gnd
+            a = render(v, orbit(T, 7.5, 120, 8), T, W=240, H=300)
+            b = render(v, (0, 4.5, 9.0), (0, 1.9, -1.0), W=240, H=300, fov=34)
+            fr = Image.new("RGB", (480, 300)); fr.paste(a, (0, 0)); fr.paste(b, (240, 0))
+            frames.append(fr)
+            if f % 4 == 0: imgs.append(a); labels.append("f%d" % f)
+        frames[0].save(os.path.join(OUT, "anim_" + scene + ".gif"), save_all=True, append_images=frames[1:], duration=33, loop=0)
+        sheet(imgs, 10, os.path.join(OUT, "anim_" + scene + ".png"), labels)
     elif what == "model":
         name = sys.argv[2]
         v = dump(["model", name], "model_" + name)

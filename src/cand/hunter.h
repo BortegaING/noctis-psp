@@ -50,14 +50,20 @@ static void hn_tatters(LineVertex *b, int &i, float y, float rx, float rz, float
 }
 
 // ============================================================================
-// PIEZAS ARTICULADAS (rig.h dibuja cada una con su giro): rangos de vertices en g_hnMark
-//   [0]muslo izq [1]cana+bota izq [2]muslo der [3]cana+bota der
-//   [4]cola trasera izq [5]cola trasera der [6]panel lateral izq [7]panel lateral der
-//   [8]torso (cinturon, esclavina, cuello) [9]brazo izq [10]antebrazo+mano+PISTOLA izq
-//   [11]brazo der [12]antebrazo+mano+SABLE der [13]cabeza/capucha [14]fin.
+// PIEZAS ARTICULADAS (rig.h dibuja cada una con su giro): g_hnMark[k] = primer vertice de la pieza k
+//   [0]muslo izq [1]cana de la bota izq [2]PIE izq [3]muslo der [4]cana der [5]PIE der
+//   [6]cola trasera izq [7]cola trasera der [8]panel lateral izq [9]panel lateral der
+//   [10]PELVIS (cintura, cinturon, bolsas) [11]PECHO (pecho, correas, esclavina, cuello)
+//   [12]brazo izq [13]antebrazo izq [14]MANO+PISTOLA (gira en la muneca) [15]brazo der
+//   [16]antebrazo+mano+SABLE der [17]cabeza/capucha [18]fin.
+// v3 (2026-10-16, Benjamin: "se ve muy tosco y rigido"): el torso era UN bloque y el pie iba pegado
+// a la cana. Ahora el pecho gira contra la pelvis (los hombros contra las caderas al caminar, el
+// cuerpo entero en el tajo) y el pie tiene TOBILLO: apoya plano, despega con la punta. La mano de
+// la pistola tiene MUNECA: al apuntar con el brazo estirado la pistola apuntaba al CIELO (iba pegada
+// al antebrazo, que al levantarse la giraba 80 grados).
 // Cada pieza va CONTIGUA en el buffer. Las articulaciones (pivotes) estan en rig.h (HN_J*).
 // ============================================================================
-static const int HN_NMARK = 15;
+static const int HN_NMARK = 19;
 static int g_hnMark[HN_NMARK];
 static const int HN_CAP = 12000;    // tamano de g_hero en main.cpp: build_hunter no debe pasarse
 
@@ -94,18 +100,20 @@ static int build_hunter(LineVertex *buf)
     // =====================================================================
     for (int side = -1; side <= 1; side += 2) {
         const float s = (float)side;
+        const int m0 = side < 0 ? 0 : 3;
+        g_hnMark[m0] = i;
         // muslo: de la cadera a la rodilla, un poco hacia adelante
         hn_tube(buf,i, s*0.095f,0.960f, 0.000f, s*0.105f,0.500f,-0.012f, 0.088f,0.064f, 10, cp_scale(pants,0.8f), pants);
         hn_ball(buf,i, s*0.105f,0.500f,-0.014f, 0.064f,0.062f,0.066f, 2,8, pants);                   // rodilla
-        g_hnMark[side < 0 ? 1 : 3] = i;
+        g_hnMark[m0 + 1] = i;
         // cana de la bota: de la rodilla al tobillo, la vuelta de cuero arriba
         hn_tube(buf,i, s*0.105f,0.470f,-0.010f, s*0.110f,0.095f, 0.020f, 0.066f,0.056f, 10, leaLit, leather);
         hn_tube(buf,i, s*0.105f,0.505f,-0.012f, s*0.105f,0.430f,-0.008f, 0.080f,0.076f, 10, leaLit, leather);   // vuelta
         hn_ball(buf,i, s*0.110f,0.085f, 0.022f, 0.058f,0.052f,0.062f, 3,10, leather);                // tobillo / talon
-        // pie: empeine que afina hacia la punta + suela oscura que sobresale apenas
+        g_hnMark[m0 + 2] = i;
+        // PIE (gira en el tobillo): empeine que afina hacia la punta + suela oscura que sobresale apenas
         hn_tube(buf,i, s*0.110f,0.075f, 0.040f, s*0.112f,0.050f,-0.165f, 0.054f,0.036f, 10, leather, leaLit);
         hn_box(buf,i, s*0.111f,0.000f,-0.058f, 0.105f,0.255f,0.026f, 0.010f, leaDk, cp_scale(leaDk,0.7f));
-        if (side < 0) g_hnMark[2] = i; else g_hnMark[4] = i;
     }
 
     // =====================================================================
@@ -123,6 +131,7 @@ static int build_hunter(LineVertex *buf)
         // colas traseras (se separan en el centro de la espalda) y paneles laterales
         const float arcs[4][2] = { { PI_, TAU_ - 1.95f }, { 1.95f, PI_ }, { TAU_ - 1.95f, TAU_ - 0.52f }, { 0.52f, 1.95f } };
         for (int p = 0; p < 4; ++p) {
+            g_hnMark[6 + p] = i;
             const float a0 = arcs[p][0], a1 = arcs[p][1];
             const float yl = (p < 2) ? 0.400f : 0.450f;            // las colas, un poco mas largas
             float ys2[4] = { ys[0], ys[1], ys[2], yl };
@@ -133,21 +142,23 @@ static int build_hunter(LineVertex *buf)
                 const float ae = (p == 2) ? a1 : a0;
                 hn_tube(buf,i, sinf(ae)*rx[0],ys[0],-cosf(ae)*rz[0], sinf(ae)*rx[3],yl,oz[3]-cosf(ae)*rz[3], 0.012f,0.010f, 6, red, redDk);
             }
-            g_hnMark[5 + p] = i;
         }
     }
 
     // =====================================================================
-    // 3) TORSO: loft eliptico (cintura -> pecho adelantado -> hombros), cinturon con hebilla y
-    //    bolsas, correas rojas cruzadas en la espalda, esclavina con jirones, cuello alto.
+    // 3) TORSO en DOS piezas: PELVIS (cintura, cinturon con hebilla y bolsas) y PECHO (pecho
+    //    adelantado, hombros, correas rojas cruzadas en la espalda, esclavina con jirones, cuello
+    //    alto). El pecho arranca DENTRO de la pelvis (1.20 < 1.29): al girar no se abre una
+    //    rendija, y la costura queda bajo la esclavina.
     // =====================================================================
+    g_hnMark[10] = i;
     {
-        const float ys[6] = { 1.060f, 1.160f, 1.280f, 1.380f, 1.455f, 1.505f };
-        const float rx[6] = { 0.172f, 0.166f, 0.186f, 0.202f, 0.192f, 0.150f };
-        const float rz[6] = { 0.122f, 0.116f, 0.130f, 0.136f, 0.122f, 0.100f };
-        const float oz[6] = { 0.000f, 0.000f,-0.010f,-0.016f,-0.010f, 0.000f };
-        const unsigned int c[6] = { coatDk, coat, coat, coatLit, coatLit, coat };
-        hn_loftE(buf,i, 6, ys, rx, rz, oz, c, 12, 0.0f, 6.2831853f);
+        const float ys[3] = { 1.060f, 1.160f, 1.290f };
+        const float rx[3] = { 0.172f, 0.166f, 0.188f };
+        const float rz[3] = { 0.122f, 0.116f, 0.131f };
+        const float oz[3] = { 0.000f, 0.000f,-0.011f };
+        const unsigned int c[3] = { coatDk, coat, coat };
+        hn_loftE(buf,i, 3, ys, rx, rz, oz, c, 12, 0.0f, 6.2831853f);
     }
     {   // cinturon (banda eliptica) + hebilla + 2 bolsas de cuero
         const float ys[2] = { 1.085f, 1.150f }, rx[2] = { 0.186f, 0.182f }, rz[2] = { 0.136f, 0.132f }, oz[2] = { 0.0f, 0.0f };
@@ -156,6 +167,15 @@ static int build_hunter(LineVertex *buf)
         hn_box(buf,i, 0.000f,1.090f,-0.138f, 0.060f,0.018f,0.055f, 0.008f, brass, brassDk);
         hn_box(buf,i, 0.150f,1.030f, 0.080f, 0.080f,0.050f,0.090f, 0.014f, leaLit, leaDk);
         hn_box(buf,i,-0.130f,1.035f, 0.100f, 0.070f,0.050f,0.080f, 0.014f, leaLit, leaDk);
+    }
+    g_hnMark[11] = i;
+    {   // PECHO
+        const float ys[5] = { 1.200f, 1.280f, 1.380f, 1.455f, 1.505f };
+        const float rx[5] = { 0.160f, 0.184f, 0.202f, 0.192f, 0.150f };
+        const float rz[5] = { 0.112f, 0.129f, 0.136f, 0.122f, 0.100f };
+        const float oz[5] = { 0.000f,-0.010f,-0.016f,-0.010f, 0.000f };
+        const unsigned int c[5] = { coat, coat, coatLit, coatLit, coat };
+        hn_loftE(buf,i, 5, ys, rx, rz, oz, c, 12, 0.0f, 6.2831853f);
     }
     // correas rojas cruzadas en la ESPALDA (lo que mira la camara) + hebilla donde se cruzan
     hn_tube(buf,i, -0.150f,1.430f, 0.112f,  0.150f,1.110f, 0.132f, 0.020f,0.020f, 8, red, redDk);
@@ -175,7 +195,7 @@ static int build_hunter(LineVertex *buf)
         const unsigned int c[2] = { coat, coatLit };
         hn_loftE(buf,i, 2, ys, rx, rz, oz, c, 12, 0.0f, 6.2831853f);
     }
-    g_hnMark[9] = i;   // (los hombros los redondea la esclavina: bolas debajo no se veian)
+    g_hnMark[12] = i;   // (los hombros los redondea la esclavina: bolas debajo no se veian)
 
     // =====================================================================
     // 4) BRAZOS: brazo | antebrazo con bocamanga, guante y mano que AGARRA.
@@ -183,9 +203,10 @@ static int build_hunter(LineVertex *buf)
     // izquierdo: la PISTOLA DE PULSOS
     hn_tube(buf,i, -0.200f,1.430f,-0.012f, -0.236f,1.150f,-0.052f, 0.062f,0.052f, 8, coat, coatLit);
     hn_ball(buf,i, -0.236f,1.150f,-0.052f, 0.053f,0.053f,0.053f, 3,8, coat);
-    g_hnMark[10] = i;
+    g_hnMark[13] = i;
     hn_tube(buf,i, -0.236f,1.150f,-0.052f, -0.234f,0.920f,-0.112f, 0.052f,0.044f, 8, coatDk, coat);
     hn_tube(buf,i, -0.235f,0.975f,-0.098f, -0.234f,0.900f,-0.118f, 0.060f,0.056f, 8, leaLit, leather);   // bocamanga del guante
+    g_hnMark[14] = i;   // MANO + PISTOLA (pivote en la muneca: rig.h HN_JWRIST_L)
     hn_ball(buf,i, -0.233f,0.862f,-0.140f, 0.046f,0.054f,0.048f, 3,8, leather);                          // mano enguantada
     {
         const unsigned int gun = RGBA(62, 66, 80, 255), gunLit = cp_scale(gun, 1.65f), gunDk = cp_scale(gun, 0.6f);
@@ -196,11 +217,11 @@ static int build_hunter(LineVertex *buf)
         hn_limb(buf,i, -0.232f,0.856f,-0.112f, -0.238f,0.770f,-0.088f, 0.024f,0.020f, 6, grip, gripLit);  // culata
         hn_ball(buf,i, -0.232f,0.842f,-0.356f, 0.020f,0.020f,0.020f, 2,6, glow);                           // boca de luz
     }
-    g_hnMark[11] = i;
+    g_hnMark[15] = i;
     // derecho: el SABLE
     hn_tube(buf,i,  0.200f,1.430f,-0.012f,  0.250f,1.145f,-0.052f, 0.062f,0.052f, 8, coat, coatLit);
     hn_ball(buf,i,  0.250f,1.145f,-0.052f, 0.053f,0.053f,0.053f, 3,8, coat);
-    g_hnMark[12] = i;
+    g_hnMark[16] = i;
     hn_tube(buf,i,  0.250f,1.145f,-0.052f,  0.262f,0.905f,-0.150f, 0.052f,0.044f, 8, coatDk, coat);
     hn_tube(buf,i,  0.259f,0.960f,-0.128f,  0.262f,0.890f,-0.158f, 0.060f,0.056f, 8, leaLit, leather);
     hn_ball(buf,i,  0.262f,0.846f,-0.178f, 0.048f,0.056f,0.050f, 3,8, leather);
@@ -225,7 +246,7 @@ static int build_hunter(LineVertex *buf)
             hn_limb(buf,i, bX[s],bY[s]-0.004f,bZ[s]-bR[s]*0.75f, bX[s+1],bY[s+1]-0.004f,bZ[s+1]-bR[s+1]*0.75f,
                     0.011f*(1.0f-0.2f*s),0.011f*(1.0f-0.2f*(s+1))+0.001f, 4, cp_lerp(spine,edge,0.5f+0.12f*s), edge);
     }
-    g_hnMark[13] = i;
+    g_hnMark[17] = i;
 
     // =====================================================================
     // 5) CABEZA: cara palida con BUFANDA-MASCARA, capucha con borde que atrapa la luz, punta
@@ -244,7 +265,7 @@ static int build_hunter(LineVertex *buf)
     hn_limb(buf,i, 0.000f,1.786f,-0.040f, 0.000f,1.764f,-0.138f, 0.074f,0.034f, 8, coatLit, coat);   // ala de la capucha sobre los ojos
     hn_limb(buf,i, 0.000f,1.800f, 0.050f, 0.000f,1.760f, 0.230f, 0.070f,0.004f, 8, coat, coatDk);    // punta que cae atras
     hn_limb(buf,i, 0.000f,1.690f, 0.100f, 0.016f,1.470f, 0.180f, 0.112f,0.060f, 8, coatDk, hemDk);   // tela por la espalda
-    g_hnMark[14] = i;
+    g_hnMark[18] = i;
 
     return i;
 }

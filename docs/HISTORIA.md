@@ -31,7 +31,7 @@ algunos se cumplen. Arriba, en el piso 12, está tu cuerpo dormido. Abajo, Bapho
 | El cielo pintado del piso 1 que se apaga | El decorado del sueño se cae |
 | Los ojos en los muros | Los ojos de la máquina: el cielo te mira |
 | "Acepta tu muerte, y descansa" (Serafín) | La Torre pidiendo apagarse |
-| "Nos veremos... abajo" (Baphomet) | El final secreto |
+| "In inferis te exspecto" — "te espero abajo" (Baphomet) | El final secreto |
 | "Puesto 12. Sin relevo" (robots) | El Guardián del piso 12 |
 | El cuervo que espera en cada piso | Lo único del sueño que no te pide descansar: te enseña a seguir |
 
@@ -86,11 +86,15 @@ Botín: PLUMA DEL SERAFÍN.
 "¿Por qué estás aquí? Conversemos." / Tú: "Qué buen perfume tiene..." / *De pronto piensas en
 Dios: una luz en el cielo.* / "¿Piensas en Él... en mi casa? Me has traicionado."
 La pelea es una pesadilla: te atrapa en su mente y te muestra **visiones de muerte** (carne
-podrida con gusanos, un ojo que se abre en la carne, calaveras, sigilos, palabras como
-"TRAIDOR"). En la fase 2 empuña un **tridente** y el piso arde en un pentagrama invertido; en la
+podrida con gusanos, ojos de cabra que se abren en la carne y te miran, calaveras con brasas en
+las cuencas, su sello ardiendo). Y te HABLA: una voz grave, lenta, con eco de cueva, que maldice
+en latín mientras la palabra arde en la pantalla: *TRADITOR* (traidor), *NEMO TE AUDIT* (nadie te
+escucha), *GENUFLECTE* (arrodíllate), *CARO TUA MEA EST* (tu carne es mía), *ILLE NON VENIET* (Él
+no vendrá), *PUTRESCE* (púdrete), *MORIERIS* (morirás), *VAE TIBI* (¡ay de ti!). En la fase 2 empuña un **tridente** y el piso arde en un pentagrama invertido; en la
 3, la cueva sangra.
-Al caer, rezas el **Padre Nuestro** y una **luz del cielo** lo derrota: "Maldito seas, portador
-de la luz... Jamás dormirás tranquilo. Nos veremos... abajo." Al esfumarse, su tiempo queda
+Al caer, rezas el **Padre Nuestro** y una **luz del cielo** lo derrota, y te maldice en latín:
+"*Maledictus sis, lucis portator...* (Maldito seas, portador de la luz...) *Numquam in pace
+dormies. In inferis te exspecto.* (Jamás dormirás tranquilo. Te espero abajo.)" Al esfumarse, su tiempo queda
 contigo: **DETENER EL TIEMPO**.
 Botín: FRASCO DE AZUFRE.
 
@@ -183,6 +187,8 @@ de los robots pasaría a ser el 13).
 - **Cuadrado:** DETENER EL TIEMPO (desde Baphomet).
 
 ## 5. Notas técnicas
+- La voz de Baphomet: las frases están en `tools/voice/make_voice.py` (se cambian ahí y se corre
+  el script: genera `assets/VOICE.ADP` y `src/voice_clips.h`).
 - Código: Serafín y ojos en `src/levels.h`; jefes en `src/boss_*.h` (Baphomet `bp_`, Gabriel
   `gb_`, jinetes `bw_ br_ bk_ bv_`, la catedral `ct_` con sus modelos en `src/catedral_models.h`); el cementerio en `src/cementerio.h` (`bc_`, la lógica) y
   `src/cementerio_models.h` (los modelos y dónde va cada cosa); botín, mercader y lanza en
@@ -200,6 +206,7 @@ de los robots pasaría a ser el 13).
   `questDone` = objetos de jefe; `ownedRanged`/`curRanged` = armas; `upgrades` = fe de la lanza.
   Las premoniciones irán en `invResLo`/`invResHi`.
 - Banderas de prueba (siempre en 0 al commitear): `NOCTIS_TEST_BOTIN`, `NOCTIS_TEST_BPFASE`,
+  `NOCTIS_TEST_BPVIS` (1 = las visiones de Baphomet y su voz siempre encendidas),
   `NOCTIS_TEST_GBFASE`, `NOCTIS_TEST_BSFASE`, `NOCTIS_TEST_BCCINE` (1 = el cementerio se juega
   como la primera vez aunque el piso esté abierto: cinemática, sirena y elevador) y
   `NOCTIS_TEST_CTFASE` (2 o 3 = el Vigía arranca en esa fase).

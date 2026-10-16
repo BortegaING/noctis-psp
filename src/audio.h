@@ -437,21 +437,43 @@ static const unsigned char *g_trkData = 0;
 static unsigned int g_trkN = 0, g_trkPos = 0, g_trkFrac = 0, g_trkInc = 0;   // N = muestras; Frac/Inc en Q16
 static int g_trkOn = 0, g_trkVol = 0, g_trkVolT = 0, g_trkPred = 0, g_trkIdx = 0, g_trkS0 = 0, g_trkS1 = 0;
 
+// un nibble IMA -> la muestra siguiente (lo comparten la pista y la voz)
+static inline int auImaStep(int code, int &pred, int &idx)
+{
+    const int step = kAuImaStep[idx];
+    int d = step >> 3;
+    if (code & 4) d += step;
+    if (code & 2) d += step >> 1;
+    if (code & 1) d += step >> 2;
+    pred += (code & 8) ? -d : d;
+    if (pred > 32767) pred = 32767; else if (pred < -32768) pred = -32768;
+    idx += kAuImaIdx[code];
+    if (idx < 0) idx = 0; else if (idx > 88) idx = 88;
+    return pred;
+}
 static inline int auTrkNext(void)
 {
     if (g_trkPos >= g_trkN) { g_trkPos = 0; g_trkPred = 0; g_trkIdx = 0; }   // vuelta al principio
     const int code = (g_trkData[g_trkPos >> 1] >> ((g_trkPos & 1) << 2)) & 15;
     ++g_trkPos;
-    const int step = kAuImaStep[g_trkIdx];
-    int d = step >> 3;
-    if (code & 4) d += step;
-    if (code & 2) d += step >> 1;
-    if (code & 1) d += step >> 2;
-    g_trkPred += (code & 8) ? -d : d;
-    if (g_trkPred > 32767) g_trkPred = 32767; else if (g_trkPred < -32768) g_trkPred = -32768;
-    g_trkIdx += kAuImaIdx[code];
-    if (g_trkIdx < 0) g_trkIdx = 0; else if (g_trkIdx > 88) g_trkIdx = 88;
-    return g_trkPred;
+    return auImaStep(code, g_trkPred, g_trkIdx);
+}
+
+// =============================================================================
+// VOZ (2026-10-16): frases grabadas que suenan UNA vez (la voz de Baphomet: src/voice_clips.h,
+// tools/voice/make_voice.py). El mismo IMA ADPCM que la pista, con su propio decodificador: habla
+// ENCIMA de la musica (que se aparta a la mitad mientras dura) y se calla sola al terminar.
+// Ya trae su eco de cueva: va FUERA del eco del lugar, como la pista.
+// =============================================================================
+static const unsigned char *g_vcData = 0;
+static unsigned int g_vcN = 0, g_vcPos = 0, g_vcFrac = 0, g_vcInc = 0;   // N = muestras; Frac/Inc en Q16
+static int g_vcOn = 0, g_vcVol = 0, g_vcPred = 0, g_vcIdx = 0, g_vcS0 = 0, g_vcS1 = 0;
+static inline int auVcNext(void)
+{
+    if (g_vcPos >= g_vcN) { g_vcOn = 0; return 0; }
+    const int code = (g_vcData[g_vcPos >> 1] >> ((g_vcPos & 1) << 2)) & 15;
+    ++g_vcPos;
+    return auImaStep(code, g_vcPred, g_vcIdx);
 }
 
 static inline void auRenderBlock(short *out)
@@ -597,6 +619,14 @@ static inline void auRenderBlock(short *out)
                 const int s = g_trkS0 + (((g_trkS1 - g_trkS0) * (int)(g_trkFrac >> 1)) >> 15);
                 trk = (s * g_trkVol) >> 15;
             }
+            int vc = 0;
+            if (g_vcOn) {
+                g_vcFrac += g_vcInc;
+                while (g_vcFrac >= 65536u) { g_vcFrac -= 65536u; g_vcS0 = g_vcS1; g_vcS1 = auVcNext(); }
+                const int s = g_vcS0 + (((g_vcS1 - g_vcS0) * (int)(g_vcFrac >> 1)) >> 15);
+                vc = (s * g_vcVol) >> 15;
+                trk >>= 1;                                 // la musica se aparta mientras habla
+            }
             // Viento: ruido con dos polos por canal. Los dos lados usan ruido
             // INDEPENDIENTE -> suena ancho, envolvente, no "pegado al centro".
             int nL = auNoise();
@@ -627,8 +657,8 @@ static inline void auRenderBlock(short *out)
             int wetL = ((e0 * NOCTIS_ECHO_WET) >> 15) + (e1 >> 3);
             int wetR = ((e1 * NOCTIS_ECHO_WET) >> 15) + (e0 >> 3);
 
-            o[i * 2    ] = (short)auClamp16(wL + d + wetL + trk);
-            o[i * 2 + 1] = (short)auClamp16(wR + d + wetR + trk);
+            o[i * 2    ] = (short)auClamp16(wL + d + wetL + trk + vc);
+            o[i * 2 + 1] = (short)auClamp16(wR + d + wetR + trk + vc);
         }
     }
 
@@ -768,6 +798,19 @@ static inline void audioTrackPlay(const unsigned char *data, unsigned int bytes,
     g_trkVol = 0; g_trkVolT = 26000; g_trkOn = 1;
 }
 static inline void audioTrackStop(void) { g_trkVolT = 0; }
+
+// Una frase de la VOZ (ADPCM, una sola pasada). vol 0..1. Si ya estaba hablando, la corta y empieza esta.
+static inline void audioVoicePlay(const unsigned char *data, unsigned int bytes, int rate, float vol)
+{
+    if (vol < 0.0f) vol = 0.0f; if (vol > 1.0f) vol = 1.0f;
+    g_vcData = data; g_vcN = bytes * 2u; g_vcPos = 0; g_vcPred = 0; g_vcIdx = 0;
+    g_vcS0 = g_vcS1 = 0; g_vcFrac = 0;
+    g_vcInc = (unsigned int)(((unsigned long long)rate << 16) / NOCTIS_AUDIO_SR);
+    g_vcVol = (int)(vol * 32767.0f); g_vcOn = 1;
+}
+static inline int audioVoiceBusy(void) { return g_vcOn; }
+static inline float audioVoiceProgress(void) { return g_vcN ? (float)g_vcPos / (float)g_vcN : 1.0f; }   // 0..1
+static inline void audioVoiceStop(void) { g_vcOn = 0; }
 
 static inline void audioShutdown(void)
 {

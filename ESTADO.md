@@ -368,6 +368,34 @@ los numeros viejos y 8 entradas (los pisos 8 y 9 leian fuera del arreglo).
 models|model NOMBRE|scene` compila dump.cpp con el g++ de WSL usando EL MISMO codigo del juego y
 dibuja con z-buffer en build/mv/*.png (personaje de frente/lado/espalda, ciclo de carrera en 8
 fases, cada modelo del cementerio, la escena con niebla). Sirve para disenar sin el emulador.
+**SABLE (8123fc6):** el nervio del filo sigue la curva de la hoja (en la punta se veia una horquilla);
+`view.py saber` = primer plano del sable.
+**MOVIMIENTO v3 (2026-10-16, "se ve muy tosco y rigido"):** el hunter tiene 18 piezas (cand/hunter.h,
+g_hnMark[0..18]): el TORSO se partio en PELVIS y PECHO (el pecho gira contra la pelvis al caminar,
+x1.7 del yawSway; se dobla en cada pisada, al acelerar, al caer; el tajo sale del cuerpo entero), cada
+PIE gira en su TOBILLO (plano mientras apoya, despega con la punta, entra de talon; rig.h rgAnkle) y la
+mano de la pistola tiene MUNECA (al apuntar la pistola miraba al CIELO: iba pegada al antebrazo).
+Toda la pose pasa por un PASO-BAJO (rig.h, al final de hunterRig): apuntar, el tajo, saltar, aterrizar
+y pasar a correr se funden en 3-5 frames en vez de saltar. Inclinacion por ACELERACION (resorte).
+`python tools/modelview/view.py anim run|walk|slash|aim|jump [n]` simula n frames SEGUIDOS con la misma
+fisica de animacion que main (dump seq) -> build/mv/anim_*.png (cada 4 frames) + .gif.
+**BAPHOMET v2 (2026-10-16, "las imagenes tienen que ser mas pulidas, los ojos y sigilos mejor
+producidos, las letras en latin, una voz que diga maldiciones en latin que de miedo y no risa"):**
+- Visiones (boss_baphomet.h, bloque "terror en 2D"): trazos con borde suave (bpHSoft/bpHSoftRing),
+  OJOS de cabra (bpHEye: almendra, parpados de carne que se afinan a las comisuras, venas, iris con
+  estrias, pupila horizontal, brillo humedo; miran y parpadean), el SELLO (doble anillo con runas,
+  pentagrama invertido FIJO que arde con luz aditiva, brasas), calavera con brasas en las cuencas,
+  y un 4o destello subliminal (el ojo enorme).
+- La VOZ: `tools/voice/make_voice.py` (frases y perillas arriba) -> voz "Microsoft Raul" por WinRT
+  (`tools/voice/tts_winrt.ps1`; las de SAPI son solo de mujer) -> x0.80 (cinta lenta: -3.9 st), una
+  octava abajo al 22 %, un susurro (fase al azar) al 20 %, eco de cueva de 2.6 s -> IMA ADPCM 16 kHz
+  en `assets/VOICE.ADP` (src/voice_blob.S) + `src/voice_clips.h` (GENERADO: offsets y textos).
+  audio.h: canal de VOZ de una sola pasada (audioVoicePlay/Busy/Progress/Stop), encima de la musica.
+- En las visiones dice una maldicion por vez y la palabra arde en pantalla MIENTRAS la dice (TRADITOR,
+  NEMO TE AUDIT, GENUFLECTE, CARO TUA MEA EST, ILLE NON VENIET, PUTRESCE, MORIERIS, VAE TIBI); en la
+  traicion "TRADITOR", en las fases "VAE TIBI" / "DEUS TUUS TE RELIQUIT", y las maldiciones finales en
+  latin con la traduccion abajo. Para oirla: Escritorio\NOCTIS_voz_baphomet.wav.
+- Bandera de prueba nueva: `NOCTIS_TEST_BPVIS` (1 = visiones y voz siempre, desde que entras).
 **Arreglo de paso:** varios HUD de jefe (cementerio, Baphomet, Gabriel, rojo) terminan con
 `sceGuEnable(GU_DEPTH_TEST)` y todo el texto que lvHud dibujaba despues (avisos, GUARDAR, mensajes)
 se recortaba contra el piso: lvHud ahora apaga la profundidad tras el HUD del jefe.

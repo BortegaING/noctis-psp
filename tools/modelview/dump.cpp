@@ -3,6 +3,8 @@
 //   dump hero <out.bin> <walkPhase> <speed01> <runK> <grounded> <aiming> <idleT>
 //   dump model <out.bin> <nombre>      (modelos del cementerio: ver bcmBuildByName)
 //   dump scene <out.bin>               (el cementerio entero: suelo + instancias)
+//   dump seq <prefijo> <escena> <n>    (n frames SEGUIDOS del hunter, con el suavizado del rig como en
+//                                       el juego: prefijo_000.bin ...; escena: walk run slash aim jump)
 #include "stubs.h"
 #include "../../src/char_prims.h"
 #include "../../src/gfx_prims.h"
@@ -17,9 +19,55 @@ static int g_heroV = 0;
 
 static LineVertex g_buf[60000];
 
+// el cuerpo como lo arma main.cpp (sin posicion ni gravedad)
+static void heroBody(HunterPose &pose, const HunterRig &rig) {
+    const float HIP = 1.70f;
+    sceGumLoadIdentity();
+    ScePspFVector3 fy = { 0.0f, -pose.yawSway, 0.0f }; sceGumRotateXYZ(&fy);
+    ScePspFVector3 bob = { pose.bobX * HUNTER_BOB_SCALE, pose.bobY * HUNTER_BOB_SCALE, 0.0f }; sceGumTranslate(&bob);
+    ScePspFVector3 up = { 0.0f, HIP, 0.0f }; sceGumTranslate(&up);
+    ScePspFVector3 body = { hunterPitchRad(pose), 0.0f, hunterRollRad(pose) }; sceGumRotateXYZ(&body);
+    ScePspFVector3 dn = { 0.0f, -HIP, 0.0f }; sceGumTranslate(&dn);
+    drawHunterRig(rig);
+}
+
+// n frames seguidos con la MISMA fisica de animacion que main.cpp (velocidad con FP_ACCEL/FP_STOP,
+// fase por distancia, runK, tajo de 14 frames, aterrizaje). La escena dice que se aprieta y cuando.
+static void heroSeq(const char *prefix, const char *scene, int n) {
+    g_heroV = build_hunter(g_hero);
+    float vel = 0.0f, runK = 0.0f, phase = 0.0f, idleT = 0.0f, landK = 0.0f;
+    int melee = 0, mtype = 0, air = 0;
+    for (int f = 0; f < n; ++f) {
+        int move = 0, run = 0, aim = 0;
+        if (!strcmp(scene, "walk"))  move = (f >= 10 && f < n - 30);
+        if (!strcmp(scene, "run"))   { move = (f >= 8 && f < n - 30); run = (f >= 30 && f < n - 30); }
+        if (!strcmp(scene, "aim"))   { move = (f >= 8 && f < n - 20); aim = (f >= 40 && f < 80); }
+        if (!strcmp(scene, "slash")) { if (f == 12 || f == 30 || f == 48) { melee = 14; mtype = (f - 12) / 18; } }
+        if (!strcmp(scene, "jump"))  { move = (f >= 8); if (f == 40) air = 32; }
+        const float target = move ? 0.11f * (1.0f + 0.75f * runK) : 0.0f;
+        vel += (target - vel) * 0.16f; if (!move) vel -= vel * 0.20f;
+        runK += ((run ? 1.0f : 0.0f) - runK) * (run ? 0.06f : 0.12f); if (runK < 0.001f) runK = 0.0f;
+        const int grounded = air > 0 ? 0 : 1;
+        if (air > 0 && --air == 0) landK = 1.0f;
+        float spd01 = vel / 0.11f; if (spd01 > 1.0f) spd01 = 1.0f;
+        if (vel > 0.02f && grounded) phase += (1.4f - 0.35f * runK) * vel;
+        idleT += 0.05f;
+        g_hunterRunK = runK; g_hunterSlashType = mtype;
+        HunterPose pose = hunterPose(phase, idleT, spd01, grounded);
+        const HunterRig rig = hunterRig(pose, phase, idleT, spd01, grounded, 0, aim, melee > 0 ? melee / 14.0f : 0.0f, landK);
+        if (melee > 0) --melee;
+        landK *= 0.84f; if (landK < 0.01f) landK = 0.0f;
+        g_out.clear();
+        heroBody(pose, rig);
+        char path[512]; snprintf(path, sizeof path, "%s_%03d.bin", prefix, f);
+        dumpOut(path);
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc < 3) { fprintf(stderr, "uso: dump hero|model|scene out.bin ...\n"); return 1; }
     const char *mode = argv[1], *out = argv[2];
+    if (!strcmp(mode, "seq")) { heroSeq(out, argc > 3 ? argv[3] : "walk", argc > 4 ? atoi(argv[4]) : 90); return 0; }
     if (!strcmp(mode, "hero")) {
         g_heroV = build_hunter(g_hero);
         fprintf(stderr, "hunter: %d vertices (marcas:", g_heroV);

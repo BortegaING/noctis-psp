@@ -22,6 +22,9 @@
 #include "icon_data.h"   // g_icon0Png / g_pic1Png (assets/ICON0.PNG y PIC1.PNG en bytes)
 // cancion de la pelea con el serafin (src/music_blob.S: .incbin de assets/SERAPH.ADP)
 extern "C" { extern const unsigned char g_seraphAdp[]; extern const unsigned char g_seraphAdpEnd[]; }
+// la voz de Baphomet (src/voice_blob.S: .incbin de assets/VOICE.ADP; donde empieza cada frase: voice_clips.h)
+extern "C" { extern const unsigned char g_voiceAdp[]; }
+#include "voice_clips.h"
 static const int LV_FADE = 150;   // cambio de piso: 30 a negro + 90 de PANTALLA DE CARGA + 30 de entrada
 
 
@@ -301,7 +304,7 @@ static uint32_t lvFlags() {
 // entra a un piso: geometria, colision, spawn, estado de enemigos
 static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, float &camYaw) {
     g_lvFloor = floor; g_lvT = 0; g_lvMenu = 0; g_prison = 0; g_bsCharge = 0; g_lvNoFallDeath = 0;
-    audioStatic(0.0f); audioDrone(0.0f); audioSiren(0);                  // el sonido del cementerio no te sigue
+    audioStatic(0.0f); audioDrone(0.0f); audioSiren(0); audioVoiceStop();   // el sonido de un piso no te sigue
     mcEnterFloor(floor);                                                // botin pendiente fuera; mercader solo en el cielo
     audioTrackStop(); audioMusic(g_optMusic);                           // cada piso arranca con la musica tranquila
     for (int k = 0; k < 16; ++k) g_orbs[k].life = 0;

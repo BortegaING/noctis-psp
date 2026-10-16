@@ -18,6 +18,9 @@ static const int   BP_PH2 = 100, BP_PH3 = 50;   // vida a la que entra en la fas
 #ifndef NOCTIS_TEST_BPFASE
 #define NOCTIS_TEST_BPFASE 0   // PRUEBA: 2 o 3 = la pelea arranca en esa fase (ver el terror sin pelear). 0 al commitear
 #endif
+#ifndef NOCTIS_TEST_BPVIS
+#define NOCTIS_TEST_BPVIS 0    // PRUEBA: 1 = las visiones de muerte (y la voz) SIEMPRE encendidas, desde que entras. 0 al commitear
+#endif
 static const float BP_HOME_R = 9.0f;       // radio al que rodea la fogata
 static const float BP_FIREY  = 1.5f;       // altura del corazon del fuego
 static const float BP_TAU    = 6.2831853f;
@@ -37,6 +40,9 @@ static int   g_bpNext = 0, g_bpCurse = 0;
 static int   g_bpPhase = 1, g_bpPhaseT = 0;          // fase 1..3; frames desde el ultimo cambio (destello)
 static float g_bpVision = 0.0f;                       // 0..1: cuanto tapan la vista las visiones de muerte
 static int   g_bpSubT = 0, g_bpSubK = 0, g_bpSubCd = 0; // destello subliminal (fase 3): frames, tipo, espera
+// la VOZ en las visiones: la maldicion que esta diciendo (-1 = calla), frames desde que empezo, pausa
+// hasta la siguiente, donde arde en pantalla y la ultima (para no repetir)
+static int   g_bpWordK = -1, g_bpWordT = 0, g_bpWordGap = 0, g_bpWordX = 240, g_bpWordY = 120, g_bpWordLast = -1;
 static float g_bpPilX[5], g_bpPilZ[5]; static int g_bpPilT = 0;   // columnas de fuego en estrella
 static int   g_bpAtk = BPA_NONE, g_bpAtkT = 0, g_bpPause = 0, g_bpSeq = 1, g_bpStun = 0;
 static int   g_bpCharge = 0, g_bpHurt = 0, g_bpBounce = 0, g_bpOrbN = 0, g_bpOrbTot = 0;
@@ -56,8 +62,8 @@ static char g_bpPLn[24][100]; static int g_bpPLnN = 0;
 static CityBldg *g_bpBx = 0; static int g_bpNbx = 0, g_bpBxCap = 0;
 
 // ---------------------------------------------------------------- textos (UTF-8)
-// palabras que asoman en las visiones de muerte
-static const char *kBpWhisper[6] = { "TRAIDOR", "NADIE TE ESCUCHA", "ARRODÍLLATE", "TU CARNE ES MÍA", "ÉL NO VENDRÁ", "PÚDRETE" };
+// las palabras de las visiones de muerte son las maldiciones en LATIN de la voz: kVoiceLat[0..VC_NWHISPER-1]
+// (src/voice_clips.h, las genera tools/voice/make_voice.py). En castellano no daban miedo.
 static const char *kBpPray[12] = {
     "Padre nuestro", "que estás en el cielo,", "santificado sea tu nombre;", "venga a nosotros tu reino;",
     "hágase tu voluntad", "en la tierra como en el cielo.", "Danos hoy nuestro pan de cada día;",
@@ -87,6 +93,9 @@ static unsigned int bpC(int r, int g, int b, int a) {
     if (a > 255) a = 255;
     return (unsigned int)((a << 24) | (b << 16) | (g << 8) | r);
 }
+// la VOZ de Baphomet: una frase de src/voice_clips.h (corta la que estuviera sonando)
+static void bpVoice(int k, float vol) { audioVoicePlay(g_voiceAdp + kVoiceOff[k], kVoiceLen[k], VOICE_RATE, vol); }
+static void bpVoiceLine(int k) { g_bpWordK = -1; bpVoice(k, 1.0f); }   // una que NO es de las visiones
 static float bpFlick(float a, float ph) { return 0.5f * sinf(a * 0.33f + ph) + 0.3f * sinf(a * 0.71f + 1.7f + ph) + 0.2f * sinf(a * 1.37f + 0.4f + ph * 2.0f); }
 static float bpGlow(float x, float y, float z) { const float dy = y - BP_FIREY; return 1.0f / (1.0f + (x * x + dy * dy + z * z) * 0.028f); }
 
@@ -462,6 +471,7 @@ static void bpResetAll() {
     g_bpSt = BPS_IDLE; g_bpStT = 0; g_bpT = 0; g_bpAnim = 0; g_bpX = 0.0f; g_bpY = 0.0f; g_bpZ = -BP_HOME_R;
     g_bpYaw = BP_PIE; g_bpScale = 1.0f; g_bpHp = BP_HP; g_bpCurse = 0;
     g_bpPhase = 1; g_bpPhaseT = 999; g_bpVision = 0.0f; g_bpSubT = 0; g_bpSubCd = 300; g_bpPilT = 0;
+    g_bpWordK = -1; g_bpWordT = 0; g_bpWordGap = 20; g_bpWordLast = -1; audioVoiceStop();
     g_bpPause = 100; g_bpSeq = 1; g_bpStun = 0; g_bpHurt = 0; g_bpBounce = 0; g_bpTint = 0.0f; g_bpLight = 0.0f; g_bpHaveLast = 0;
     g_bpPStep = 0; g_bpPErr = 0; g_bpPWrong = 0; g_bpPShake = 0; g_bpPLnN = 0;
     for (int k = 0; k < 3; ++k) { g_bpArm[0][k] = (k == 0) ? 0.2f : (k == 1 ? 0.22f : 0.55f); g_bpArm[1][k] = g_bpArm[0][k]; }
@@ -526,10 +536,10 @@ static void bpAdvance(int code) {
     // Habla POCO: un cumplido, un pensamiento que se te escapa, y la traicion.
     case BPN_TU:     bpSay("TÚ", "Qué buen perfume tiene...", "", BPN_GOD); break;
     case BPN_GOD:    bpSay("", "De pronto piensas en Dios:", "una luz en el cielo.", BPN_BETRAY); break;
-    case BPN_BETRAY: bpSay("BAPHOMET", "¿Piensas en Él... en mi casa?", "Me has traicionado.", BPN_MINDIN); break;
+    case BPN_BETRAY: bpSay("BAPHOMET", "¿Piensas en Él... en mi casa?", "TRADITOR. Me has traicionado.", BPN_MINDIN); bpVoiceLine(VC_TRADITOR); break;
     case BPN_MINDIN: g_bpSt = BPS_MINDIN; g_bpStT = 0; break;
     case BPN_PRAY: g_bpSt = BPS_PRAY; g_bpStT = 0; g_bpPStep = 0; g_bpPErr = 0; bpPrayRebuild(); bpPrayOptions(); break;
-    case BPN_CURSE2: bpSay("BAPHOMET", "Jamás dormirás tranquilo. Nos veremos... abajo.", "", BPN_VANISH); break;
+    case BPN_CURSE2: bpSay("BAPHOMET", kVoiceLat[VC_NUMQUAM], kVoiceEs[VC_NUMQUAM], BPN_VANISH); bpVoiceLine(VC_NUMQUAM); break;
     case BPN_VANISH: g_bpSt = BPS_VANISH; g_bpStT = 0; lvMessage("BAPHOMET SE ESFUMA", 150); g_lvFlash = 12; break;   // deja el tiempo: ver BPS_VANISH
     default: break;
     }
@@ -647,7 +657,7 @@ static void bpFightUpdate(BossIO &io) {
     // fase 3: destellos subliminales (5 frames de calavera, carne o sigilo, sin aviso)
     if (g_bpPhase >= 3) {
         if (g_bpSubT > 0) --g_bpSubT;
-        else if (--g_bpSubCd <= 0) { g_bpSubT = 6; g_bpSubK = (int)(bpRnd(g_bpT, 5, 97) * 3.0f) % 3; g_bpSubCd = 200 + (int)(bpRnd(g_bpT, 6, 98) * 220.0f); }
+        else if (--g_bpSubCd <= 0) { g_bpSubT = 6; g_bpSubK = (int)(bpRnd(g_bpT, 5, 97) * 4.0f) % 4; g_bpSubCd = 200 + (int)(bpRnd(g_bpT, 6, 98) * 220.0f); }
     }
     // sombras: se deslizan hacia el jugador
     for (int i = 0; i < 4; ++i) {
@@ -1043,11 +1053,26 @@ static void bp_Update(BossIO &io) {
     const int lookCam = (g_bpSt == BPS_SAY || g_bpSt == BPS_MINDIN || g_bpSt == BPS_KOFALL || g_bpSt == BPS_PRAY || g_bpSt == BPS_LIGHT);
     // visiones: tapan la vista al entrar en su mente y durante el ataque VISIONES DE MUERTE
     {
-        const float want = (g_bpSt == BPS_MINDIN) ? 0.75f : (g_bpSt == BPS_FIGHT && g_bpAtk == BPA_VISION && g_bpAtkT < 170) ? 0.88f : 0.0f;
+        const float want = NOCTIS_TEST_BPVIS ? 0.88f :
+                           (g_bpSt == BPS_MINDIN) ? 0.75f : (g_bpSt == BPS_FIGHT && g_bpAtk == BPA_VISION && g_bpAtkT < 170) ? 0.88f : 0.0f;
         g_bpVision += (want - g_bpVision) * (want > g_bpVision ? 0.04f : 0.08f);
         if (g_bpVision < 0.004f) g_bpVision = 0.0f;
         if (g_bpPhaseT < 999) ++g_bpPhaseT;
     }
+    // la VOZ en las visiones: una maldicion por vez, y la palabra arde en pantalla MIENTRAS la dice (bpHWord);
+    // cuando calla, un respiro y otra. Nunca la misma dos veces seguidas.
+    if (g_bpWordK >= 0) { ++g_bpWordT; if (!audioVoiceBusy()) { g_bpWordK = -1; g_bpWordGap = 18 + (int)(bpRnd(g_bpT, 12, 114) * 40.0f); } }
+    if (g_bpVision > 0.35f && g_bpWordK < 0 && !audioVoiceBusy() && --g_bpWordGap <= 0) {
+        int k = (int)(bpRnd(g_bpT, 11, 113) * VC_NWHISPER) % VC_NWHISPER;
+        if (k == g_bpWordLast) k = (k + 3) % VC_NWHISPER;
+        int len = 0; for (const char *p = kVoiceLat[k]; *p; ++p) ++len;
+        const int tw = (len > 12 ? 16 : 24) * len;
+        g_bpWordX = tw / 2 + 16 + (int)(bpRnd(g_bpT, 13, 115) * (float)(480 - tw - 32));
+        g_bpWordY = 36 + (int)(bpRnd(g_bpT, 14, 116) * 170.0f);
+        g_bpWordK = g_bpWordLast = k; g_bpWordT = 0;
+        bpVoice(k, 0.95f);
+    }
+    if (g_bpVision <= 0.35f && g_bpWordGap > 12) g_bpWordGap = 12;   // cuando vuelvan, empieza enseguida
     // la luz del cielo en la que piensas (BPN_GOD): breve, antes de la traicion
     if (g_bpSt == BPS_SAY && g_bpNext == BPN_BETRAY) g_bpLight = bpClampf(g_bpStT / 50.0f, 0.0f, 0.55f);
     if (lookCam) { const float d = bpWrapPi(atan2f(g_bpX - io.px, -(g_bpZ - io.pz)) - io.camYaw); io.camYaw += d * 0.05f; }
@@ -1087,7 +1112,7 @@ static void bp_Update(BossIO &io) {
         break;
     case BPS_LIGHT:
         if (g_bpStT == 60) g_lvFlash = 70;
-        if (g_bpStT >= 170) { g_bpCurse = 1; bpSay("BAPHOMET", "Maldito seas, portador de la luz...", "", BPN_CURSE2); }
+        if (g_bpStT >= 170) { g_bpCurse = 1; bpSay("BAPHOMET", kVoiceLat[VC_MALEDICTUS], kVoiceEs[VC_MALEDICTUS], BPN_CURSE2); bpVoiceLine(VC_MALEDICTUS); }
         break;
     case BPS_VANISH: {
         const float vt = bpClampf((g_bpStT - 20) / 150.0f, 0.0f, 1.0f);
@@ -1102,28 +1127,181 @@ static void bp_Update(BossIO &io) {
 }
 
 // ---------------------------------------------------------------- terror en 2D (visiones de muerte)
-// Todo procedural, sin texturas: carne podrida que late, venas, gusanos, un ojo que se abre en la
-// carne, calaveras, sigilos (pentagrama invertido, cruz invertida) y palabras que asoman.
+// Todo procedural, sin texturas: carne podrida que late, venas, gusanos, OJOS que se abren en la carne,
+// calaveras, el SELLO (pentagrama invertido) y las maldiciones en latin que dice la voz.
+// v2 (2026-10-16, Benjamin: "las imagenes de baphomet tienen que ser mas pulidas, los ojos y sigilos
+// mejor producidos, las letras en latin"):
+//   - trazos con BORDE SUAVE (nucleo + alas que se desvanecen): antes eran palitos de 2 px con esquinas;
+//   - OJOS de cabra: almendra con parpados de carne y pestanas, esclerotica sucia con venas, iris ambar
+//     con estrias y aro oscuro, pupila HORIZONTAL que se dilata, brillo humedo; miran y parpadean;
+//   - el SELLO: doble anillo con runas entre los dos, pentagrama invertido que ARDE (luz que se suma)
+//     y brasas que suben;
+//   - la calavera: pomulos, sienes en sombra, cuencas hondas con una brasa, dientes uno por uno;
+//   - la palabra que DICE la voz, en el momento en que la dice (src/voice_clips.h).
 static const int BP_2D = GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D;
+static inline unsigned int bpA0(unsigned int c) { return c & 0x00FFFFFFu; }   // mismo color, alfa 0
 static void bpHTri(float ax, float ay, float bx, float by, float cx, float cy, unsigned int c) {
     LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 3);
     v[0] = { c, ax, ay, 0.0f }; v[1] = { c, bx, by, 0.0f }; v[2] = { c, cx, cy, 0.0f };
     sceGumDrawArray(GU_TRIANGLES, BP_2D, 3, 0, v);
 }
-static void bpHLine(float x0, float y0, float x1, float y1, float w, unsigned int c) {
-    float dx = x1 - x0, dy = y1 - y0; const float l = sqrtf(dx * dx + dy * dy) + 1e-4f;
-    const float nx = -dy / l * w * 0.5f, ny = dx / l * w * 0.5f;
+static void bpHQuad(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3,
+                    unsigned int c0, unsigned int c1, unsigned int c2, unsigned int c3) {
     LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 6);
-    v[0] = { c, x0 - nx, y0 - ny, 0.0f }; v[1] = { c, x1 - nx, y1 - ny, 0.0f }; v[2] = { c, x1 + nx, y1 + ny, 0.0f };
-    v[3] = { c, x0 - nx, y0 - ny, 0.0f }; v[4] = { c, x1 + nx, y1 + ny, 0.0f }; v[5] = { c, x0 + nx, y0 + ny, 0.0f };
+    v[0] = { c0, x0, y0, 0.0f }; v[1] = { c1, x1, y1, 0.0f }; v[2] = { c2, x2, y2, 0.0f };
+    v[3] = { c0, x0, y0, 0.0f }; v[4] = { c2, x2, y2, 0.0f }; v[5] = { c3, x3, y3, 0.0f };
     sceGumDrawArray(GU_TRIANGLES, BP_2D, 6, 0, v);
 }
-static void bpHRing(float cx, float cy, float r, float w, unsigned int c, int seg) {
+// elipse rellena: color al centro -> color en el borde
+static void bpHEll(float cx, float cy, float rx, float ry, unsigned int cIn, unsigned int cOut, int seg) {
+    LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 3 * seg);
     for (int s = 0; s < seg; ++s) {
         const float a0 = BP_TAU * s / seg, a1 = BP_TAU * (s + 1) / seg;
-        bpHLine(cx + cosf(a0) * r, cy + sinf(a0) * r, cx + cosf(a1) * r, cy + sinf(a1) * r, w, c);
+        v[s * 3 + 0] = { cIn, cx, cy, 0.0f };
+        v[s * 3 + 1] = { cOut, cx + cosf(a0) * rx, cy + sinf(a0) * ry, 0.0f };
+        v[s * 3 + 2] = { cOut, cx + cosf(a1) * rx, cy + sinf(a1) * ry, 0.0f };
+    }
+    sceGumDrawArray(GU_TRIANGLES, BP_2D, 3 * seg, 0, v);
+}
+// TRAZO SUAVE: nucleo de ancho w y dos alas de ancho f que se desvanecen (antialias de pobre). Los
+// extremos se estiran medio ancho para que las uniones de una polilinea no se abran.
+static void bpHSoft(float x0, float y0, float x1, float y1, float w, float f, unsigned int c) {
+    float dx = x1 - x0, dy = y1 - y0; const float l = sqrtf(dx * dx + dy * dy) + 1e-4f;
+    dx /= l; dy /= l;
+    const float e = w * 0.5f;
+    x0 -= dx * e; y0 -= dy * e; x1 += dx * e; y1 += dy * e;
+    const float nx = -dy, ny = dx, h = w * 0.5f;
+    const float o[4] = { -h - f, -h, h, h + f };
+    const unsigned int z = bpA0(c), cc[4] = { z, c, c, z };
+    LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 18);
+    int n = 0;
+    for (int b = 0; b < 3; ++b) {
+        const float oa = o[b], ob = o[b + 1]; const unsigned int ca = cc[b], cb = cc[b + 1];
+        v[n++] = { ca, x0 + nx * oa, y0 + ny * oa, 0.0f }; v[n++] = { ca, x1 + nx * oa, y1 + ny * oa, 0.0f }; v[n++] = { cb, x1 + nx * ob, y1 + ny * ob, 0.0f };
+        v[n++] = { ca, x0 + nx * oa, y0 + ny * oa, 0.0f }; v[n++] = { cb, x1 + nx * ob, y1 + ny * ob, 0.0f }; v[n++] = { cb, x0 + nx * ob, y0 + ny * ob, 0.0f };
+    }
+    sceGumDrawArray(GU_TRIANGLES, BP_2D, 18, 0, v);
+}
+// anillo con borde suave (una sola tira: sin uniones)
+static void bpHSoftRing(float cx, float cy, float r, float w, float f, unsigned int c, int seg) {
+    const float rr[4] = { r - w * 0.5f - f, r - w * 0.5f, r + w * 0.5f, r + w * 0.5f + f };
+    const unsigned int z = bpA0(c), cc[4] = { z, c, c, z };
+    LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 18 * seg);
+    int n = 0;
+    for (int s = 0; s < seg; ++s) {
+        const float a0 = BP_TAU * s / seg, a1 = BP_TAU * (s + 1) / seg;
+        const float c0 = cosf(a0), s0 = sinf(a0), c1 = cosf(a1), s1 = sinf(a1);
+        for (int b = 0; b < 3; ++b) {
+            const float ra = rr[b], rb = rr[b + 1]; const unsigned int ca = cc[b], cb = cc[b + 1];
+            v[n++] = { ca, cx + c0 * ra, cy + s0 * ra, 0.0f }; v[n++] = { ca, cx + c1 * ra, cy + s1 * ra, 0.0f }; v[n++] = { cb, cx + c1 * rb, cy + s1 * rb, 0.0f };
+            v[n++] = { ca, cx + c0 * ra, cy + s0 * ra, 0.0f }; v[n++] = { cb, cx + c1 * rb, cy + s1 * rb, 0.0f }; v[n++] = { cb, cx + c0 * rb, cy + s0 * rb, 0.0f };
+        }
+    }
+    sceGumDrawArray(GU_TRIANGLES, BP_2D, n, 0, v);
+}
+
+// OJO DE CABRA. (cx,cy) centro, w medio ancho; open 0..1; (lx,ly) -1..1 a donde mira; dil 0..1 pupila;
+// a = alfa. Orden: hueco oscuro -> esclerotica -> venas -> iris -> pupila -> brillo -> PARPADOS (tapan
+// lo que sobra del iris y se funden con la carne) -> pestanas.
+static void bpHEye(float cx, float cy, float w, float open, float lx, float ly, float dil, float a) {
+    if (a <= 0.01f) return;
+    const int N = 14, A = (int)(255.0f * a);
+    const float H = w * 0.56f;
+    if (open < 0.0f) open = 0.0f;
+    float tx[N + 1], ty[N + 1], by[N + 1], fa[N + 1], kk[N + 1];
+    for (int i = 0; i <= N; ++i) {
+        const float u = -1.0f + 2.0f * i / N, k = 1.0f - u * u;
+        tx[i] = cx + u * w;
+        ty[i] = cy - H * open * powf(k, 0.70f) + 0.10f * H * u;   // almendra inclinada: el lagrimal mas bajo
+        by[i] = cy + H * 0.80f * open * powf(k, 0.95f) + 0.10f * H * u;
+        fa[i] = bpClampf((1.0f - fabsf(u)) / 0.12f, 0.0f, 1.0f);    // los parpados se funden a los costados
+        kk[i] = sqrtf(k);                                            // y se afinan hacia las comisuras (cerrado: una almendra, no dos bloques)
+    }
+    bpHEll(cx, cy, w * 1.45f, H * 1.95f, bpC(26, 2, 4, (int)(210.0f * a)), bpC(60, 8, 10, 0), 24);   // hundido en la carne
+    if (open > 0.04f) {
+        {   // esclerotica: palida al centro, rosada y sucia en las comisuras, sombra del parpado arriba
+            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 6 * N); int n = 0;
+            for (int i = 0; i < N; ++i) {
+                const float u0 = fabsf(-1.0f + 2.0f * i / N), u1 = fabsf(-1.0f + 2.0f * (i + 1) / N);
+                const unsigned int t0 = bpC(150 - (int)(14 * u0), 116 - (int)(56 * u0), 100 - (int)(52 * u0), A);
+                const unsigned int t1 = bpC(150 - (int)(14 * u1), 116 - (int)(56 * u1), 100 - (int)(52 * u1), A);
+                const unsigned int b0 = bpC(228 - (int)(44 * u0), 214 - (int)(120 * u0), 194 - (int)(110 * u0), A);
+                const unsigned int b1 = bpC(228 - (int)(44 * u1), 214 - (int)(120 * u1), 194 - (int)(110 * u1), A);
+                v[n++] = { t0, tx[i], ty[i], 0.0f }; v[n++] = { t1, tx[i + 1], ty[i + 1], 0.0f }; v[n++] = { b1, tx[i + 1], by[i + 1], 0.0f };
+                v[n++] = { t0, tx[i], ty[i], 0.0f }; v[n++] = { b1, tx[i + 1], by[i + 1], 0.0f }; v[n++] = { b0, tx[i], by[i], 0.0f };
+            }
+            sceGumDrawArray(GU_TRIANGLES, BP_2D, n, 0, v);
+        }
+        for (int k = 0; k < 6; ++k) {   // venas: de las comisuras hacia el iris, finas y quebradas
+            const float sd = (k & 1) ? 1.0f : -1.0f, yo = ((k >> 1) - 1.0f) * 0.22f * H * open;
+            float x = cx + sd * w * 0.94f, y = cy + yo * 0.4f + 0.08f * H * sd;
+            for (int j = 0; j < 3; ++j) {
+                const float nx = x - sd * w * (0.15f + 0.03f * j), ny = y + yo * 0.30f + (float)((k * 7 + j * 3) % 5 - 2) * 0.05f * H;
+                bpHSoft(x, y, nx, ny, 0.7f, 0.7f, bpC(168, 22, 30, (int)(170.0f * a * (1.0f - 0.25f * j))));
+                x = nx; y = ny;
+            }
+        }
+        // IRIS: aro oscuro afuera, estrias ambar (colores alternados por gajo) y oro que se enciende al centro
+        const float R = H * 0.92f, ix = cx + lx * w * 0.30f, iy = cy + ly * H * 0.25f, r0 = R * 0.62f;
+        const int S = 28;
+        {
+            LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 9 * S); int n = 0;
+            const unsigned int out = bpC(40, 14, 4, A), mid = bpC(255, 214, 96, A);
+            for (int s = 0; s < S; ++s) {
+                const float a0 = BP_TAU * s / S, a1 = BP_TAU * (s + 1) / S;
+                const unsigned int i0 = (s & 1) ? bpC(236, 150, 26, A) : bpC(150, 70, 10, A);
+                const unsigned int i1 = ((s + 1) & 1) ? bpC(236, 150, 26, A) : bpC(150, 70, 10, A);
+                const float c0 = cosf(a0), s0 = sinf(a0), c1 = cosf(a1), s1 = sinf(a1);
+                v[n++] = { i0, ix + c0 * r0, iy + s0 * r0, 0.0f }; v[n++] = { i1, ix + c1 * r0, iy + s1 * r0, 0.0f }; v[n++] = { out, ix + c1 * R, iy + s1 * R, 0.0f };
+                v[n++] = { i0, ix + c0 * r0, iy + s0 * r0, 0.0f }; v[n++] = { out, ix + c1 * R, iy + s1 * R, 0.0f }; v[n++] = { out, ix + c0 * R, iy + s0 * R, 0.0f };
+                v[n++] = { mid, ix, iy, 0.0f }; v[n++] = { i0, ix + c0 * r0, iy + s0 * r0, 0.0f }; v[n++] = { i1, ix + c1 * r0, iy + s1 * r0, 0.0f };
+            }
+            sceGumDrawArray(GU_TRIANGLES, BP_2D, n, 0, v);
+        }
+        // pupila HORIZONTAL (de cabra), con un borde rojizo
+        const float pw = R * (0.50f + 0.22f * dil), ph = R * (0.12f + 0.13f * dil);
+        bpHEll(ix, iy, pw * 1.08f, ph * 1.35f, bpC(90, 20, 4, A), bpC(90, 20, 4, 0), 20);
+        bpHEll(ix, iy, pw, ph, bpC(2, 0, 0, A), bpC(16, 2, 2, A), 20);
+        // brillo HUMEDO: una ventana grande arriba y un reflejo chico abajo
+        bpHEll(ix - R * 0.34f, iy - R * 0.40f, R * 0.18f, R * 0.12f, bpC(255, 255, 248, (int)(235.0f * a)), bpC(255, 255, 248, 0), 12);
+        bpHEll(ix + R * 0.32f, iy + R * 0.28f, R * 0.07f, R * 0.05f, bpC(255, 236, 226, (int)(150.0f * a)), bpC(255, 236, 226, 0), 8);
+    }
+    {   // PARPADOS de carne (con un pliegue mas oscuro pegado al ojo)
+        LineVertex *v = (LineVertex *)sceGuGetMemory(sizeof(LineVertex) * 24 * N); int n = 0;
+        for (int i = 0; i < N; ++i) {
+            const float lidUa = 1.30f * H * kk[i], lidUb = 1.30f * H * kk[i + 1], fadUa = 0.80f * H * kk[i] + 2.0f, fadUb = 0.80f * H * kk[i + 1] + 2.0f;
+            const float lidDa = 1.00f * H * kk[i], lidDb = 1.00f * H * kk[i + 1], fadDa = 0.70f * H * kk[i] + 2.0f, fadDb = 0.70f * H * kk[i + 1] + 2.0f;
+            const int Aa = (int)(A * fa[i]), Ab = (int)(A * fa[i + 1]);
+            const unsigned int dkA = bpC(64, 10, 14, Aa), dkB = bpC(64, 10, 14, Ab), skA = bpC(122, 36, 40, Aa), skB = bpC(122, 36, 40, Ab);
+            const unsigned int zA = bpC(122, 36, 40, 0);
+            const float xa = tx[i], xb = tx[i + 1];
+            // arriba: borde oscuro -> carne opaca -> se desvanece
+            v[n++] = { dkA, xa, ty[i], 0.0f }; v[n++] = { dkB, xb, ty[i + 1], 0.0f }; v[n++] = { skB, xb, ty[i + 1] - lidUb, 0.0f };
+            v[n++] = { dkA, xa, ty[i], 0.0f }; v[n++] = { skB, xb, ty[i + 1] - lidUb, 0.0f }; v[n++] = { skA, xa, ty[i] - lidUa, 0.0f };
+            v[n++] = { skA, xa, ty[i] - lidUa, 0.0f }; v[n++] = { skB, xb, ty[i + 1] - lidUb, 0.0f }; v[n++] = { zA, xb, ty[i + 1] - lidUb - fadUb, 0.0f };
+            v[n++] = { skA, xa, ty[i] - lidUa, 0.0f }; v[n++] = { zA, xb, ty[i + 1] - lidUb - fadUb, 0.0f }; v[n++] = { zA, xa, ty[i] - lidUa - fadUa, 0.0f };
+            // abajo
+            v[n++] = { dkA, xa, by[i], 0.0f }; v[n++] = { dkB, xb, by[i + 1], 0.0f }; v[n++] = { skB, xb, by[i + 1] + lidDb, 0.0f };
+            v[n++] = { dkA, xa, by[i], 0.0f }; v[n++] = { skB, xb, by[i + 1] + lidDb, 0.0f }; v[n++] = { skA, xa, by[i] + lidDa, 0.0f };
+            v[n++] = { skA, xa, by[i] + lidDa, 0.0f }; v[n++] = { skB, xb, by[i + 1] + lidDb, 0.0f }; v[n++] = { zA, xb, by[i + 1] + lidDb + fadDb, 0.0f };
+            v[n++] = { skA, xa, by[i] + lidDa, 0.0f }; v[n++] = { zA, xb, by[i + 1] + lidDb + fadDb, 0.0f }; v[n++] = { zA, xa, by[i] + lidDa + fadDa, 0.0f };
+        }
+        sceGumDrawArray(GU_TRIANGLES, BP_2D, n, 0, v);
+    }
+    // linea de las pestanas, el pliegue de arriba y pestanas que salen hacia afuera
+    for (int i = 0; i < N; ++i) {
+        const float f = 0.5f * (fa[i] + fa[i + 1]);
+        bpHSoft(tx[i], ty[i], tx[i + 1], ty[i + 1], 1.8f, 1.2f, bpC(18, 2, 4, (int)(A * f)));
+        bpHSoft(tx[i], by[i], tx[i + 1], by[i + 1], 1.0f, 1.0f, bpC(30, 4, 6, (int)(A * f * 0.8f)));
+        const float cy0 = ty[i] - 0.30f * H - 0.25f * H * open, cy1 = ty[i + 1] - 0.30f * H - 0.25f * H * open;
+        if (i > 1 && i < N - 2) bpHSoft(tx[i], cy0, tx[i + 1], cy1, 1.0f, 1.4f, bpC(52, 8, 12, (int)(A * 0.55f)));
+        if (i > 0 && (i & 1)) {
+            const float u = -1.0f + 2.0f * i / N, lx2 = u * 0.35f * H, ly2 = -0.30f * H;
+            bpHSoft(tx[i], ty[i], tx[i] + lx2, ty[i] + ly2, 0.9f, 0.6f, bpC(14, 2, 2, (int)(A * f)));
+        }
     }
 }
+
 static void bpHFlesh(float a, int t) {
     if (a <= 0.01f) return;
     drawRect(0, 0, SCR_WIDTH, SCR_HEIGHT, bpC(38, 5, 7, (int)(215.0f * a)));
@@ -1133,11 +1311,12 @@ static void bpHFlesh(float a, int t) {
         const int rot = (k % 4 == 0);
         lvFan2D(cx, cy, r, rot ? bpC(74, 84, 26, (int)(200.0f * a)) : bpC(152, 46, 50, (int)(222.0f * a)), bpC(40, 6, 10, 0), 14);
     }
-    for (int k = 0; k < 10; ++k) {                                  // venas
+    for (int k = 0; k < 10; ++k) {                                  // venas: gruesas, que se afinan y se ramifican
         float x = (float)((k * 53 + 11) % 480), y = (float)((k * 97 + 23) % 272), ang = k * 1.3f + 0.4f * sinf(t * 0.03f + k);
         for (int j = 0; j < 5; ++j) {
-            const float nx = x + cosf(ang) * 30.0f, ny = y + sinf(ang) * 30.0f;
-            bpHLine(x, y, nx, ny, 2.6f, bpC(84, 12, 52, (int)(205.0f * a)));
+            const float nx = x + cosf(ang) * 30.0f, ny = y + sinf(ang) * 30.0f, wv = 3.2f - 0.45f * j;
+            bpHSoft(x, y, nx, ny, wv, 1.8f, bpC(84, 12, 52, (int)(205.0f * a)));
+            if (j == 2) bpHSoft(nx, ny, nx + cosf(ang + 1.1f) * 22.0f, ny + sinf(ang + 1.1f) * 22.0f, 1.2f, 1.2f, bpC(84, 12, 52, (int)(170.0f * a)));
             x = nx; y = ny; ang += 0.55f * sinf(k * 1.7f + j);
         }
     }
@@ -1147,35 +1326,112 @@ static void bpHFlesh(float a, int t) {
         lvFan2D(x, y, 3, bpC(228, 216, 182, (int)(235.0f * a)), bpC(190, 170, 130, (int)(200.0f * a)), 6);
         lvFan2D(x + 4, y + 1, 3, bpC(214, 200, 166, (int)(225.0f * a)), bpC(170, 150, 110, (int)(190.0f * a)), 6);
     }
-    {   // un OJO que se abre en la carne
-        const float open = 0.5f + 0.5f * sinf(t * 0.025f);
-        const int ex = 240 + (int)(70.0f * sinf(t * 0.011f)), ey = 150 + (int)(30.0f * sinf(t * 0.017f));
-        lvFan2D(ex, ey, 36, bpC(232, 222, 210, (int)(240.0f * a)), bpC(200, 150, 140, (int)(240.0f * a)), 18);
-        lvFan2D(ex + (int)(6.0f * sinf(t * 0.05f)), ey, 17, bpC(170, 20, 24, (int)(250.0f * a)), bpC(90, 6, 10, (int)(250.0f * a)), 14);
-        lvFan2D(ex + (int)(6.0f * sinf(t * 0.05f)), ey, 7, bpC(4, 2, 2, (int)(255.0f * a)), bpC(4, 2, 2, (int)(255.0f * a)), 10);
-        const int lid = (int)(38.0f * (1.0f - open));
-        drawRect(ex - 40, ey - 40, 80, 4 + lid, bpC(110, 30, 34, (int)(250.0f * a)));
-        drawRect(ex - 40, ey + 36 - lid, 80, 4 + lid, bpC(110, 30, 34, (int)(250.0f * a)));
+    for (int k = 0; k < 3; ++k) {                                   // ojos chicos que se abren en otros lados
+        const int per = 150 + k * 40, ph = (t + k * 61) % per, cyc = (t + k * 61) / per;
+        const float o = ph < 90 ? sinf(BP_PIE * ph / 90.0f) : 0.0f;
+        if (o <= 0.02f) continue;
+        bpHEye(50.0f + bpRnd(cyc, k, 141) * 380.0f, 40.0f + bpRnd(cyc, k, 142) * 190.0f, 18.0f + 6.0f * k, o,
+               bpSg(cyc, k, 143), 0.4f * bpSg(cyc, k, 144), 0.3f, a);
+    }
+    {   // el OJO grande: se abre, mira, se dilata y de vez en cuando PARPADEA
+        float open = 0.62f + 0.38f * sinf(t * 0.025f);
+        const int bl = t % 173; if (bl < 8) open *= fabsf((float)(bl - 4)) / 4.0f;
+        bpHEye(240.0f + 70.0f * sinf(t * 0.011f), 140.0f + 26.0f * sinf(t * 0.017f), 64.0f, open,
+               0.9f * sinf(t * 0.05f), 0.5f * sinf(t * 0.037f), 0.5f + 0.5f * sinf(t * 0.08f), a);
     }
 }
-static void bpHSkull(int cx, int cy, int s, float a) {
-    const unsigned int bone = bpC(226, 214, 186, (int)(238.0f * a)), dark = bpC(10, 6, 6, (int)(248.0f * a));
-    lvFan2D(cx, cy, s, bone, bpC(168, 150, 118, (int)(238.0f * a)), 18);                       // craneo
-    drawRect(cx - (int)(s * 0.55f), cy + (int)(s * 0.55f), (int)(s * 1.1f), (int)(s * 0.55f), bone);   // mandibula
-    lvFan2D(cx - (int)(s * 0.38f), cy + (int)(s * 0.08f), (int)(s * 0.28f), dark, dark, 12);   // cuencas
-    lvFan2D(cx + (int)(s * 0.38f), cy + (int)(s * 0.08f), (int)(s * 0.28f), dark, dark, 12);
-    bpHTri((float)cx, cy + s * 0.32f, cx - s * 0.13f, cy + s * 0.55f, cx + s * 0.13f, cy + s * 0.55f, dark);   // nariz
-    for (int i = 0; i < 6; ++i) drawRect(cx - (int)(s * 0.46f) + (int)(i * s * 0.18f), cy + (int)(s * 0.66f), 2, (int)(s * 0.40f), dark);   // dientes
-    bpHLine(cx - s * 0.1f, cy - s * 0.92f, cx + s * 0.22f, cy - s * 0.38f, 2.0f, dark);       // grieta
+static void bpHSkull(int cxI, int cyI, int sI, float a) {
+    const float cx = (float)cxI, cy = (float)cyI, s = (float)sI; const int A = (int)(242.0f * a);
+    const unsigned int bone = bpC(234, 224, 198, A), boneMd = bpC(198, 182, 150, A), boneDk = bpC(118, 100, 76, A), dark = bpC(10, 5, 5, A);
+    bpHEll(cx, cy - 0.12f * s, 0.98f * s, 1.02f * s, bone, boneMd, 28);                               // craneo
+    bpHQuad(cx - 0.56f * s, cy + 0.42f * s, cx + 0.56f * s, cy + 0.42f * s, cx + 0.40f * s, cy + 1.04f * s, cx - 0.40f * s, cy + 1.04f * s,
+            boneMd, boneMd, boneDk, boneDk);                                                           // maxilar
+    for (int sd = -1; sd <= 1; sd += 2) {
+        bpHEll(cx + sd * 0.62f * s, cy + 0.40f * s, 0.30f * s, 0.24f * s, boneMd, boneDk, 14);         // pomulos
+        bpHEll(cx + sd * 0.80f * s, cy - 0.05f * s, 0.26f * s, 0.52f * s, bpC(90, 70, 52, (int)(130.0f * a)), bpC(90, 70, 52, 0), 14);   // sienes en sombra
+        bpHEll(cx + sd * 0.36f * s, cy + 0.10f * s, 0.31f * s, 0.28f * s, bpC(2, 1, 1, A), bpC(70, 50, 38, A), 18);   // cuencas hondas
+        const float em = 0.55f + 0.45f * sinf(g_bpAnim * 0.15f + sd);                                  // y una brasa adentro
+        bpHEll(cx + sd * 0.36f * s, cy + 0.13f * s, 0.075f * s, 0.055f * s, bpC(255, 70, 24, (int)(230.0f * a * em)), bpC(255, 20, 0, 0), 10);
+    }
+    bpHTri(cx, cy + 0.30f * s, cx - 0.14f * s, cy + 0.56f * s, cx, cy + 0.62f * s, dark);           // nariz: corazon invertido
+    bpHTri(cx, cy + 0.30f * s, cx + 0.14f * s, cy + 0.56f * s, cx, cy + 0.62f * s, dark);
+    bpHQuad(cx - 0.42f * s, cy + 0.67f * s, cx + 0.42f * s, cy + 0.67f * s, cx + 0.38f * s, cy + 0.99f * s, cx - 0.38f * s, cy + 0.99f * s,
+            dark, dark, dark, dark);
+    for (int k = 0; k < 7; ++k) {                                                                      // dientes, uno por uno
+        const float x = cx - 0.36f * s + k * 0.12f * s;
+        bpHEll(x, cy + 0.75f * s, 0.052f * s, 0.078f * s, bone, boneMd, 10);
+        if (k < 6) bpHEll(x + 0.06f * s, cy + 0.91f * s, 0.048f * s, 0.068f * s, boneMd, boneDk, 10);
+    }
+    bpHSoft(cx - 0.10f * s, cy - 1.05f * s, cx + 0.04f * s, cy - 0.70f * s, 1.6f, 1.0f, dark);       // grietas
+    bpHSoft(cx + 0.04f * s, cy - 0.70f * s, cx + 0.22f * s, cy - 0.46f * s, 1.3f, 1.0f, dark);
+    bpHSoft(cx + 0.04f * s, cy - 0.70f * s, cx - 0.12f * s, cy - 0.52f * s, 0.9f, 0.8f, dark);
 }
+// runas del sello: 3 trazos cada una, en decimos de un cuadrado -10..10 (y = hacia AFUERA del anillo)
+static const signed char kBpRune[8][3][4] = {
+    { { 0,-10, 0, 10 }, { 0,  2,-7, 9 }, { 0, 2, 7, 9 } },
+    { {-6, 10, 6, 10 }, { 6, 10,-6,-10 }, {-6,-10, 6,-10 } },
+    { { 0,-10, 0, 10 }, {-7,  3, 7, 3 }, { 7, 3, 7, -4 } },
+    { {-7,-10, 0, 10 }, { 0, 10, 7,-10 }, {-4, -2, 4, -2 } },
+    { { 0,-10, 0, 10 }, { 0, 10, 7, 4 }, { 7, 4, 0, -2 } },
+    { {-7,-10, 7, 10 }, { 7,-10,-7, 10 }, { 0,-10, 0, 10 } },
+    { {-7,-10,-7, 10 }, {-7,  0, 7, 10 }, {-7, 0, 7,-10 } },
+    { {-7, 10, 7, 10 }, { 0, 10, 0,-10 }, {-5, -4, 5, -4 } },
+};
 static void bpHSigil(float cx, float cy, float r, float a, float rot) {
-    const unsigned int glow = bpC(200, 10, 20, (int)(110.0f * a)), core = bpC(255, 40, 40, (int)(240.0f * a));
-    bpHRing(cx, cy, r, 7.0f, glow, 36); bpHRing(cx, cy, r, 2.0f, core, 36); bpHRing(cx, cy, r * 0.84f, 2.0f, core, 36);
+    if (a <= 0.01f) return;
+    const int t = g_bpAnim;
+    const float fl = 0.86f + 0.14f * sinf(t * 0.31f) * sinf(t * 0.17f + 1.0f);          // arde: titila
+    const unsigned int halo = bpC(210, 12, 10, (int)(80.0f * a * fl)), core = bpC(255, 64, 34, (int)(235.0f * a * fl));
+    const unsigned int hot = bpC(255, 214, 170, (int)(200.0f * a * fl));
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xFFFFFFFF);                          // es LUZ: se suma
+    bpHEll(cx, cy, r * 1.30f, r * 1.30f, bpC(140, 0, 0, (int)(70.0f * a)), bpC(140, 0, 0, 0), 32);
+    bpHSoftRing(cx, cy, r, 7.0f, 7.0f, halo, 40);
+    bpHSoftRing(cx, cy, r, 1.8f, 1.4f, core, 40);
+    bpHSoftRing(cx, cy, r * 0.80f, 1.6f, 1.4f, core, 40);
+    for (int k = 0; k < 15; ++k) {                                                      // runas entre los anillos
+        const float an = rot + BP_TAU * (k + 0.5f) / 15.0f, ca = cosf(an), sa = sinf(an);
+        const float rx = cx + ca * r * 0.90f, ry = cy + sa * r * 0.90f, sc = r * 0.0052f;
+        const signed char (*g)[4] = kBpRune[(k * 5 + 3) % 8];
+        for (int j = 0; j < 3; ++j) {
+            const float gx0 = g[j][0] * sc, gy0 = g[j][1] * sc, gx1 = g[j][2] * sc, gy1 = g[j][3] * sc;
+            bpHSoft(rx - sa * gx0 + ca * gy0, ry + ca * gx0 + sa * gy0, rx - sa * gx1 + ca * gy1, ry + ca * gx1 + sa * gy1, 1.3f, 1.1f, core);
+        }
+    }
+    // pentagrama INVERTIDO: NO gira con las runas (dando vueltas quedaba al derecho); apenas se mece
     float px[5], py[5];
-    for (int k = 0; k < 5; ++k) { const float an = rot + BP_PIE * 0.5f + k * BP_TAU / 5.0f; px[k] = cx + cosf(an) * r * 0.84f; py[k] = cy + sinf(an) * r * 0.84f; }   // punta ABAJO
-    for (int k = 0; k < 5; ++k) { bpHLine(px[k], py[k], px[(k + 2) % 5], py[(k + 2) % 5], 7.0f, glow); bpHLine(px[k], py[k], px[(k + 2) % 5], py[(k + 2) % 5], 2.0f, core); }
-    bpHLine(cx, cy - r * 0.32f, cx, cy + r * 0.30f, 3.0f, core);                                 // cruz invertida
-    bpHLine(cx - r * 0.14f, cy + r * 0.14f, cx + r * 0.14f, cy + r * 0.14f, 3.0f, core);
+    const float pr = BP_PIE * 0.5f + 0.10f * sinf(t * 0.021f);
+    for (int k = 0; k < 5; ++k) { const float an = pr + k * BP_TAU / 5.0f; px[k] = cx + cosf(an) * r * 0.80f; py[k] = cy + sinf(an) * r * 0.80f; }
+    for (int k = 0; k < 5; ++k) bpHSoft(px[k], py[k], px[(k + 2) % 5], py[(k + 2) % 5], 8.0f, 7.0f, halo);
+    for (int k = 0; k < 5; ++k) bpHSoft(px[k], py[k], px[(k + 2) % 5], py[(k + 2) % 5], 2.4f, 1.6f, core);
+    for (int k = 0; k < 5; ++k) bpHSoft(px[k], py[k], px[(k + 2) % 5], py[(k + 2) % 5], 0.8f, 0.8f, hot);
+    bpHSoft(cx, cy - r * 0.22f, cx, cy + r * 0.20f, 2.0f, 1.5f, core);                // cruz invertida, chica
+    bpHSoft(cx - r * 0.09f, cy + r * 0.08f, cx + r * 0.09f, cy + r * 0.08f, 2.0f, 1.5f, core);
+    for (int k = 0; k < 10; ++k) {                                                     // brasas que suben del sello
+        const float ph = (float)((t * 3 + k * 37) % 120) / 120.0f, an = rot + k * 2.4f, rho = r * (0.25f + 0.07f * (k % 9));
+        bpHEll(cx + cosf(an) * rho, cy + sinf(an) * rho - ph * r * 0.55f, 1.8f, 1.8f, bpC(255, 140, 70, (int)(210.0f * a * (1.0f - ph))), bpC(255, 60, 20, 0), 6);
+    }
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+}
+// la maldicion que DICE la voz, mientras la dice: grande, temblando, con halo de sangre
+static void bpHWord(float a) {
+    if (g_bpWordK < 0 || !audioVoiceBusy() || a <= 0.01f) return;
+    const float tf = audioVoiceProgress();
+    const float wa = a * bpClampf(g_bpWordT / 5.0f, 0.0f, 1.0f) * bpClampf((0.92f - tf) / 0.30f, 0.0f, 1.0f);
+    if (wa <= 0.01f) return;
+    const char *w = kVoiceLat[g_bpWordK];
+    int len = 0; for (const char *p = w; *p; ++p) ++len;
+    const float sc = len > 12 ? 2.0f : 3.0f;
+    const int t = g_bpAnim, tw = (int)(8 * sc) * len;
+    const int x = g_bpWordX - tw / 2 + (int)(1.6f * bpSg(t, 3, 131)), y = g_bpWordY + (int)(1.6f * bpSg(t, 4, 132));
+    fontTexOn();
+    for (int k = 0; k < 8; ++k) {                                                      // halo
+        const float an = k * BP_TAU / 8.0f;
+        drawText(x + (int)(cosf(an) * 3.5f), y + (int)(sinf(an) * 3.5f), sc, bpC(130, 0, 0, (int)(64.0f * wa)), w);
+    }
+    drawText(x + 2, y + 3, sc, bpC(8, 0, 0, (int)(220.0f * wa)), w);                   // sombra
+    drawText(x, y, sc, bpC(222, 26, 18, (int)(250.0f * wa)), w);                       // la palabra
+    drawText(x, y - 1, sc, bpC(255, 150, 110, (int)(80.0f * wa)), w);                  // filo de luz arriba
+    sceGuDisable(GU_TEXTURE_2D);
 }
 // todo junto: lo llama bp_Hud
 static void bpHudHorror() {
@@ -1188,11 +1444,12 @@ static void bpHudHorror() {
         bpHFlesh(a, t);
         bpHSigil(240.0f, 136.0f, 92.0f + 6.0f * sinf(t * 0.05f), a * 0.9f, t * 0.012f);
         if ((t / 9) % 3 == 0) bpHSkull(60 + (t * 37) % 360, 50 + (t * 53) % 170, 30 + (t % 3) * 8, a);
-        if ((t / 14) % 2 == 0) {
-            const char *w = kBpWhisper[(t / 28) % 6];
-            fontTexOn(); drawText(40 + (t * 29) % 300, 40 + (t * 47) % 190, ((t / 28) & 1) ? 2.0f : 1.0f, bpC(255, 40, 30, (int)(240.0f * a)), w);
+        if ((t / 14) % 2 == 0) {                                     // otras maldiciones que asoman, chicas
+            const char *w = kVoiceLat[(t / 28) % VC_NWHISPER];
+            fontTexOn(); drawText(40 + (t * 29) % 300, 40 + (t * 47) % 190, 1.0f, bpC(255, 60, 40, (int)(120.0f * a)), w);
             sceGuDisable(GU_TEXTURE_2D);
         }
+        bpHWord(a);
     }
     if (g_bpPhaseT < 50 && g_bpSt == BPS_FIGHT) {                   // cambio de fase: golpe de terror
         const float a = 1.0f - g_bpPhaseT / 50.0f;
@@ -1204,7 +1461,8 @@ static void bpHudHorror() {
         drawRect(0, 0, SCR_WIDTH, SCR_HEIGHT, bpC(0, 0, 0, 200));
         if (g_bpSubK == 0) bpHFlesh(0.9f, t);
         else if (g_bpSubK == 1) bpHSkull(240, 120, 92, 1.0f);
-        else bpHSigil(240.0f, 136.0f, 118.0f, 1.0f, 0.0f);
+        else if (g_bpSubK == 2) bpHSigil(240.0f, 136.0f, 118.0f, 1.0f, 0.0f);
+        else bpHEye(240.0f, 136.0f, 170.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f);           // el ojo, enorme, mirandote
     }
 }
 
@@ -1303,6 +1561,7 @@ static bool bp_ShotHit(float x, float y, float z, int dmg) {
                 if (ph > g_bpPhase) {
                     g_bpPhase = ph; g_bpPhaseT = 0; bpClearAttacks(); g_bpPause = 110; g_bpSeq = 0; g_lvFlash = 20;
                     lvMessage(ph == 2 ? "BAPHOMET EMPUÑA SU TRIDENTE" : "LA CUEVA SANGRA. BAPHOMET ENLOQUECE", 170);
+                    bpVoiceLine(ph == 2 ? VC_VAE : VC_DEUS);   // "VAE TIBI" / "DEUS TUUS TE RELIQUIT"
                 }
             }
         } else g_bpBounce = 8;                               // rebota

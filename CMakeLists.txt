@@ -25,11 +25,15 @@ set(CMAKE_C_FLAGS_RELEASE   "-O2 -DNDEBUG")
 add_executable(${PROJECT_NAME}
     src/main.cpp
     src/music_blob.S   # .incbin de assets/SERAPH.ADP (cancion de la pelea con el serafin)
+    src/voice_blob.S   # .incbin de assets/VOICE.ADP (la voz de Baphomet: tools/voice/make_voice.py)
 )
 # el .incbin busca en assets/, y si la cancion cambia hay que reensamblar
 set_source_files_properties(src/music_blob.S PROPERTIES
     COMPILE_FLAGS "-Wa,-I${CMAKE_SOURCE_DIR}/assets"
     OBJECT_DEPENDS "${CMAKE_SOURCE_DIR}/assets/SERAPH.ADP")
+set_source_files_properties(src/voice_blob.S PROPERTIES
+    COMPILE_FLAGS "-Wa,-I${CMAKE_SOURCE_DIR}/assets"
+    OBJECT_DEPENDS "${CMAKE_SOURCE_DIR}/assets/VOICE.ADP")
 
 target_link_libraries(${PROJECT_NAME}
     psputility
