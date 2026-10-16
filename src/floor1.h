@@ -242,20 +242,23 @@ static int f1BuildElevator(LineVertex *buf, int cap) {
     const unsigned int STONE = RGBA(118, 116, 112, 255), STONED = RGBA(80, 78, 76, 255);
     const unsigned int BRASS = RGBA(176, 142, 72, 255), LIGHT = RGBA(255, 214, 120, 255);
     gpBevelBox(buf, i, 0.0f, -0.4f, 0.0f, 6.6f, 6.6f, 0.5f, 0.12f, STONE, STONED);                // plataforma
-    gpRingY(buf, i, 0.0f, 0.11f, 0.0f, 2.2f, 0.16f, 0.04f, 20, BRASS);                             // aro de laton en el piso
-    gpRingY(buf, i, 0.0f, 0.11f, 0.0f, 0.5f, 0.10f, 0.04f, 12, BRASS);
+    for (int k = 0; k < 16; ++k) {                                                                // aro de laton en el piso (plano)
+        const float a0 = GP_TAU * k / 16, a1 = GP_TAU * (k + 1) / 16;
+        gpQuad(buf, i, cosf(a0) * 2.1f, 0.12f, sinf(a0) * 2.1f, BRASS, cosf(a1) * 2.1f, 0.12f, sinf(a1) * 2.1f, BRASS,
+                       cosf(a1) * 2.3f, 0.12f, sinf(a1) * 2.3f, BRASS, cosf(a0) * 2.3f, 0.12f, sinf(a0) * 2.3f, BRASS);
+    }
     const float cx[4] = { -2.9f, 2.9f, 2.9f, -2.9f }, cz[4] = { -2.9f, -2.9f, 2.9f, 2.9f };
     for (int k = 0; k < 4; ++k) {                                                                 // columnas
         gpBevelBox(buf, i, cx[k], 0.1f, cz[k], 0.62f, 0.62f, 0.32f, 0.06f, IRONL, IRON);
         gpPrism(buf, i, cx[k], 0.42f, cz[k], 0.22f, 0.18f, 7.2f, 8, 0.0f, IRON, IRONL, 0);
-        gpRingY(buf, i, cx[k], 1.0f, cz[k], 0.23f, 0.06f, 0.10f, 8, BRASS);
-        gpRingY(buf, i, cx[k], 7.3f, cz[k], 0.21f, 0.06f, 0.10f, 8, BRASS);
+        gpTube(buf, i, cx[k], 0.95f, cz[k], cx[k], 1.05f, cz[k], 0.25f, 0.25f, 8, BRASS, BRASS);
+        gpTube(buf, i, cx[k], 7.25f, cz[k], cx[k], 7.35f, cz[k], 0.23f, 0.23f, 8, BRASS, BRASS);
     }
     for (int w = 0; w < 3; ++w) {                                                                 // barrotes: atras, izq, der
         for (int k = 1; k <= 8; ++k) {
             const float t = -2.9f + 5.8f * k / 9.0f;
             const float x = (w == 0) ? t : (w == 1 ? -2.9f : 2.9f), z = (w == 0) ? -2.9f : t;
-            gpTube(buf, i, x, 0.1f, z, x, 7.6f, z, 0.035f, 0.035f, 4, IRON, IRONL);
+            gpTube(buf, i, x, 0.1f, z, x, 7.6f, z, 0.035f, 0.035f, 3, IRON, IRONL);
         }
         for (int r = 0; r < 3; ++r) {
             const float y = (r == 0) ? 1.0f : (r == 1 ? 3.2f : 7.3f);
@@ -276,7 +279,7 @@ static int f1BuildElevator(LineVertex *buf, int cap) {
     }
     gpBevelBox(buf, i, 0.0f, 7.6f, 0.0f, 6.8f, 6.8f, 0.42f, 0.10f, IRONL, IRON);                   // techo
     gpPrism(buf, i, 0.0f, 8.02f, 0.0f, 3.7f, 0.35f, 1.7f, 4, 0.7854f, IRON, IRONL, 0);
-    gpRingXY(buf, i, 0.0f, 10.2f, 0.0f, 0.55f, 0.12f, 0.16f, 12, BRASS);                         // polea
+    gpRingXY(buf, i, 0.0f, 10.2f, 0.0f, 0.55f, 0.12f, 0.16f, 8, BRASS);                          // polea
     gpTube(buf, i, 0.0f, 9.7f, 0.0f, 0.0f, 10.2f, 0.0f, 0.07f, 0.07f, 4, IRONL, IRONL);
     for (int s = -1; s <= 1; s += 2)                                                              // cadenas
         gpTube(buf, i, s * 0.55f, 10.2f, 0.0f, s * 0.55f, 46.0f, 0.0f, 0.05f, 0.05f, 4, IRON, IRON);

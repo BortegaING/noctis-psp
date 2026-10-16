@@ -83,6 +83,30 @@ static void gpBevelBox(LineVertex *b, int &i, float cx, float y0, float cz, floa
     gpTri(b, i, a1, yb, z1, gpShade(g1, Q, Q, Q),   x1, yb, c1, gpShade(g1, Q, Q, Q),   a1, y1, c1, gpShade(cTop, Q, Q, Q));
 }
 
+// gpPanel: un cuadrilatero GRANDE partido en celdas de a lo sumo cell unidades (degradado de color de
+// abajo (c0: lado a-b) a arriba (c1: lado d-c)). El GE de la PSP descarta ENTERO un triangulo enorme
+// pegado a la camara: muros, pisos y bovedas largas se teselan siempre (regla del motor: <= 8u).
+static void gpPanel(LineVertex *b, int &i, float ax, float ay, float az, float bx, float by, float bz,
+                    float cx, float cy, float cz, float dx, float dy, float dz, unsigned int c0, unsigned int c1, float cell) {
+    const float lu = sqrtf((bx - ax) * (bx - ax) + (by - ay) * (by - ay) + (bz - az) * (bz - az));
+    const float lv = sqrtf((dx - ax) * (dx - ax) + (dy - ay) * (dy - ay) + (dz - az) * (dz - az));
+    int nu = (int)(lu / cell) + 1, nv = (int)(lv / cell) + 1; if (nu > 40) nu = 40; if (nv > 40) nv = 40;
+    for (int v = 0; v < nv; ++v)
+        for (int u = 0; u < nu; ++u) {
+            float P[4][3]; const float uu[4] = { (float)u / nu, (float)(u + 1) / nu, (float)(u + 1) / nu, (float)u / nu };
+            const float vv[4] = { (float)v / nv, (float)v / nv, (float)(v + 1) / nv, (float)(v + 1) / nv };
+            unsigned int C[4];
+            for (int q = 0; q < 4; ++q) {   // bilineal sobre a,b,c,d
+                const float s = uu[q], t = vv[q];
+                P[q][0] = (ax * (1 - s) + bx * s) * (1 - t) + (dx * (1 - s) + cx * s) * t;
+                P[q][1] = (ay * (1 - s) + by * s) * (1 - t) + (dy * (1 - s) + cy * s) * t;
+                P[q][2] = (az * (1 - s) + bz * s) * (1 - t) + (dz * (1 - s) + cz * s) * t;
+                C[q] = cp_lerp(c0, c1, t);
+            }
+            gpQuad(b, i, P[0][0], P[0][1], P[0][2], C[0], P[1][0], P[1][1], P[1][2], C[1], P[2][0], P[2][1], P[2][2], C[2], P[3][0], P[3][1], P[3][2], C[3]);
+        }
+}
+
 // gpBox: la misma caja SIN biselar (30 v, sin la base): para las versiones de lejos, donde el bisel
 // ya no se distingue y cuesta el triple.
 static void gpBox(LineVertex *b, int &i, float cx, float y0, float cz, float w, float d, float h,

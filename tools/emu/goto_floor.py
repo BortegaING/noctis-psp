@@ -1,6 +1,6 @@
 """NOCTIS: lleva al jugador del cielo al piso N por el elevador (con el atajo de pruebas SELECT,
 que abre los pisos 1..9). Sirve con el emulador oculto (hidden.ps1) o en pantalla (show.ps1).
-Uso: python goto_floor.py N        (N = 1..9; tarda ~45 s: caminata de 38.5 s + carga)
+Uso: python goto_floor.py N        (N = 1..10; tarda ~45 s: caminata de 38.5 s + carga)
 """
 import sys, time
 from psp_input import find_port, ws_connect, ws_send

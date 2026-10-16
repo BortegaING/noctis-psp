@@ -127,7 +127,7 @@ static int build_hunter(LineVertex *buf)
             const float yl = (p < 2) ? 0.400f : 0.450f;            // las colas, un poco mas largas
             float ys2[4] = { ys[0], ys[1], ys[2], yl };
             hn_loftE(buf,i, 4, ys2, rx, rz, oz, cO, 6, a0, a1);           // tela
-            hn_loftE(buf,i, 4, ys2, rx, rz, oz, cL, 6, a0, a1, 0.93f);    // forro por dentro
+            hn_loftE(buf,i, 4, ys2, rx, rz, oz, cL, 4, a0, a1, 0.93f);    // forro por dentro
             hn_tatters(buf,i, yl, rx[3], rz[3], oz[3], a0, a1, 4, 0.11f, 17u + p * 5u, coatDk, hemDk);
             if (p >= 2) {   // vivo rojo por el canto delantero del panel lateral
                 const float ae = (p == 2) ? a1 : a0;
@@ -167,8 +167,8 @@ static int build_hunter(LineVertex *buf)
         const float rz[4] = { 0.118f, 0.198f, 0.244f, 0.262f };
         const float oz[4] = { 0.000f, 0.004f, 0.012f, 0.020f };
         const unsigned int c[4] = { coatLit, coatLit, coat, coatDk };
-        hn_loftE(buf,i, 4, ys, rx, rz, oz, c, 16, 0.0f, 6.2831853f);
-        hn_tatters(buf,i, 1.240f, 0.322f, 0.262f, 0.020f, 0.0f, 6.2831853f, 14, 0.085f, 3u, coatDk, hemDk);
+        hn_loftE(buf,i, 4, ys, rx, rz, oz, c, 13, 0.0f, 6.2831853f);
+        hn_tatters(buf,i, 1.240f, 0.322f, 0.262f, 0.020f, 0.0f, 6.2831853f, 13, 0.085f, 3u, coatDk, hemDk);
     }
     {   // cuello alto que se ABRE hacia arriba
         const float ys[2] = { 1.470f, 1.610f }, rx[2] = { 0.125f, 0.150f }, rz[2] = { 0.108f, 0.128f }, oz[2] = { -0.02f, -0.01f };
@@ -229,15 +229,15 @@ static int build_hunter(LineVertex *buf)
     //    que cae hacia atras y la tela que baja por la espalda.
     // =====================================================================
     hn_tube(buf,i, 0.000f,1.470f,-0.030f, 0.000f,1.600f,-0.055f, 0.056f,0.052f, 8, skinDk, skinDk);   // cuello
-    hn_ball(buf,i, 0.000f,1.680f,-0.072f, 0.086f,0.106f,0.094f, 5,10, skin);                          // cara
+    hn_ball(buf,i, 0.000f,1.680f,-0.072f, 0.086f,0.106f,0.094f, 4,8, skin);                           // cara
     hn_ball(buf,i, -0.034f,1.700f,-0.158f, 0.014f,0.010f,0.008f, 2,6, RGBA(24, 20, 22, 255));          // ojos (en sombra)
     hn_ball(buf,i,  0.034f,1.700f,-0.158f, 0.014f,0.010f,0.008f, 2,6, RGBA(24, 20, 22, 255));
-    hn_ball(buf,i, 0.000f,1.632f,-0.082f, 0.096f,0.066f,0.102f, 4,10, scarf);                         // bufanda sobre boca y nariz
+    hn_ball(buf,i, 0.000f,1.632f,-0.082f, 0.096f,0.066f,0.102f, 3,8, scarf);                          // bufanda sobre boca y nariz
     // masa de la capucha: corrida hacia ATRAS para que la cara asome por delante
-    hn_ball(buf,i, 0.000f,1.705f, 0.036f, 0.136f,0.152f,0.130f, 5,12, coat);
+    hn_ball(buf,i, 0.000f,1.705f, 0.036f, 0.136f,0.152f,0.130f, 4,10, coat);
     // borde de la abertura: un aro vertical alrededor de la cara (atrapa la luz como la nariz dorada
     // de los peldanos del Serafin)
-    gpRingXY(buf,i, 0.000f*HN_S,1.682f*HN_S,-0.104f*HN_S, 0.108f*HN_S, 0.030f*HN_S, 0.046f*HN_S, 14, coatLit);
+    gpRingXY(buf,i, 0.000f*HN_S,1.682f*HN_S,-0.104f*HN_S, 0.108f*HN_S, 0.030f*HN_S, 0.046f*HN_S, 10, coatLit);
     hn_limb(buf,i, 0.000f,1.786f,-0.040f, 0.000f,1.764f,-0.138f, 0.074f,0.034f, 8, coatLit, coat);   // ala de la capucha sobre los ojos
     hn_limb(buf,i, 0.000f,1.800f, 0.050f, 0.000f,1.760f, 0.230f, 0.070f,0.004f, 8, coat, coatDk);    // punta que cae atras
     hn_limb(buf,i, 0.000f,1.690f, 0.100f, 0.016f,1.470f, 0.180f, 0.112f,0.060f, 8, coatDk, hemDk);   // tela por la espalda

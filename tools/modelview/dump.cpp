@@ -13,6 +13,7 @@ static int g_heroV = 0;
 #include "../../src/rig.h"
 #define BCM_PREVIEW 1
 #include "../../src/cementerio_models.h"
+#include "../../src/catedral_models.h"
 
 static LineVertex g_buf[60000];
 
@@ -40,6 +41,7 @@ int main(int argc, char **argv) {
         drawHunterRig(rig);
     } else if (!strcmp(mode, "model")) {
         int n = bcmBuildByName(argc > 3 ? argv[3] : "", g_buf, 60000);
+        if (n <= 0) n = ctmBuildByName(argc > 3 ? argv[3] : "", g_buf, 60000);
         if (n <= 0) { fprintf(stderr, "modelo desconocido\n"); return 1; }
         sceGumLoadIdentity(); sceGumDrawArray(GU_TRIANGLES, 0, n, 0, g_buf);
     } else if (!strcmp(mode, "pool")) {   // cuanto ocupan TODOS los modelos (alto + lejos) y el suelo
@@ -62,6 +64,13 @@ int main(int argc, char **argv) {
         }
         for (int m = 0; m < BCM_N; ++m) if (cnt[m]) fprintf(stderr, "  %-11s x%2d  %6d\n", kBcmName[m], cnt[m], per[m]);
         fprintf(stderr, "instancias: %d   + suelo %d\n", tot, bcmBuildGround(g_buf, 60000));
+    } else if (!strcmp(mode, "catedral")) {
+        ctmBuildScenePreview(g_buf, 60000, argc > 3 ? atof(argv[3]) : 2.6f);
+        fprintf(stderr, "nave fija: %d vertices, pool: ", ctmBuildNave(g_buf, 60000));
+        fprintf(stderr, "%d (vigia %d, lanza %d, pilar %d)\n", ctmBuildAll(g_buf, 60000), g_ctm[CTM_VIGIA].n, g_ctm[CTM_SPEAR].n, g_ctm[CTM_PIER].n);
+        for (int m = 0; m < CTM_N; ++m) fprintf(stderr, "  modelo %d: %d\n", m, g_ctm[m].n);
+        ctmBuildNave(g_buf, 60000);
+        for (int k = 0; k < g_ctNChunk; ++k) fprintf(stderr, "  trozo %d (z %.0f..%.0f): %d / lejos %d\n", k, g_ctChunk[k].z0, g_ctChunk[k].z1, g_ctChunk[k].n, g_ctChunk[k].loN);
     } else if (!strcmp(mode, "scene")) {
         bcmBuildScenePreview(g_buf, 60000);
     }

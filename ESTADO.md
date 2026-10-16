@@ -327,6 +327,22 @@ hunterRunPose: fase de vuelo, pierna mas adelante que atras, rodilla de vuelo a 
 que arrastra; se mezcla con runK), ELEVADOR jaula gotica (f1BuildElevator, ~2.3k), PUNTO DE GUARDADO
 pedestal + cristal que gira, TOCON del cuervo, ORBES enemigos como esferas de luz (eran cubos).
 Guardado y elevador ahora se dibujan CON niebla (asomaban nitidos a traves de la bruma).
+**LA CATEDRAL, PISO 10 (2026-10-16, Benjamin: "quiero que aparezca uno en la catedral, tiene que ser
+una estructura grande", referencia Rancid de Fear & Hunger).** `src/catedral_models.h` (modelos +
+nave, sin motor: se ve en la PC) y `src/boss_catedral.h` (prefijo ct_, contrato boss_api.h; LVF_CATHEDRAL
+= 10 = LVF_LAST). NAVE: fachada en z=44, abside hasta z=-88, nave x=+-12, laterales hasta +-22, pilares
+en haz en x=+-12 cada 18 (z 26..-64), boveda ojival 38..52, triforio, 10 vitrales + 10 del
+claristorio, 3 aranas, 3 campanas en z=-19 y=36, roseton en fachada y abside, altar y cruz. Se arma
+UNA vez en g_ctNave (por TROZOS a lo largo de Z, cada uno en version alta y liviana): ct_Draw dibuja
+solo los trozos con alguna esquina delante de la camara, livianos a mas de 32. TODO paño grande va
+en paneles de <= 8 (gpPanel): el GE descarta triangulos enormes junto a la camara. EL VIGIA:
+ctmBuildVigia (metros, CT_S = 2.6, ~4.9k v), piezas articuladas en g_ctMark (piernas digitigradas,
+torso que se encorva, cola, brazos, cabeza) + 2 lanzas (modelo aparte; la derecha se arroja). 220 de
+vida: ESTOCADA (linea roja, 22), GIRO (anillo, saltar, 18), LANZA (18, se clava y vuelve), SALTO
+(fase 2+, circulo, 26 + onda); 66% CAMPANAS (anillos por el suelo, 12); 33% VITRALES CON OJOS que
+disparan + mas rapido. Mascara = doble dano. Botin MASCARA DE LOS OJOS (kMcItem[10], 450 ecos,
+mascara de objetos 0x7FE). Carga medida: ~29k vertices (31k en la fase 3). Prueba:
+`NOCTIS_TEST_CTFASE 2/3`. De paso: la pantalla de carga mostraba "PISO 0" para el 10.
 **ELEVADOR AL CIELO (2026-10-16, Benjamin: "necesito volver al piso 0 para comprar con el
 mercader"):** el menu del elevador va de 0 a 12; 0 = EL CIELO (MERCADER). Llegando en el elevador
 (g_lvViaElev) apareces delante de la puerta del elevador del cielo mirando al mercader, no al

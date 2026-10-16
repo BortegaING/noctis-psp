@@ -159,6 +159,14 @@ def main():
             T = ((min(xs) + max(xs)) * 0.5, (min(ys) + max(ys)) * 0.5, (min(zs) + max(zs)) * 0.5)
             imgs.append(render(v + ground(size * 0.8), orbit(T, size * 1.9 + 0.8, 205, 18), T, W=240, H=260))
         sheet(imgs, 6, os.path.join(OUT, "models.png"), names)
+    elif what == "catedral":
+        v = dump(["catedral"], "catedral")
+        fog = (40.0, 170.0, (20, 20, 28))
+        bg = ((24, 22, 30), (12, 12, 16))
+        a = render(v, (0, 4.5, 41), (0, 6, 20), W=480, H=272, fov=66, fog=fog, bg=bg)
+        b = render(v, (9, 9, 4), (-2, 8, -20), W=480, H=272, fov=66, fog=fog, bg=bg)
+        c = render(v, (0, 5.5, 2), (0, 5.5, -12), W=480, H=272, fov=60, fog=fog, bg=bg)
+        sheet([a, b, c], 3, os.path.join(OUT, "catedral.png"), ["entrada", "nave", "el vigia"])
     elif what == "scene":
         v = dump(["scene"], "scene")
         fog = (6.0, 60.0, (176, 178, 180))

@@ -31,7 +31,7 @@ static int   g_lvFloor = 0, g_lvUnlocked = 1;
 // Usar SIEMPRE estos nombres, nunca el numero: el proximo piso nuevo se agrega tocando solo aqui
 // (y las tablas de nombres: elevador, pantalla de carga, XMB, kZone de main y los objetos del mercader).
 enum { LVF_SKY = 0, LVF_EYES = 1, LVF_CEMETERY = 2, LVF_SERAPH = 3, LVF_CAVE = 4, LVF_GABRIEL = 5,
-       LVF_WHITE = 6, LVF_RED = 7, LVF_BLACK = 8, LVF_PALE = 9, LVF_LAST = 9 };
+       LVF_WHITE = 6, LVF_RED = 7, LVF_BLACK = 8, LVF_PALE = 9, LVF_CATHEDRAL = 10, LVF_LAST = 10 };
 // MENU PRINCIPAL (lobby): 1 = principal, 2 = opciones, 3 = controles, 0 = jugando
 static int   g_menu = 1, g_menuSel = 0, g_menuT = 0;
 static int   g_optMusic = 1, g_optShake = 1, g_optFps = 1;   // opciones (se guardan en eventFlags 10..12)
@@ -191,10 +191,12 @@ LV_STUB(bk)
 #else
 LV_STUB(bv)
 #endif
-static int lvBossFloor() { return g_lvFloor == LVF_CEMETERY || (g_lvFloor >= LVF_CAVE && g_lvFloor <= LVF_PALE); }
+#include "boss_catedral.h"   // 10 LA CATEDRAL: EL VIGIA (mascara de ojos, dos lanzas, campanas)
+static int lvBossFloor() { return g_lvFloor == LVF_CEMETERY || (g_lvFloor >= LVF_CAVE && g_lvFloor <= LVF_LAST); }
 #define LV_BOSS(fn, ...) (g_lvFloor == LVF_CEMETERY ? bc_##fn(__VA_ARGS__) : g_lvFloor == LVF_CAVE ? bp_##fn(__VA_ARGS__) : \
                           g_lvFloor == LVF_GABRIEL ? gb_##fn(__VA_ARGS__) : g_lvFloor == LVF_WHITE ? bw_##fn(__VA_ARGS__) : \
-                          g_lvFloor == LVF_RED ? br_##fn(__VA_ARGS__) : g_lvFloor == LVF_BLACK ? bk_##fn(__VA_ARGS__) : bv_##fn(__VA_ARGS__))
+                          g_lvFloor == LVF_RED ? br_##fn(__VA_ARGS__) : g_lvFloor == LVF_BLACK ? bk_##fn(__VA_ARGS__) : \
+                          g_lvFloor == LVF_CATHEDRAL ? ct_##fn(__VA_ARGS__) : bv_##fn(__VA_ARGS__))
 static void lvBossEnter(BossIO &io, float *sx, float *sy, float *sz) {
     int nb = 0;
     switch (g_lvFloor) {
@@ -204,6 +206,7 @@ static void lvBossEnter(BossIO &io, float *sx, float *sy, float *sz) {
         case LVF_WHITE:   bw_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
         case LVF_RED:     br_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
         case LVF_BLACK:   bk_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
+        case LVF_CATHEDRAL: ct_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
         default: bv_Enter(io, g_lvGeo, 9000, &g_lvGeoN, g_city, &nb, 250, sx, sy, sz); break;
     }
     g_cityCount = nb;
@@ -211,21 +214,25 @@ static void lvBossEnter(BossIO &io, float *sx, float *sy, float *sz) {
 static void lvBossVoidUpdate(BossIO &io) {
     switch (g_lvFloor) { case LVF_CEMETERY: bc_Update(io); break; case LVF_CAVE: bp_Update(io); break; case LVF_GABRIEL: gb_Update(io); break;
                          case LVF_WHITE: bw_Update(io); break; case LVF_RED: br_Update(io); break; case LVF_BLACK: bk_Update(io); break;
+                         case LVF_CATHEDRAL: ct_Update(io); break;
                          default: bv_Update(io); break; }
 }
 static void lvBossVoidDraw(float px, float py, float pz) {
     switch (g_lvFloor) { case LVF_CEMETERY: bc_Draw(px, py, pz); break; case LVF_CAVE: bp_Draw(px, py, pz); break; case LVF_GABRIEL: gb_Draw(px, py, pz); break;
                          case LVF_WHITE: bw_Draw(px, py, pz); break; case LVF_RED: br_Draw(px, py, pz); break; case LVF_BLACK: bk_Draw(px, py, pz); break;
+                         case LVF_CATHEDRAL: ct_Draw(px, py, pz); break;
                          default: bv_Draw(px, py, pz); break; }
 }
 static void lvBossVoidHud(BossIO &io) {
     switch (g_lvFloor) { case LVF_CEMETERY: bc_Hud(io); break; case LVF_CAVE: bp_Hud(io); break; case LVF_GABRIEL: gb_Hud(io); break;
                          case LVF_WHITE: bw_Hud(io); break; case LVF_RED: br_Hud(io); break; case LVF_BLACK: bk_Hud(io); break;
+                         case LVF_CATHEDRAL: ct_Hud(io); break;
                          default: bv_Hud(io); break; }
 }
 static void lvBossVoidBackdrop() {
     switch (g_lvFloor) { case LVF_CEMETERY: bc_Backdrop(); break; case LVF_CAVE: bp_Backdrop(); break; case LVF_GABRIEL: gb_Backdrop(); break;
                          case LVF_WHITE: bw_Backdrop(); break; case LVF_RED: br_Backdrop(); break; case LVF_BLACK: bk_Backdrop(); break;
+                         case LVF_CATHEDRAL: ct_Backdrop(); break;
                          default: bv_Backdrop(); break; }
 }
 static int g_rosaryHas = 0;   // (reservado)
@@ -250,10 +257,10 @@ static void lvInit(uint32_t flags) {
         gpBevelBox(b, i, 0.0f, 0.0f, 0.0f, 1.9f, 1.9f, 0.28f, 0.07f, ST, STD);
         gpBevelBox(b, i, 0.0f, 0.28f, 0.0f, 1.4f, 1.4f, 0.24f, 0.06f, ST, STD);
         gpPrism(b, i, 0.0f, 0.52f, 0.0f, 0.40f, 0.33f, 1.9f, 8, 0.3927f, STD, ST, 0);
-        gpRingY(b, i, 0.0f, 0.70f, 0.0f, 0.41f, 0.07f, 0.10f, 8, ST);
+        gpTube(b, i, 0.0f, 0.66f, 0.0f, 0.0f, 0.74f, 0.0f, 0.44f, 0.44f, 8, ST, ST);
         gpBevelBox(b, i, 0.0f, 2.42f, 0.0f, 1.05f, 1.05f, 0.22f, 0.05f, ST, ST);
         gpTube(b, i, 0.0f, 2.64f, 0.0f, 0.0f, 2.96f, 0.0f, 0.22f, 0.56f, 12, BR, cp_scale(BR, 1.25f));   // cuenco
-        gpRingY(b, i, 0.0f, 2.96f, 0.0f, 0.56f, 0.06f, 0.06f, 12, cp_scale(BR, 1.3f));
+        gpTube(b, i, 0.0f, 2.93f, 0.0f, 0.0f, 2.99f, 0.0f, 0.59f, 0.59f, 12, cp_scale(BR, 1.3f), cp_scale(BR, 1.3f));
         g_lvSaveN = i;
         i = 0; LineVertex *c = g_lvCrysV;   // cristal: dos piramides hexagonales (la de arriba mas alta)
         gpPrism(c, i, 0.0f, -0.42f, 0.0f, 0.0f, 0.30f, 0.42f, 6, 0.0f, RGBA(90, 150, 220, 255), RGBA(170, 220, 255, 255), 0);
@@ -351,6 +358,7 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
         g_lvElevX = sx - 8.0f; g_lvElevY = sy; g_lvElevZ = sz - 8.0f;
         // el cementerio: sube junto a la capilla, despues de la sirena
         if (floor == LVF_CEMETERY) { g_lvElevX = BC_ELEV_X; g_lvElevZ = BC_ELEV_Z; }
+        if (floor == LVF_CATHEDRAL) { g_lvElevX = 6.5f; g_lvElevZ = 37.5f; }   // junto a la puerta (en sx-8,sz-8 tocaba un pilar)
         g_lvElevOn = (g_lvUnlocked > floor); g_lvElevRise = g_lvElevOn ? 1.0f : 0.0f;
     } else {
         int nb = 0;
@@ -380,8 +388,8 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
         g_cineRk = 1.7f; g_cineZm = 0.4f; g_cineH0 = -30.0f;
     } else if (floor >= LVF_CAVE) {   // estos jefes pelean cada vez que entras: la presentacion va siempre (X la salta)
         // (el cementerio no: su cinematica es otra, la arma su modulo en bc_Enter)
-        static const char *kT[6] = { "BAPHOMET", "", "EL JINETE BLANCO", "EL JINETE ROJO", "EL JINETE NEGRO", "EL JINETE PÁLIDO" };
-        static const char *kS[6] = { "EL QUE ESPERA JUNTO AL FUEGO", "", "CONQUISTA", "GUERRA", "HAMBRE", "MUERTE. HADES LO SIGUE" };
+        static const char *kT[7] = { "BAPHOMET", "", "EL JINETE BLANCO", "EL JINETE ROJO", "EL JINETE NEGRO", "EL JINETE PÁLIDO", "EL VIGÍA" };
+        static const char *kS[7] = { "EL QUE ESPERA JUNTO AL FUEGO", "", "CONQUISTA", "GUERRA", "HAMBRE", "MUERTE. HADES LO SIGUE", "LA CATEDRAL TE MIRA" };
         float t[3] = { 0.0f, 6.0f, 0.0f };
         if (!LV_BOSS(AimTarget, t)) { t[0] = 0.0f; t[1] = 6.0f; t[2] = 0.0f; }
         lvCineStart(t[0], t[1], t[2], px, pz, kT[floor - LVF_CAVE], kS[floor - LVF_CAVE]);
@@ -391,9 +399,9 @@ static void lvEnter(int floor, float &px, float &py, float &pz, float &heroYaw, 
 // ---------------------------------------------------------------- guardado
 // descripcion del XMB (antes del piso 3 en adelante decia "Piso 2. La escalera blanca.")
 static const char *lvSaveDesc() {
-    static const char *k[10] = { "El cielo. Camino al elevador.", "Piso 1. El campo y el arbol.", "Piso 2. El cementerio.", "Piso 3. La escalera blanca.",
+    static const char *k[LVF_LAST + 1] = { "El cielo. Camino al elevador.", "Piso 1. El campo y el arbol.", "Piso 2. El cementerio.", "Piso 3. La escalera blanca.",
                                 "Piso 4. La cueva.", "Piso 5. El arcangel.", "Piso 6. El jinete blanco.",
-                                "Piso 7. El jinete rojo.", "Piso 8. El jinete negro.", "Piso 9. El jinete palido." };
+                                "Piso 7. El jinete rojo.", "Piso 8. El jinete negro.", "Piso 9. El jinete palido.", "Piso 10. La catedral." };
     return (g_lvFloor >= 0 && g_lvFloor <= LVF_LAST) ? k[g_lvFloor] : k[0];
 }
 static void lvSaveFrame() {
@@ -599,7 +607,7 @@ static void lvMenuDraw() {
         if (g_svHas) {                                                // de que piso es la partida guardada
             static const char *kFl[LVF_LAST + 1] = { "EL CIELO", "PISO 1: EL CAMPO", "PISO 2: EL CEMENTERIO", "PISO 3: LA ESCALERA",
                                           "PISO 4: LA CUEVA", "PISO 5: EL ARCÁNGEL", "PISO 6: JINETE BLANCO", "PISO 7: JINETE ROJO",
-                                          "PISO 8: JINETE NEGRO", "PISO 9: JINETE PÁLIDO" };
+                                          "PISO 8: JINETE NEGRO", "PISO 9: JINETE PÁLIDO", "PISO 10: LA CATEDRAL" };
             drawText(44, y0 + 32 + 17, 1.0f, RGBA(150, 140, 110, 255), kFl[lvSavedFloor()]);
         }
         drawText(36, 248, 1.0f, RGBA(120, 126, 140, 255), "X ACEPTAR");
@@ -679,7 +687,7 @@ static void lvUpdate(const SceCtrlData &pad, float &px, float &py, float &pz, fl
         if (edge & PSP_CTRL_UP)   { if (--g_lvMenuSel < 0) g_lvMenuSel = 12; }   // 0 = EL CIELO (el mercader)
         if (edge & PSP_CTRL_DOWN) { if (++g_lvMenuSel > 12) g_lvMenuSel = 0; }
         if (edge & PSP_CTRL_CIRCLE) g_lvMenu = 0;
-        if ((edge & PSP_CTRL_SELECT) && g_lvUnlocked < LVF_LAST) { g_lvUnlocked = LVF_LAST; lvMessage("PRUEBAS: PISOS 1-9 ABIERTOS", 90); }   // atajo de desarrollo
+        if ((edge & PSP_CTRL_SELECT) && g_lvUnlocked < LVF_LAST) { g_lvUnlocked = LVF_LAST; lvMessage("PRUEBAS: PISOS ABIERTOS", 90); }   // atajo de desarrollo
         if (edge & PSP_CTRL_CROSS) {
             if (g_lvMenuSel > g_lvUnlocked) lvMessage("ESE PISO SIGUE CERRADO", 90);
             else if (g_lvMenuSel > LVF_LAST) lvMessage("PISO EN CONSTRUCCIÓN", 90);
@@ -1316,7 +1324,7 @@ static void lvHud(int aiming, float hp, float hpMax) {
     }
     if (g_lvMenu) {
         drawText(198, 40, 1.0f, RGBA(236, 206, 120, 255), "ELEVADOR");
-        static const char *kNames[13] = { "EL CIELO (MERCADER)", "EL CAMPO", "EL CEMENTERIO", "LA ESCALERA", "LA CUEVA", "EL ARCÁNGEL", "JINETE BLANCO", "JINETE ROJO", "JINETE NEGRO", "JINETE PÁLIDO", "???", "???", "???" };
+        static const char *kNames[13] = { "EL CIELO (MERCADER)", "EL CAMPO", "EL CEMENTERIO", "LA ESCALERA", "LA CUEVA", "EL ARCÁNGEL", "JINETE BLANCO", "JINETE ROJO", "JINETE NEGRO", "JINETE PÁLIDO", "LA CATEDRAL", "???", "???" };
         for (int f = 0; f <= 12; ++f) {
             char b[32]; int n = 0;
             b[n++] = (f == g_lvMenuSel) ? '>' : ' '; b[n++] = ' ';
@@ -1336,9 +1344,11 @@ static void lvHud(int aiming, float hp, float hpMax) {
         drawText(150, 172, 1.0f, RGBA(230, 236, 246, 255), g_lvNear == 1 ? "TRIÁNGULO: GUARDAR" : "TRIÁNGULO: ELEVADOR");
     if (g_prison > 0) drawText(150, 138, 1.0f, RGBA(220, 210, 255, 255), "¡MUEVE EL ANÁLOGO!");
     if (loading) {
-        static const char *kTitle[10] = { "EL CIELO", "EL CAMPO", "EL CEMENTERIO", "LA ESCALERA BLANCA", "LA CUEVA", "EL ARCÁNGEL", "EL JINETE BLANCO", "EL JINETE ROJO", "EL JINETE NEGRO", "EL JINETE PÁLIDO" };
+        static const char *kTitle[LVF_LAST + 1] = { "EL CIELO", "EL CAMPO", "EL CEMENTERIO", "LA ESCALERA BLANCA", "LA CUEVA", "EL ARCÁNGEL", "EL JINETE BLANCO", "EL JINETE ROJO", "EL JINETE NEGRO", "EL JINETE PÁLIDO", "LA CATEDRAL" };
         char b[12] = "PISO  ";
-        b[5] = (char)('0' + shownFloor % 10); b[6] = 0;
+        int nb = 5;   // (de 2 cifras desde la catedral: antes el 10 salia "PISO 0")
+        if (shownFloor >= 10) b[nb++] = (char)('0' + (shownFloor / 10) % 10);
+        b[nb++] = (char)('0' + shownFloor % 10); b[nb] = 0;
         drawText(240 - 6 * 8, 100, 2.0f, RGBA(236, 238, 244, 255), b);
         const char *t = kTitle[shownFloor > LVF_LAST ? 0 : shownFloor];
         const int n = textLen(t);

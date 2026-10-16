@@ -27,9 +27,9 @@
 #define MERCADER_H
 
 // objeto de cada jefe, por piso (LVF_*; Gabriel: su "objeto" es la lanza misma)
-static const char *kMcItem[10] = { "", "LÁGRIMA DEL CIELO", "", "PLUMA DEL SERAFÍN", "FRASCO DE AZUFRE", "LANZA DE GABRIEL",
-                                   "CORONA DEL CONQUISTADOR", "FILO DE LA GUERRA", "BALANZA ROTA", "CENIZA VERDE" };
-static const int kMcBossEcos[10] = { 0, 60, 0, 200, 250, 350, 300, 350, 400, 500 };   // por jefe (el piso 1 ademas 3 por ojo)
+static const char *kMcItem[11] = { "", "LÁGRIMA DEL CIELO", "", "PLUMA DEL SERAFÍN", "FRASCO DE AZUFRE", "LANZA DE GABRIEL",
+                                   "CORONA DEL CONQUISTADOR", "FILO DE LA GUERRA", "BALANZA ROTA", "CENIZA VERDE", "MÁSCARA DE LOS OJOS" };
+static const int kMcBossEcos[11] = { 0, 60, 0, 200, 250, 350, 300, 350, 400, 500, 450 };   // por jefe (el piso 1 ademas 3 por ojo)
 static const int MC_SPEAR = 10;      // la lanza de Gabriel (kRanged[10])
 // tienda (indice = arma de kRanged): precio en ecos y objeto que pide (piso del jefe; 0 = ninguno)
 static const int kMcPrice[11] = { 0, 600, 200, 700, 450, 800, 500, 250, 900, 1500, 0 };
@@ -68,7 +68,7 @@ static void mcInit() {
 }
 static void mcLoadSave(int ecos, uint32_t items, uint32_t owned, int cur, uint32_t upg) {
     g_mcSvEcos = (ecos < 0) ? 0 : (ecos > 99999 ? 99999 : ecos);
-    g_mcSvItems = items & 0x3FEu;
+    g_mcSvItems = items & 0x7FEu;   // bits 1..10 (la catedral es el 10)
     g_mcSvOwned = (owned & 0x7FFu) | 1u;
     g_mcSvUpg = (int)(upg & 7u);
     g_mcSvCur = (cur >= 0 && cur < kRangedCount && ((g_mcSvOwned >> cur) & 1u)) ? cur : 0;

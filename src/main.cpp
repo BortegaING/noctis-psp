@@ -2205,7 +2205,7 @@ int main(void) {
                 st.gravName = kGravName[gravG];
                 st.px = playerX; st.pz = playerZ; st.yaw = heroYaw;
                 {
-                    static const char *kZone[10] = { "CIELO", "PISO 1", "PISO 2", "PISO 3", "PISO 4", "PISO 5", "PISO 6", "PISO 7", "PISO 8", "PISO 9" };
+                    static const char *kZone[LVF_LAST + 1] = { "CIELO", "PISO 1", "PISO 2", "PISO 3", "PISO 4", "PISO 5", "PISO 6", "PISO 7", "PISO 8", "PISO 9", "PISO 10" };
                     st.district = !NOCTIS_SKYWORLD ? "CAMPANARIO" : kZone[(g_lvFloor >= 0 && g_lvFloor <= LVF_LAST) ? g_lvFloor : 0];
                 }
                 st.matTaken = objMaterialsTaken(); st.matTotal = objMaterialCount();

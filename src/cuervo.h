@@ -26,6 +26,7 @@ static const char *kCvLines[LVF_LAST + 1][3] = {
     { "Cuando brame, sal de su línea o sáltala.", "Si fallas su tajo, grita. Mueve el análogo.", "La guerra cansa. A él también." },
     { "La balanza castiga al que saca más.", "Salta sus ondas. Y ojo con sus monedas.", "El hambre no espera. Cra." },
     { "Mientras vuelen las moscas, la Muerte no siente.", "Derriba las moscas. Aquí el rosario no cura.", "No le des la espalda a la guadaña." },
+    { "Cuando se agacha, va a lanzarse. Hazte a un lado.", "Si abre las lanzas, salta. Y salta cuando doblen las campanas.", "Su máscara tiene más ojos que la Torre. Ahí le duele. Cra." },
 };
 static const char *cvLine(int k) {
     if (g_lvFloor == LVF_CEMETERY) return bcCuervoLine(k);   // cambian despues de la sirena

@@ -118,17 +118,29 @@ pesadillas-jefe, y se vuelven a pelear cada vez que entras (se juntan ecos):
 - **9. El Jinete Pálido + Hades — Muerte.** Hordas de moscas; el rosario no cura.
   Botín: CENIZA VERDE.
 
-### Acto III — Volver a subir (por construir)
+### Acto III — Volver a subir
 
-Con el cementerio, los jinetes llegan hasta el 9 y para el Acto III quedan 3 pisos (10 a 12),
-pero había 4 ideas. **Por decidir (Benjamin):** juntar EL ALTAR y EL SILENCIO en uno, o llevar
-la Torre a 13 pisos (el "Puesto 12" de los robots pasaría a ser el 13).
+**Piso 10 — La catedral. El Vigía (HECHO, 2026-10-16).** Una catedral enorme por dentro: la nave
+de pilares en haz y arcos ojivales, vitrales de colores que dejan caer rayos de luz, arañas de
+velas, tres campanas colgando de la bóveda y, al fondo, el altar bajo un rosetón gigante. Su
+guardián es **EL VIGÍA** (referencia de Benjamin: Rancid, de Fear & Hunger): una bestia flaca y
+encorvada de pelaje gris, con una **máscara de hueso llena de ojos** (los ojos de la Torre otra
+vez) y astas, que pelea con **dos lanzas**.
+Se agacha y se lanza en línea recta (una línea roja te avisa), abre las lanzas y gira (salta),
+te arroja una lanza que después vuelve a su mano y, desde la fase 2, salta sobre ti. Al 66%
+**las campanas despiertan** y mandan anillos de sonido por el suelo. Al 33% **la catedral te
+mira**: los vitrales se vuelven ojos que disparan, y él se apura. Un tiro en la máscara le duele
+el doble. Botín: MÁSCARA DE LOS OJOS.
+
+Quedaron para el Acto III EL ALTAR, EL SILENCIO y EL PUESTO 12 en los pisos 11 y 12. **Por decidir
+(Benjamin):** juntar EL ALTAR y EL SILENCIO en uno, o llevar la Torre a 13 pisos (el "Puesto 12"
+de los robots pasaría a ser el 13).
 
 | Piso | Nombre | Qué es |
 |---|---|---|
-| 10? | EL ALTAR | Las cápsulas de los durmientes muertos. Sin jefe: leer sus nombres, entregar las cartas del Mensajero |
-| 10? | EL SILENCIO | Un piso sin sonido. Los ojos vuelven: si corres o disparas, te ven. Sigilo |
-| 11 | LA CATEDRAL | Jefe: una catedral viva que te persigue y te vigila con campanas |
+| 10 | LA CATEDRAL | **Hecho:** El Vigía, las campanas, los vitrales que miran |
+| 11? | EL ALTAR | Las cápsulas de los durmientes muertos. Sin jefe: leer sus nombres, entregar las cartas del Mensajero |
+| 11? | EL SILENCIO | Un piso sin sonido. Los ojos vuelven: si corres o disparas, te ven. Sigilo |
 | 12 | EL PUESTO 12 | El Guardián ("Mi orden dice: no dejar subir a nadie") y tu cuerpo dormido |
 
 ### Los finales
@@ -172,7 +184,7 @@ la Torre a 13 pisos (el "Puesto 12" de los robots pasaría a ser el 13).
 
 ## 5. Notas técnicas
 - Código: Serafín y ojos en `src/levels.h`; jefes en `src/boss_*.h` (Baphomet `bp_`, Gabriel
-  `gb_`, jinetes `bw_ br_ bk_ bv_`); el cementerio en `src/cementerio.h` (`bc_`, la lógica) y
+  `gb_`, jinetes `bw_ br_ bk_ bv_`, la catedral `ct_` con sus modelos en `src/catedral_models.h`); el cementerio en `src/cementerio.h` (`bc_`, la lógica) y
   `src/cementerio_models.h` (los modelos y dónde va cada cosa); botín, mercader y lanza en
   `src/mercader.h`; el cuervo en `src/cuervo.h`. El Rey Esqueleto y la necromancia quedaron en
   la historia de git (commit 7f75c9e).
@@ -188,5 +200,6 @@ la Torre a 13 pisos (el "Puesto 12" de los robots pasaría a ser el 13).
   `questDone` = objetos de jefe; `ownedRanged`/`curRanged` = armas; `upgrades` = fe de la lanza.
   Las premoniciones irán en `invResLo`/`invResHi`.
 - Banderas de prueba (siempre en 0 al commitear): `NOCTIS_TEST_BOTIN`, `NOCTIS_TEST_BPFASE`,
-  `NOCTIS_TEST_GBFASE`, `NOCTIS_TEST_BSFASE` y `NOCTIS_TEST_BCCINE` (1 = el cementerio se juega
-  como la primera vez aunque el piso esté abierto: cinemática, sirena y elevador).
+  `NOCTIS_TEST_GBFASE`, `NOCTIS_TEST_BSFASE`, `NOCTIS_TEST_BCCINE` (1 = el cementerio se juega
+  como la primera vez aunque el piso esté abierto: cinemática, sirena y elevador) y
+  `NOCTIS_TEST_CTFASE` (2 o 3 = el Vigía arranca en esa fase).
