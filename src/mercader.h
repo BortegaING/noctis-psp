@@ -51,6 +51,8 @@ static float    g_mcX = 0.0f, g_mcY = 0.0f, g_mcZ = 0.0f;
 static int      g_mcOn = 0;          // hay mercader en este piso (solo en el cielo)
 static LineVertex __attribute__((aligned(16))) g_mcV[420];
 static int      g_mcN = 0;
+static LineVertex __attribute__((aligned(16))) g_mcLampV[220];   // su farol (era un cubo flotando)
+static int      g_mcLampN = 0;
 static float    g_mcBX = 0.0f, g_mcBZ = 6.0f;       // ultima posicion conocida del jefe (pisos 3..7)
 static int      g_mcBossSeen = 0;
 static int      g_mcSpearReady = 0, g_mcFe = 0, g_mcSpearMsgT = 0;   // la lanza: cargada / rosarios rezados (0..3)
@@ -65,6 +67,14 @@ static void mcInit() {
     int i = 0;
     buildMechanic(g_mcV, i, rFrame(0.0f, 0.0f, 0.0f, -1.0f));   // mira a -Z: lvLookAngles lo gira hacia el jugador
     g_mcN = i;
+    i = 0; LineVertex *b = g_mcLampV;   // farol de laton: argolla, techito, vidrio calido y jaula
+    const unsigned int BR = RGBA(150, 116, 60, 255), GL = RGBA(255, 210, 130, 255);
+    gpTube(b, i, 0.0f, 0.42f, 0.0f, 0.0f, 0.62f, 0.0f, 0.03f, 0.03f, 4, BR, BR);
+    gpPrism(b, i, 0.0f, 0.22f, 0.0f, 0.30f, 0.0f, 0.22f, 6, 0.0f, BR, cp_scale(BR, 1.3f), 0);
+    gpPrism(b, i, 0.0f, -0.22f, 0.0f, 0.18f, 0.18f, 0.44f, 6, 0.0f, GL, GL, 0);
+    for (int k = 0; k < 6; k += 2) { const float a = 6.2831853f * k / 6; gpTube(b, i, cosf(a) * 0.2f, -0.24f, sinf(a) * 0.2f, cosf(a) * 0.2f, 0.22f, sinf(a) * 0.2f, 0.018f, 0.018f, 3, BR, BR); }
+    gpPrism(b, i, 0.0f, -0.32f, 0.0f, 0.12f, 0.24f, 0.10f, 6, 0.0f, BR, BR, 0);
+    g_mcLampN = i;
 }
 static void mcLoadSave(int ecos, uint32_t items, uint32_t owned, int cur, uint32_t upg) {
     g_mcSvEcos = (ecos < 0) ? 0 : (ecos > 99999 ? 99999 : ecos);
@@ -246,7 +256,10 @@ static void mcDraw(float px, float py, float pz) {
     lvDrawAt(g_mcV, g_mcN, g_mcX, g_mcY, g_mcZ, yaw, 0.0f, 1.3f);
     // farol: una luz calida que cuelga sobre el, para encontrarlo desde el camino
     const float b = 0.5f + 0.5f * sinf(g_lvT * 0.07f);
-    lvBox(g_mcX, g_mcY + 3.6f + 0.1f * b, g_mcZ, 0.42f, 0.42f, RGBA(255, 200 + (int)(40 * b), 120, 255));
+    lvDrawAt(g_mcLampV, g_mcLampN, g_mcX, g_mcY + 3.6f + 0.1f * b, g_mcZ, g_lvT * 0.01f, 0.0f, 1.3f);
+    sceGuEnable(GU_BLEND); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xFFFFFFFF); sceGuDepthMask(GU_TRUE);
+    bcGlow(g_mcX, g_mcY + 3.6f + 0.1f * b, g_mcZ, 1.6f, RGBA(255, 210, 140, 110 + (int)(40 * b)), RGBA(255, 170, 90, 0));
+    sceGuDepthMask(GU_FALSE); sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0); sceGuDisable(GU_BLEND);
 }
 
 // ---------------------------------------------------------------- HUD

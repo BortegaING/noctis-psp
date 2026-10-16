@@ -208,6 +208,33 @@ static void swEmitCell(int cx, int cz, SwOut &o) {
                     swQuadC(o.t, o.tn, px0, y, pz0, t, px0, y, pz1, t, px1, y, pz1, t, px1, y, pz0, t);
                 }
         }
+        // FILETE DORADO en el borde de la losa (2026-10-16, "usa los bordes del serafin"): la nariz
+        // dorada de sus peldanos, aqui alrededor de cada losa. Tapa + cara de afuera, en tramos de <= 8.
+        if (o.t && o.tn + 4 * 6 * 24 <= SW_TV) {
+            // (esta parte se dibuja con descarte de caras: cada quad va por las DOS caras)
+            auto q2 = [&](float ax, float ay, float az, unsigned int ca, float bx, float by, float bz, unsigned int cb,
+                          float cx2, float cy2, float cz2, unsigned int cc, float dx, float dy, float dz, unsigned int cd) {
+                swQuadC(o.t, o.tn, ax, ay, az, ca, bx, by, bz, cb, cx2, cy2, cz2, cc, dx, dy, dz, cd);
+                swQuadC(o.t, o.tn, dx, dy, dz, cd, cx2, cy2, cz2, cc, bx, by, bz, cb, ax, ay, az, ca);
+            };
+            const unsigned int gT = RGBA(226, 198, 128, 255), gF = RGBA(170, 142, 84, 255);
+            const float x0 = L.x - L.w * 0.5f, x1 = L.x + L.w * 0.5f, z0 = L.z - L.d * 0.5f, z1 = L.z + L.d * 0.5f, y = L.top + 0.05f, W = 0.5f;
+            for (int sd = 0; sd < 4; ++sd) {
+                const int along = (sd < 2) ? nx : nz;
+                for (int k = 0; k < along; ++k) {
+                    const float t0 = (float)k / along, t1 = (float)(k + 1) / along;
+                    if (sd < 2) {   // bordes norte (z0) y sur (z1)
+                        const float z = sd ? z1 : z0, zi = sd ? z1 - W : z0 + W, xa = x0 + (x1 - x0) * t0, xb = x0 + (x1 - x0) * t1, zo = sd ? z1 + 0.04f : z0 - 0.04f;
+                        q2(xa, y, z, gT, xb, y, z, gT, xb, y, zi, gT, xa, y, zi, gT);
+                        q2(xa, y - 0.32f, zo, gF, xb, y - 0.32f, zo, gF, xb, y, zo, gT, xa, y, zo, gT);
+                    } else {        // bordes oeste (x0) y este (x1)
+                        const float x = (sd == 3) ? x1 : x0, xi = (sd == 3) ? x1 - W : x0 + W, za = z0 + (z1 - z0) * t0, zb = z0 + (z1 - z0) * t1, xo = (sd == 3) ? x1 + 0.04f : x0 - 0.04f;
+                        q2(x, y, za, gT, x, y, zb, gT, xi, y, zb, gT, xi, y, za, gT);
+                        q2(xo, y - 0.32f, za, gF, xo, y - 0.32f, zb, gF, xo, y, zb, gT, xo, y, za, gT);
+                    }
+                }
+            }
+        }
         if (o.box && o.bn < o.bmax) o.box[o.bn++] = { L.x, L.z, L.w, L.d, L.top, SW_C_SLAB };
         if (swBridge(cx, cz, 0)) swEmitBridge(cx, cz, 0, o);
         if (swBridge(cx, cz, 1)) swEmitBridge(cx, cz, 1, o);
@@ -235,14 +262,21 @@ static void swEmitCell(int cx, int cz, SwOut &o) {
     // sueltas abajo. Se leian como TORRES (Benjamin: "saca las torres"); ahora las losas flotan
     // sobre un mar de nubes (levels.h, lvBackdrop) como en un cielo real.
     o.lCore = o.ln;
-    // ===== L detalle: farol frio en una esquina =====
+    // ===== L detalle: farol frio en una esquina (va con lo que se dibuja SIN descarte: sus prismas
+    // no tienen el sentido de las cajas) =====
+    o.lBoxEnd = o.ln;
     if (L.type == 1 && !elevCell && swRand(cx, cz, 50) < 0.45f) {
         const float sx = (swHash(cx, cz, 51) & 1) ? 1.0f : -1.0f, sz = (swHash(cx, cz, 52) & 1) ? 1.0f : -1.0f;
         const float x = L.x + sx * (L.w * 0.5f - 1.4f), z = L.z + sz * (L.d * 0.5f - 1.4f);
-        swSolidL(o, x, L.top, z, 0.35f, 0.35f, 4.6f, SW_C_PIL, true);
-        swSolidL(o, x, L.top + 4.6f, z, 0.9f, 0.9f, 0.6f, SW_C_LAMP, false);
+        // farol: poste octogonal con su base y una linterna (antes dos cajas)
+        if (o.l && o.ln + 260 <= SW_LV) {
+            gpPrism(o.l, o.ln, x, L.top, z, 0.42f, 0.36f, 0.4f, 8, 0.0f, SW_C_PIL, SW_C_PIL, 0);
+            gpPrism(o.l, o.ln, x, L.top + 0.4f, z, 0.17f, 0.14f, 4.2f, 8, 0.0f, SW_C_PIL, brighten(SW_C_PIL, 1.2f), 0);
+            gpPrism(o.l, o.ln, x, L.top + 4.6f, z, 0.34f, 0.34f, 0.7f, 6, 0.0f, SW_C_LAMP, SW_C_LAMP, 0);
+            gpPrism(o.l, o.ln, x, L.top + 5.3f, z, 0.46f, 0.0f, 0.45f, 6, 0.0f, SW_C_PIL, brighten(SW_C_PIL, 1.2f), 0);
+        }
+        if (o.box && o.bn < o.bmax) o.box[o.bn++] = { x, z, 0.5f, 0.5f, L.top + 4.6f, SW_C_PIL };
     }
-    o.lBoxEnd = o.ln;
     // ===== anillos (sin cull) =====
     if (o.l) {
         if (L.type == 1 && !elevCell && swRand(cx, cz, 60) < 0.20f) {

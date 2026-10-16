@@ -355,6 +355,10 @@ en X (se giraba por +heroYaw; heroYaw = "adelante (sin,-cos)" pide -heroYaw): ye
 miraba al otro. Ademas: giro segun la velocidad, camara con inercia (resorte en el punto que
 sigue, distancia que se acorta al instante y vuelve lento) y movimiento secundario del abrigo y
 la cabeza (rig.h hunterSecondary, g_hunterTurn).
+**EL CIELO CON BORDES (2026-10-16):** cada losa lleva un FILETE DORADO en su borde (tapa + cara de
+afuera, tramos de <= 8; esa parte se dibuja con descarte de caras, por eso cada quad va por las dos
+caras), y los faroles son poste octogonal + linterna (van en la parte de L sin descarte: o.lBoxEnd se
+marca ANTES del farol). El mercader tiene un farol de laton con su luz (era un cubo flotando).
 **ELEVADOR AL CIELO (2026-10-16, Benjamin: "necesito volver al piso 0 para comprar con el
 mercader"):** el menu del elevador va de 0 a 12; 0 = EL CIELO (MERCADER). Llegando en el elevador
 (g_lvViaElev) apareces delante de la puerta del elevador del cielo mirando al mercader, no al
